@@ -50,6 +50,7 @@ def play(args):
     # Initialize variables
     start_point = np.array([0.0, 0.0, 1.0])
     max_speed = 1.0  # hard maximum speed cap
+    num_iterations = 5
 
     # Function to generate a random unit vector
     def random_unit_vector():
@@ -81,7 +82,7 @@ def play(args):
     positions = []
     velocities = []
 
-    for i in range((density ** 2) * int(env.max_episode_length)):
+    for i in range(num_iterations * int(env.max_episode_length)):
         ideal_position = start_point + unnormalized_direction_vector * env.dt * ((i+1) % int(env.max_episode_length))
         
         # Update current position and yaw
