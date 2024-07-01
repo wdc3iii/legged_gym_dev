@@ -96,6 +96,7 @@ def play(args):
             desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
             turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
             time_since_turn = 0
+            start_point = current_position
             print(f'Turn at iteration {i}, new direction: {unnormalized_direction_vector}, new desired direction: {desired_direction_vector}, will turn again in {turn_interval} intervals')
 
         ideal_position = start_point + unnormalized_direction_vector * env.dt * time_since_turn
