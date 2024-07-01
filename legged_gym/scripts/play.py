@@ -13,8 +13,10 @@ import time
 
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
-    num_robots = 1  # affects grid space searching too
-    # override some parameters for testing
+    num_robots = 2  # Adjust the number of robots as needed
+    randomness_scale = 0.5  # Scaling factor for randomness
+
+    # Override some parameters for testing
     env_cfg.env.num_envs = min(env_cfg.env.num_envs, num_robots)
     env_cfg.terrain.num_rows = 5
     env_cfg.terrain.num_cols = 5
@@ -23,15 +25,15 @@ def play(args):
     env_cfg.domain_rand.randomize_friction = False
     env_cfg.domain_rand.push_robots = False
 
-    # prepare environment
+    # Prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
     obs = env.get_observations()
-    # load policy
+    # Load policy
     train_cfg.runner.resume = True
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
     policy = ppo_runner.get_inference_policy(device=env.device)
 
-    # export policy as a jit module (used to run it from C++)
+    # Export policy as a jit module (used to run it from C++)
     if EXPORT_POLICY:
         path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'policies')
         export_policy_as_jit(ppo_runner.alg.actor_critic, path)
@@ -46,38 +48,40 @@ def play(args):
     camera_vel = np.array([1., 1., 0.])
     camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
     img_idx = 0
-    
+
     # Initialize variables
-    start_point = np.array([0.0, 0.0, 1.0])
+    start_points = np.array([[0.0, 0.0, 1.0]] * num_robots)
     max_speed = 1.0  # hard maximum speed cap
-    num_iterations = 5
+    num_iterations = 3
 
-    # Function to generate a random unit vector
-    def random_unit_vector():
-        angle = np.random.uniform(0, 2 * np.pi)
-        return np.array([np.cos(angle), np.sin(angle), 0.0])
-    
-    def randomize_turn_interval(base_interval, range_offset):
-        return base_interval + np.random.randint(-range_offset, range_offset + 1)
+    # Function to generate random unit vectors
+    def random_unit_vectors(num):
+        angles = np.random.uniform(0, 2 * np.pi, num)
+        return np.column_stack((np.cos(angles), np.sin(angles), np.zeros(num)))
 
-    # Randomly generate initial direction and desired direction vectors
-    unnormalized_direction_vector = random_unit_vector() * max_speed # hard cap is used to scale the unit vector
-    desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
+    def randomize_turn_intervals(base_interval, range_offset, num):
+        return base_interval + np.random.randint(-range_offset, range_offset + 1, num)
 
-    current_position = start_point.copy()
-    current_yaw = 0
-    base_vels = [.5,.5]
+    current_positions = start_points.copy()
+    perm_start_points = start_points.copy()
+    current_yaws = np.zeros(num_robots)
+    base_vels = np.array([0.5, 0.5])
+    scale_down_from_vel = 0.8
     base_turn_interval = 500  # number of iterations between each turn of the robot
     turn_interval_range = 150
-    turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
+    turn_intervals = randomize_turn_intervals(base_turn_interval, turn_interval_range, num_robots)
+
+    # Randomly generate initial direction and desired direction vectors
+    unnormalized_direction_vectors = random_unit_vectors(num_robots) * base_vels[0] * scale_down_from_vel * randomness_scale
+    desired_direction_vectors = random_unit_vectors(num_robots)[:, :2]  # 2D vector for yaw calculation
 
     # PD controller gains
-    Kp = 0.8
-    Kd = 0.0
+    Kp = 1.5
+    Kd = 0.5
 
     # Initialize previous error terms
-    prev_position_error = np.array([0.0, 0.0])
-    prev_yaw_error = 0.0
+    prev_position_errors = np.zeros((num_robots, 2))
+    prev_yaw_errors = np.zeros(num_robots)
 
     delta_t = env.dt
     CMD_START_IDX = 9
@@ -85,65 +89,71 @@ def play(args):
     CMD_LIN_VEL_Y_IDX = CMD_START_IDX + 1
     CMD_ANG_VEL_YAW_IDX = CMD_START_IDX + 2
 
-    positions = []
-    velocities = []
-    ideal_positions = []
-    time_of_last_turn = 0
+    positions = [[] for _ in range(num_robots)]
+    velocities = [[] for _ in range(num_robots)]
+    ideal_positions = [[] for _ in range(num_robots)]
+    unnormalized_direction_vectors_all = [[] for _ in range(num_robots)]
+    time_of_last_turns = np.zeros(num_robots)
 
     for i in range(num_iterations * int(env.max_episode_length)):
-        if (i - time_of_last_turn) == turn_interval:
-            unnormalized_direction_vector = random_unit_vector() * max_speed
-            desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
-            turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
-            time_of_last_turn = i
-            start_point = current_position
-            print(f'Turn at iteration {i}, new direction: {unnormalized_direction_vector}, new desired direction: {desired_direction_vector}, will turn again in {turn_interval} intervals')
+        turn_mask = (i - time_of_last_turns) >= turn_intervals
+        if np.any(turn_mask):
+            unnormalized_direction_vectors[turn_mask] = random_unit_vectors(np.sum(turn_mask)) * base_vels[0] * scale_down_from_vel * randomness_scale
+            desired_direction_vectors[turn_mask] = random_unit_vectors(np.sum(turn_mask))[:, :2]  # 2D vector for yaw calculation
+            turn_intervals[turn_mask] = randomize_turn_intervals(base_turn_interval, turn_interval_range, np.sum(turn_mask))
+            time_of_last_turns[turn_mask] = i
+            start_points[turn_mask] = current_positions[turn_mask]
+            print(f'Turn at iteration {i}, new directions for robots: {unnormalized_direction_vectors[turn_mask]}, new desired directions: {desired_direction_vectors[turn_mask]}, will turn again in {turn_intervals[turn_mask]} intervals')
 
-        ideal_position = start_point + unnormalized_direction_vector * env.dt * (i - time_of_last_turn)
-        ideal_positions.append(ideal_position.copy())
-        
-        # Update current position and yaw
-        base_lin_vel_x = env.base_lin_vel[robot_index, 0].item()
-        base_lin_vel_y = env.base_lin_vel[robot_index, 1].item()
-        base_ang_vel_yaw = env.base_ang_vel[robot_index, 2].item()
+        ideal_positions_step = start_points + unnormalized_direction_vectors * env.dt * (i - time_of_last_turns).reshape(-1, 1)
+        for robot_idx in range(num_robots):
+            ideal_positions[robot_idx].append(ideal_positions_step[robot_idx].copy())
+            temp_dir_vecs = unnormalized_direction_vectors[robot_idx].tolist()
+            temp_dir_vecs.append(desired_direction_vectors[robot_idx])
+            unnormalized_direction_vectors_all[robot_idx].append(temp_dir_vecs)
 
-        current_yaw += base_ang_vel_yaw * delta_t
-        current_yaw = (current_yaw + np.pi) % (2 * np.pi) - np.pi
-        current_position[0] += delta_t * (np.cos(current_yaw) * base_lin_vel_x - np.sin(current_yaw) * base_lin_vel_y)
-        current_position[1] += delta_t * (np.sin(current_yaw) * base_lin_vel_x + np.cos(current_yaw) * base_lin_vel_y)
+        # Update current positions and yaws
+        base_lin_vels = env.base_lin_vel.cpu().numpy()[:, :2]
+        base_ang_vel_yaws = env.base_ang_vel[:, 2]
 
-        # Calculate position error
-        position_error = ideal_position[:2] - current_position[:2]
+        current_yaws = np.add(current_yaws, base_ang_vel_yaws.cpu().numpy() * delta_t)
+        current_yaws = (current_yaws + np.pi) % (2 * np.pi) - np.pi
+        current_positions[:, 0] += delta_t * (np.cos(current_yaws) * base_lin_vels[:, 0] - np.sin(current_yaws) * base_lin_vels[:, 1])
+        current_positions[:, 1] += delta_t * (np.sin(current_yaws) * base_lin_vels[:, 0] + np.cos(current_yaws) * base_lin_vels[:, 1])
 
-        # Calculate yaw error using desired_direction_vector
-        desired_yaw = np.arctan2(desired_direction_vector[1], desired_direction_vector[0])
-        yaw_error = desired_yaw - current_yaw
-        yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
+        # Calculate position and yaw errors
+        position_errors = ideal_positions_step[:, :2] - current_positions[:, :2]
+        desired_yaws = np.arctan2(desired_direction_vectors[:, 1], desired_direction_vectors[:, 0])
+        yaw_errors = desired_yaws - current_yaws
+        yaw_errors = (yaw_errors + np.pi) % (2 * np.pi) - np.pi
 
         # PD control for position and yaw
-        control_command_x = base_vels[0] + Kp * position_error[0] + Kd * (position_error[0] - prev_position_error[0]) / delta_t
-        control_command_y = base_vels[1] + Kp * position_error[1] + Kd * (position_error[1] - prev_position_error[1]) / delta_t
-        control_command_yaw = Kp * yaw_error + Kd * (yaw_error - prev_yaw_error) / delta_t
+        control_commands_x = unnormalized_direction_vectors[:, 0] + Kp * position_errors[:, 0] + Kd * (position_errors[:, 0] - prev_position_errors[:, 0]) / delta_t
+        control_commands_y = unnormalized_direction_vectors[:, 1] + Kp * position_errors[:, 1] + Kd * (position_errors[:, 1] - prev_position_errors[:, 1]) / delta_t
+        control_commands_yaw = Kp * yaw_errors + Kd * (yaw_errors - prev_yaw_errors) / delta_t
 
         # Cap the control commands to max_speed
-        control_speed = np.sqrt(control_command_x**2 + control_command_y**2)
-        if control_speed > max_speed:
-            scale = max_speed / control_speed
-            control_command_x *= scale
-            control_command_y *= scale
+        control_speeds = np.sqrt(control_commands_x**2 + control_commands_y**2)
+        scale = np.minimum(1, max_speed / control_speeds)
+        control_commands_x *= scale
+        control_commands_y *= scale
 
         # Save current errors
-        prev_position_error = position_error
-        prev_yaw_error = yaw_error
+        prev_position_errors = position_errors
+        prev_yaw_errors = yaw_errors
 
         # Save positions and velocities
-        positions.append(current_position.copy())
-        velocities.append([control_command_x, control_command_y, control_command_yaw])
+        for robot_idx in range(num_robots):
+            temp_pos = current_positions[robot_idx].tolist()
+            temp_pos.append(current_yaws[robot_idx])
+            positions[robot_idx].append(temp_pos)
+            velocities[robot_idx].append([control_commands_x[robot_idx], control_commands_y[robot_idx], control_commands_yaw[robot_idx]])
 
         # Update observations with new commands
-        obs[robot_index, CMD_LIN_VEL_X_IDX] = control_command_x
-        obs[robot_index, CMD_LIN_VEL_Y_IDX] = control_command_y
-        obs[robot_index, CMD_ANG_VEL_YAW_IDX] = control_command_yaw
+        for robot_idx in range(num_robots):
+            obs[robot_idx, CMD_LIN_VEL_X_IDX] = control_commands_x[robot_idx]
+            obs[robot_idx, CMD_LIN_VEL_Y_IDX] = control_commands_y[robot_idx]
+            obs[robot_idx, CMD_ANG_VEL_YAW_IDX] = control_commands_yaw[robot_idx]
 
         # Normal action inferences
         actions = policy(obs.detach())
@@ -153,40 +163,51 @@ def play(args):
             # Save the data to a CSV file
             filename = f'trajectory_data_{(i + 1) // env.max_episode_length}.csv'
             with open(filename, 'w', newline='') as csvfile:
-                fieldnames = ['time', 'position_x', 'position_y', 'position_z', 'traj_x', 'traj_y', 'traj_z', 'velocity_x', 'velocity_y', 'velocity_yaw']
+                fieldnames = ['time', 'robot_index', 'position_x', 'position_y', 'position_yaw', 'traj_x', 'traj_y', 'traj_yaw', 'reduced_command_x',
+                              'reduced_command_y', 'reduced_command_yaw', 'velocity_x', 'velocity_y', 'velocity_yaw']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
-                for t, (pos, vel, ideal_pos) in enumerate(zip(positions, velocities, ideal_positions)):
-                    writer.writerow({
-                        'time': t * delta_t,
-                        'position_x': pos[0],
-                        'position_y': pos[1],
-                        'position_z': pos[2],
-                        'traj_x': ideal_pos[0],
-                        'traj_y': ideal_pos[1],
-                        'traj_z': ideal_pos[2],
-                        'velocity_x': vel[0],
-                        'velocity_y': vel[1],
-                        'velocity_yaw': vel[2]
-                    })
+                for t in range(len(positions[0])):
+                    for robot_idx in range(num_robots):
+                        pos = positions[robot_idx][t]
+                        vel = velocities[robot_idx][t]
+                        red = unnormalized_direction_vectors_all[robot_idx][t]
+                        ideal_pos = ideal_positions[robot_idx][t]
+                        writer.writerow({
+                            'time': t * delta_t,
+                            'robot_index': robot_idx,
+                            'position_x': pos[0],
+                            'position_y': pos[1],
+                            'position_yaw': pos[2],
+                            'traj_x': ideal_pos[0],
+                            'traj_y': ideal_pos[1],
+                            'traj_yaw': red[2],
+                            'reduced_command_x': red[0],
+                            'reduced_command_y': red[1],
+                            'reduced_command_yaw': red[2],
+                            'velocity_x': vel[0],
+                            'velocity_y': vel[1],
+                            'velocity_yaw': vel[2]
+                        })
             
             # Reset positions and velocities
-            positions = []
-            velocities = []
-            ideal_positions = []
+            positions = [[] for _ in range(num_robots)]
+            velocities = [[] for _ in range(num_robots)]
+            ideal_positions = [[] for _ in range(num_robots)]
+            unnormalized_direction_vectors_all = [[] for _ in range(num_robots)]
 
             # Reset PD controller state
-            current_position = start_point.copy()
-            current_yaw = 0
-            prev_position_error = np.array([0.0, 0.0])
-            prev_yaw_error = 0.0
-            time_of_last_turn = i
+            start_points = perm_start_points.copy()
+            current_positions = start_points.copy()
+            current_yaws = np.zeros(num_robots)
+            prev_position_errors = np.zeros((num_robots, 2))
+            prev_yaw_errors = np.zeros(num_robots)
+            time_of_last_turns = np.zeros(num_robots)
 
             # Randomly generate new direction and desired direction vectors
-            unnormalized_direction_vector = random_unit_vector()
-            desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
-            
-            print(f'Changed to {unnormalized_direction_vector}')
+            unnormalized_direction_vectors = random_unit_vectors(num_robots) * base_vels[0] * scale_down_from_vel * randomness_scale
+            desired_direction_vectors = random_unit_vectors(num_robots)[:, :2]  # 2D vector for yaw calculation
+            print(f'Changed to {unnormalized_direction_vectors}')
 
         if RECORD_FRAMES:
             if i % 2:
