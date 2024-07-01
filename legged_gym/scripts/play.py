@@ -61,7 +61,7 @@ def play(args):
         return base_interval + np.random.randint(-range_offset, range_offset + 1)
 
     # Randomly generate initial direction and desired direction vectors
-    unnormalized_direction_vector = random_unit_vector()
+    unnormalized_direction_vector = random_unit_vector() * max_speed # hard cap is used to scale the unit vector
     desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
 
     current_position = start_point.copy()
@@ -92,7 +92,7 @@ def play(args):
 
     for i in range(num_iterations * int(env.max_episode_length)):
         if (i - time_of_last_turn) == turn_interval:
-            unnormalized_direction_vector = random_unit_vector()
+            unnormalized_direction_vector = random_unit_vector() * max_speed
             desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
             turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
             time_of_last_turn = i
