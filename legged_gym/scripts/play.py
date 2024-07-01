@@ -64,100 +64,86 @@ def play(args):
     direction_vector = direction_vector / desired_speed  # Normalize the direction vector
     current_position = start_point.copy()
     current_yaw = 0  # Convert direction vector to yaw
+    base_vels = [.5,.5] # base x,y velocities
+
+    # Initialize desired direction vector
+    desired_direction_vector = np.array([1.0, 0.0])  # Example desired direction vector
+
+    current_position = start_point.copy()
+    current_yaw = 0
 
     # PD controller gains
-    Kp = 0.8  # Proportional gain for position and yaw
-    Kd = 0.0  # Derivative gain for position and yaw
+    Kp = 0.8
+    Kd = 0.0
 
-    # Initialize previous error terms for derivative calculation
-    prev_lateral_error = 0.0
-    prev_longitudinal_error = 0.0
+    # Initialize previous error terms
+    prev_position_error = np.array([0.0, 0.0])
     prev_yaw_error = 0.0
 
-    delta_t = env.dt  # Time step
-
-    # Index for commands based on the given structure of obs
-    CMD_START_IDX = 9  # start of commands in obs_buf
-    CMD_LIN_VEL_X_IDX = CMD_START_IDX  # linear velocity x command index
-    CMD_LIN_VEL_Y_IDX = CMD_START_IDX + 1  # linear velocity y command index
-    CMD_ANG_VEL_YAW_IDX = CMD_START_IDX + 2  # angular velocity yaw command index
+    delta_t = env.dt
+    CMD_START_IDX = 9
+    CMD_LIN_VEL_X_IDX = CMD_START_IDX
+    CMD_LIN_VEL_Y_IDX = CMD_START_IDX + 1
+    CMD_ANG_VEL_YAW_IDX = CMD_START_IDX + 2
 
     positions = []
     velocities = []
 
     for i in range((density ** 2) * int(env.max_episode_length)):
-        ideal_position = start_point + unnormalized_direction_vector * env.dt * ((i + 1) % int(env.max_episode_length))
-        # Retrieve current velocities and update position and yaw
+        ideal_position = start_point + unnormalized_direction_vector * env.dt * ((i+1) % int(env.max_episode_length))
+        
+        # Update current position and yaw
         base_lin_vel_x = env.base_lin_vel[robot_index, 0].item()
         base_lin_vel_y = env.base_lin_vel[robot_index, 1].item()
         base_ang_vel_yaw = env.base_ang_vel[robot_index, 2].item()
 
-        # Update yaw and position
         current_yaw += base_ang_vel_yaw * delta_t
-        current_yaw = (current_yaw + np.pi) % (2 * np.pi) - np.pi  # Normalize yaw
+        current_yaw = (current_yaw + np.pi) % (2 * np.pi) - np.pi
         current_position[0] += delta_t * (np.cos(current_yaw) * base_lin_vel_x - np.sin(current_yaw) * base_lin_vel_y)
         current_position[1] += delta_t * (np.sin(current_yaw) * base_lin_vel_x + np.cos(current_yaw) * base_lin_vel_y)
 
-        # Calculate longitudinal error
-        longitudinal_error = np.dot(current_position[:2] - start_point[:2], direction_vector[:2])
+        # Calculate position error
+        position_error = ideal_position[:2] - current_position[:2]
 
-        # Calculate lateral error (perpendicular distance to the direction vector)
-        lateral_error = \
-        np.cross(np.append(current_position[:2] - start_point[:2], 0), np.append(direction_vector[:2], 0))[2]
-
-        # Calculate yaw error
-        desired_yaw = np.arctan2(direction_vector[1], direction_vector[0])
+        # Calculate yaw error using desired_direction_vector
+        desired_yaw = np.arctan2(desired_direction_vector[1], desired_direction_vector[0])
         yaw_error = desired_yaw - current_yaw
-        yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
+        yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
 
-        # Compute control commands using PD control
-        control_command_y = Kp * lateral_error + Kd * (lateral_error - prev_lateral_error) / delta_t
+        # PD control for position and yaw
+        control_command_x = base_vels[0] + Kp * position_error[0] + Kd * (position_error[0] - prev_position_error[0]) / delta_t
+        control_command_y = base_vels[1] + Kp * position_error[1] + Kd * (position_error[1] - prev_position_error[1]) / delta_t
         control_command_yaw = Kp * yaw_error + Kd * (yaw_error - prev_yaw_error) / delta_t
 
-        # Adjust control command for x to maintain desired speed
-        control_command_x = np.sqrt(max(0, desired_speed ** 2 - control_command_y ** 2))
-
-        # Save current errors for next derivative calculation
-        prev_lateral_error = lateral_error
-        prev_longitudinal_error = longitudinal_error
+        # Save current errors
+        prev_position_error = position_error
         prev_yaw_error = yaw_error
 
-        # Save current position and velocity commands
+        # Save positions and velocities
         positions.append(current_position.copy())
         velocities.append([control_command_x, control_command_y, control_command_yaw])
 
         # Update observations with new commands
-        obs[robot_index, CMD_LIN_VEL_X_IDX] = control_command_y * direction_vector[0]  # reversed this intentionally
-        obs[robot_index, CMD_LIN_VEL_Y_IDX] = control_command_x * direction_vector[1]
+        obs[robot_index, CMD_LIN_VEL_X_IDX] = control_command_x
+        obs[robot_index, CMD_LIN_VEL_Y_IDX] = control_command_y
         obs[robot_index, CMD_ANG_VEL_YAW_IDX] = control_command_yaw
-
-        print(i)
-        print(f"x: {obs[robot_index, CMD_LIN_VEL_X_IDX]}")
-        print(f"y: {obs[robot_index, CMD_LIN_VEL_Y_IDX]}")
-        print(f"yaw: {obs[robot_index, CMD_ANG_VEL_YAW_IDX]}")
-        print('--------')
-        print(f'longitudinal error: {longitudinal_error}')
-        print(f'lateral error: {lateral_error}')
-        print(f'yaw error: {yaw_error}')
 
         # Normal action inferences
         actions = policy(obs.detach())
         obs, _, rews, dones, infos = env.step(actions.detach())
 
-        # Reset the PD controller state and save data at multiples of env.max_episode_length
         if (i + 1) % env.max_episode_length == 0:
             # Save the data to a CSV file
             filename = f'trajectory_data_{(i + 1) // env.max_episode_length}.csv'
             with open(filename, 'w', newline='') as csvfile:
-                fieldnames = ['time', 'position_x', 'position_y', 'position_z', 'traj_x', 'traj_y', 'traj_z',
-                              'velocity_x', 'velocity_y', 'velocity_yaw']
+                fieldnames = ['time', 'position_x', 'position_y', 'position_z', 'traj_x', 'traj_y', 'traj_z', 'velocity_x', 'velocity_y', 'velocity_yaw']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for t, (pos, vel) in enumerate(zip(positions, velocities)):
                     writer.writerow({
                         'time': t * delta_t,
-                        'position_x': pos[0],  # x_x
-                        'position_y': pos[1],  # x_y
+                        'position_x': pos[0],
+                        'position_y': pos[1],
                         'position_z': pos[2],
                         'traj_x': ideal_position[0],
                         'traj_y': ideal_position[1],
@@ -166,22 +152,21 @@ def play(args):
                         'velocity_y': vel[1],
                         'velocity_yaw': vel[2]
                     })
-
-            # Reset positions and velocities for the next episode
+            
+            # Reset positions and velocities
             positions = []
             velocities = []
 
             # Reset PD controller state
             current_position = start_point.copy()
             current_yaw = 0
-            prev_lateral_error = 0.0
-            prev_longitudinal_error = 0.0
+            prev_position_error = np.array([0.0, 0.0])
             prev_yaw_error = 0.0
 
-            # unnormalized_direction_vector = np.array(robot_grids_with_z[robot_index][robot_grid_iterator])
-            # desired_speed = np.linalg.norm(unnormalized_direction_vector)
-            # direction_vector = unnormalized_direction_vector / desired_speed if desired_speed != 0 else np.zeros_like(unnormalized_direction_vector)
-            # robot_grid_iterator += 1
+            unnormalized_direction_vector = np.array(robot_grids_with_z[robot_index][robot_grid_iterator])
+            desired_speed = np.linalg.norm(unnormalized_direction_vector)
+            direction_vector = unnormalized_direction_vector / desired_speed if desired_speed != 0 else np.zeros_like(unnormalized_direction_vector)
+            robot_grid_iterator += 1
             print(f'Changed to {unnormalized_direction_vector}')
 
         if RECORD_FRAMES:
