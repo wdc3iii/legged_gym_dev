@@ -88,18 +88,18 @@ def play(args):
     positions = []
     velocities = []
     ideal_positions = []
-    time_since_turn = 0
+    time_of_last_turn = 0
 
     for i in range(num_iterations * int(env.max_episode_length)):
-        if time_since_turn == turn_interval:
+        if (i - time_of_last_turn) == turn_interval:
             unnormalized_direction_vector = random_unit_vector()
             desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
             turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
-            time_since_turn = 0
+            time_of_last_turn = i
             start_point = current_position
             print(f'Turn at iteration {i}, new direction: {unnormalized_direction_vector}, new desired direction: {desired_direction_vector}, will turn again in {turn_interval} intervals')
 
-        ideal_position = start_point + unnormalized_direction_vector * env.dt * time_since_turn
+        ideal_position = start_point + unnormalized_direction_vector * env.dt * (i - time_of_last_turn)
         ideal_positions.append(ideal_position.copy())
         
         # Update current position and yaw
@@ -180,7 +180,7 @@ def play(args):
             current_yaw = 0
             prev_position_error = np.array([0.0, 0.0])
             prev_yaw_error = 0.0
-            time_since_turn = 0
+            time_of_last_turn = i
 
             # Randomly generate new direction and desired direction vectors
             unnormalized_direction_vector = random_unit_vector()
