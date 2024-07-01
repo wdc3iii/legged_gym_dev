@@ -56,21 +56,21 @@ def play(args):
     robot_grids_with_z = add_zero_z_coordinate(robot_grids)
     robot_grid_iterator = 0
 
+    # Initialize variables
     start_point = np.array([0.0, 0.0, 1.0])
-    # direction_vector = np.array(robot_grids_with_z[robot_index][0]) # [0.5, 0.5, 0.0])  # Example direction vector
-    direction_vector = np.array([-.5, .5, 0])
-    desired_speed = np.linalg.norm(direction_vector)
-    unnormalized_direction_vector = direction_vector.copy()
-    direction_vector = direction_vector / desired_speed  # Normalize the direction vector
-    current_position = start_point.copy()
-    current_yaw = 0  # Convert direction vector to yaw
-    base_vels = [.5,.5] # base x,y velocities
 
-    # Initialize desired direction vector
-    desired_direction_vector = np.array([1.0, 0.0])  # Example desired direction vector
+    # Function to generate a random unit vector
+    def random_unit_vector():
+        angle = np.random.uniform(0, 2 * np.pi)
+        return np.array([np.cos(angle), np.sin(angle), 0.0])
+
+    # Randomly generate initial direction and desired direction vectors
+    unnormalized_direction_vector = random_unit_vector()
+    desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
 
     current_position = start_point.copy()
     current_yaw = 0
+    base_vels = [.5,.5]
 
     # PD controller gains
     Kp = 0.8
@@ -163,10 +163,10 @@ def play(args):
             prev_position_error = np.array([0.0, 0.0])
             prev_yaw_error = 0.0
 
-            unnormalized_direction_vector = np.array(robot_grids_with_z[robot_index][robot_grid_iterator])
-            desired_speed = np.linalg.norm(unnormalized_direction_vector)
-            direction_vector = unnormalized_direction_vector / desired_speed if desired_speed != 0 else np.zeros_like(unnormalized_direction_vector)
-            robot_grid_iterator += 1
+            # Randomly generate new direction and desired direction vectors
+            unnormalized_direction_vector = random_unit_vector()
+            desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
+            
             print(f'Changed to {unnormalized_direction_vector}')
 
         if RECORD_FRAMES:
