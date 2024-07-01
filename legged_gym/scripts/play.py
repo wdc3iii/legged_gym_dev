@@ -13,7 +13,7 @@ import time
 
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
-    num_robots = 2  # Adjust the number of robots as needed
+    num_robots = 1000  # Adjust the number of robots as needed
     randomness_scale = 0.5  # Scaling factor for randomness
 
     # Override some parameters for testing
@@ -51,8 +51,8 @@ def play(args):
 
     # Initialize variables
     start_points = np.array([[0.0, 0.0, 1.0]] * num_robots)
-    max_speed = 1.0  # hard maximum speed cap
-    num_iterations = 3
+    max_speed = 2  # hard maximum speed cap
+    num_iterations = 1000
 
     # Function to generate random unit vectors
     def random_unit_vectors(num):
@@ -65,8 +65,8 @@ def play(args):
     current_positions = start_points.copy()
     perm_start_points = start_points.copy()
     current_yaws = np.zeros(num_robots)
-    base_vels = np.array([0.5, 0.5])
-    scale_down_from_vel = 0.8
+    base_vels = np.array([1, 1])
+    scale_down_from_vel = .95 # planning model can move only .95 times as fast as normal robot
     base_turn_interval = 500  # number of iterations between each turn of the robot
     turn_interval_range = 150
     turn_intervals = randomize_turn_intervals(base_turn_interval, turn_interval_range, num_robots)
@@ -153,7 +153,7 @@ def play(args):
         for robot_idx in range(num_robots):
             obs[robot_idx, CMD_LIN_VEL_X_IDX] = control_commands_x[robot_idx]
             obs[robot_idx, CMD_LIN_VEL_Y_IDX] = control_commands_y[robot_idx]
-            obs[robot_idx, CMD_ANG_VEL_YAW_IDX] = control_commands_yaw[robot_idx]
+            obs[robot_idx, CMD_ANG_VEL_YAW_IDX] = 0 # control_commands_yaw[robot_idx]
 
         # Normal action inferences
         actions = policy(obs.detach())
@@ -163,8 +163,9 @@ def play(args):
             # Save the data to a CSV file
             filename = f'trajectory_data_{(i + 1) // env.max_episode_length}.csv'
             with open(filename, 'w', newline='') as csvfile:
-                fieldnames = ['time', 'robot_index', 'position_x', 'position_y', 'position_yaw', 'traj_x', 'traj_y', 'traj_yaw', 'reduced_command_x',
-                              'reduced_command_y', 'reduced_command_yaw', 'velocity_x', 'velocity_y', 'velocity_yaw']
+                fieldnames = ['time', 'episode_number', 'robot_index', 'position_x', 'position_y', 'position_yaw', 
+                              'traj_x', 'traj_y', 'traj_yaw', 'reduced_command_x', 'reduced_command_y', 'reduced_command_yaw', 
+                              'velocity_x', 'velocity_y', 'velocity_yaw']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for t in range(len(positions[0])):
@@ -175,6 +176,7 @@ def play(args):
                         ideal_pos = ideal_positions[robot_idx][t]
                         writer.writerow({
                             'time': t * delta_t,
+                            'episode_number': (i + 1) // env.max_episode_length,
                             'robot_index': robot_idx,
                             'position_x': pos[0],
                             'position_y': pos[1],
