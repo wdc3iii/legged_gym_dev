@@ -87,6 +87,7 @@ def play(args):
 
     positions = []
     velocities = []
+    ideal_positions = []
 
     for i in range(num_iterations * int(env.max_episode_length)):
         if i % turn_interval == 0:
@@ -96,6 +97,7 @@ def play(args):
             print(f'Turn at iteration {i}, new direction: {unnormalized_direction_vector}, new desired direction: {desired_direction_vector}, will turn again in {turn_interval} intervals')
 
         ideal_position = start_point + unnormalized_direction_vector * env.dt * ((i+1) % int(env.max_episode_length))
+        ideal_positions.append(ideal_position.copy())
         
         # Update current position and yaw
         base_lin_vel_x = env.base_lin_vel[robot_index, 0].item()
@@ -151,15 +153,15 @@ def play(args):
                 fieldnames = ['time', 'position_x', 'position_y', 'position_z', 'traj_x', 'traj_y', 'traj_z', 'velocity_x', 'velocity_y', 'velocity_yaw']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
-                for t, (pos, vel) in enumerate(zip(positions, velocities)):
+                for t, (pos, vel, ideal_pos) in enumerate(zip(positions, velocities, ideal_positions)):
                     writer.writerow({
                         'time': t * delta_t,
                         'position_x': pos[0],
                         'position_y': pos[1],
                         'position_z': pos[2],
-                        'traj_x': ideal_position[0],
-                        'traj_y': ideal_position[1],
-                        'traj_z': ideal_position[2],
+                        'traj_x': ideal_pos[0],
+                        'traj_y': ideal_pos[1],
+                        'traj_z': ideal_pos[2],
                         'velocity_x': vel[0],
                         'velocity_y': vel[1],
                         'velocity_yaw': vel[2]
@@ -168,6 +170,7 @@ def play(args):
             # Reset positions and velocities
             positions = []
             velocities = []
+            ideal_positions = []
 
             # Reset PD controller state
             current_position = start_point.copy()
