@@ -57,3 +57,6 @@ runs
 # other
 *.egg-info
 __pycache__
+
+# data
+*.csv
