@@ -92,6 +92,8 @@ def play(args):
     positions = [[] for _ in range(num_robots)]
     velocities = [[] for _ in range(num_robots)]
     ideal_positions = [[] for _ in range(num_robots)]
+    joint_positions = [[] for _ in range(num_robots)]
+    joint_velocities = [[] for _ in range(num_robots)]
     unnormalized_direction_vectors_all = [[] for _ in range(num_robots)]
     time_of_last_turns = np.zeros(num_robots)
 
@@ -149,6 +151,10 @@ def play(args):
             positions[robot_idx].append(temp_pos)
             velocities[robot_idx].append([control_commands_x[robot_idx], control_commands_y[robot_idx], control_commands_yaw[robot_idx]])
 
+            # Assuming legged_robot is an instance of LeggedRobot class
+            joint_positions[robot_idx].append(env.dof_pos[robot_idx].cpu().numpy().tolist())
+            joint_velocities[robot_idx].append(env.dof_vel[robot_idx].cpu().numpy().tolist())
+
         # Update observations with new commands
         for robot_idx in range(num_robots):
             obs[robot_idx, CMD_LIN_VEL_X_IDX] = control_commands_x[robot_idx]
@@ -163,9 +169,8 @@ def play(args):
             # Save the data to a CSV file
             filename = f'trajectory_data_{(i + 1) // env.max_episode_length}.csv'
             with open(filename, 'w', newline='') as csvfile:
-                fieldnames = ['time', 'episode_number', 'robot_index', 'position_x', 'position_y', 'position_yaw', 
-                              'traj_x', 'traj_y', 'traj_yaw', 'reduced_command_x', 'reduced_command_y', 'reduced_command_yaw', 
-                              'velocity_x', 'velocity_y', 'velocity_yaw']
+                fieldnames = ['time', 'episode_number', 'robot_index', 'position_x', 'position_y', 'position_yaw', 'traj_x', 'traj_y', 'traj_yaw', 'reduced_command_x',
+                            'reduced_command_y', 'reduced_command_yaw', 'velocity_x', 'velocity_y', 'velocity_yaw', 'joint_positions', 'joint_velocities']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for t in range(len(positions[0])):
@@ -189,8 +194,11 @@ def play(args):
                             'reduced_command_yaw': red[2],
                             'velocity_x': vel[0],
                             'velocity_y': vel[1],
-                            'velocity_yaw': vel[2]
+                            'velocity_yaw': vel[2],
+                            'joint_positions': joint_positions[robot_idx][t],
+                            'joint_velocities': joint_velocities[robot_idx][t]
                         })
+
             
             # Reset positions and velocities
             positions = [[] for _ in range(num_robots)]
