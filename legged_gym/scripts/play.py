@@ -46,18 +46,10 @@ def play(args):
     camera_vel = np.array([1., 1., 0.])
     camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
     img_idx = 0
-
-    # Generate grid for a single robot over the search space of -1 to 1 for both x and y with density 10 and deviation 0.025
-    start = -1
-    end = 1
-    density = 10
-    deviation = 0.025
-    robot_grids = generate_robot_grids(start, end, density, num_robots, deviation)
-    robot_grids_with_z = add_zero_z_coordinate(robot_grids)
-    robot_grid_iterator = 0
-
+    
     # Initialize variables
     start_point = np.array([0.0, 0.0, 1.0])
+    max_speed = 1.0  # hard maximum speed cap
 
     # Function to generate a random unit vector
     def random_unit_vector():
@@ -114,6 +106,13 @@ def play(args):
         control_command_x = base_vels[0] + Kp * position_error[0] + Kd * (position_error[0] - prev_position_error[0]) / delta_t
         control_command_y = base_vels[1] + Kp * position_error[1] + Kd * (position_error[1] - prev_position_error[1]) / delta_t
         control_command_yaw = Kp * yaw_error + Kd * (yaw_error - prev_yaw_error) / delta_t
+
+        # Cap the control commands to max_speed
+        control_speed = np.sqrt(control_command_x**2 + control_command_y**2)
+        if control_speed > max_speed:
+            scale = max_speed / control_speed
+            control_command_x *= scale
+            control_command_y *= scale
 
         # Save current errors
         prev_position_error = position_error
