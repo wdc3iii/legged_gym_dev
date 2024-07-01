@@ -91,7 +91,7 @@ def play(args):
     time_since_turn = 0
 
     for i in range(num_iterations * int(env.max_episode_length)):
-        if i % turn_interval == 0:
+        if time_since_turn == turn_interval:
             unnormalized_direction_vector = random_unit_vector()
             desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
             turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
