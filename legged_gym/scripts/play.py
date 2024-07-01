@@ -67,8 +67,8 @@ def play(args):
     current_position = start_point.copy()
     current_yaw = 0
     base_vels = [.5,.5]
-    base_turn_interval = 50  # number of iterations between each turn of the robot
-    turn_interval_range = 10
+    base_turn_interval = 500  # number of iterations between each turn of the robot
+    turn_interval_range = 150
     turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
 
     # PD controller gains
