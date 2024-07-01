@@ -56,6 +56,9 @@ def play(args):
     def random_unit_vector():
         angle = np.random.uniform(0, 2 * np.pi)
         return np.array([np.cos(angle), np.sin(angle), 0.0])
+    
+    def randomize_turn_interval(base_interval, range_offset):
+        return base_interval + np.random.randint(-range_offset, range_offset + 1)
 
     # Randomly generate initial direction and desired direction vectors
     unnormalized_direction_vector = random_unit_vector()
@@ -64,6 +67,9 @@ def play(args):
     current_position = start_point.copy()
     current_yaw = 0
     base_vels = [.5,.5]
+    base_turn_interval = 50  # number of iterations between each turn of the robot
+    turn_interval_range = 10
+    turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
 
     # PD controller gains
     Kp = 0.8
@@ -83,6 +89,12 @@ def play(args):
     velocities = []
 
     for i in range(num_iterations * int(env.max_episode_length)):
+        if i % turn_interval == 0:
+            unnormalized_direction_vector = random_unit_vector()
+            desired_direction_vector = random_unit_vector()[:2]  # 2D vector for yaw calculation
+            turn_interval = randomize_turn_interval(base_turn_interval, turn_interval_range)
+            print(f'Turn at iteration {i}, new direction: {unnormalized_direction_vector}, new desired direction: {desired_direction_vector}, will turn again in {turn_interval} intervals')
+
         ideal_position = start_point + unnormalized_direction_vector * env.dt * ((i+1) % int(env.max_episode_length))
         
         # Update current position and yaw
