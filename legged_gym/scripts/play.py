@@ -167,7 +167,7 @@ def play(args):
 
         if (i + 1) % env.max_episode_length == 0:
             # Save the data to a CSV file
-            filename = f'trajectory_data_{(i + 1) // env.max_episode_length}.csv'
+            filename = f'rom_tracking_data/trajectory_data_{(i + 1) // env.max_episode_length}.csv'
             with open(filename, 'w', newline='') as csvfile:
                 fieldnames = ['time', 'episode_number', 'robot_index', 'position_x', 'position_y', 'position_yaw', 'traj_x', 'traj_y', 'traj_yaw', 'reduced_command_x',
                             'reduced_command_y', 'reduced_command_yaw', 'velocity_x', 'velocity_y', 'velocity_yaw', 'joint_positions', 'joint_velocities']
