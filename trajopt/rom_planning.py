@@ -1,18 +1,29 @@
 import time
 import numpy as np
-import casadi as cs
+import casadi as ca
 import matplotlib.pyplot as plt
 
+from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
+                                  ExtendedUnicycle, ExtendedLateralUnicycle)
 
-x0 = np.array([-5, -5, 0, 0])
-xf = np.array([8, 3, 0, 0])
-Q = np.eye(4)
-R = np.eye(2)
-u_max = 2
-v_max = 1
-p_max = 10
+# model = "SingleInt2D"
+# model = "DoubleInt2D"
+# model = "Unicycle"
+# model = "LateralUnicycle"
+# model = "ExtendedUnicycle"
+model = "ExtendedLateralUnicycle"
+
+start = np.array([-5, -5, 0])
+goal = np.array([8, 3, np.pi / 2])
+
+acc_max = 2
+alpha_max = 4
+vel_max = 1
+omega_max = 2
+pos_max = 10
 dt = 0.25
 N = 75
+
 # obs = {
 #     'c': np.array([[-2, 4, 1, 0], [-3, 5, -4, 0]]),
 #     'r': np.array([1, 1, 0.2, 3])
@@ -26,24 +37,26 @@ obs = {
 #     'r': np.zeros((0,))
 # }
 
-def trajopt_solver(N, dt, Q, R, v_max, p_max, u_max, Nobs, Qf=None):
+
+def trajopt_solver(pm, N, Q, R, z_min, z_max, v_min, v_max, Nobs, Qf=None):
     if Qf is None:
         Qf = Q
-    Q = cs.DM(Q)
-    Qf = cs.DM(Qf)
-    v_max = cs.DM(v_max)
-    p_max = cs.DM(p_max)
-    u_max = cs.DM(u_max)
+    Q = ca.DM(Q)
+    Qf = ca.DM(Qf)
+    z_min = ca.DM(z_min)
+    z_max = ca.DM(z_max)
+    v_min = ca.DM(v_min)
+    v_max = ca.DM(v_max)
 
     # Make decision variables (2D double integrator)
-    x = cs.MX.sym("x", N + 1, 4)
-    u = cs.MX.sym("u", N, 2)
+    z = ca.MX.sym("z", N + 1, pm.n)
+    v = ca.MX.sym("v", N, pm.m)
 
     # Parameters: initial condition, final condition
-    p_x0 = cs.MX.sym("p_x0", 1, 4)                 # Initial condition
-    p_xf = cs.MX.sym("p_xf", 1, 4)                 # Goal state
-    p_obs_c = cs.MX.sym("p_obs_c", Nobs, 2)    # obstacle centers
-    p_obs_r = cs.MX.sym("p_obs_r", Nobs, 1)    # obstacle radii
+    p_z0 = ca.MX.sym("p_z0", 1, pm.n)          # Initial state
+    p_zf = ca.MX.sym("p_zf", 1, pm.n)          # Goal state
+    p_obs_c = ca.MX.sym("p_obs_c", Nobs, 2)    # positional obstacle centers
+    p_obs_r = ca.MX.sym("p_obs_r", Nobs, 1)    # positional obstacle radii
 
     # Define NLP
     obj = 0
@@ -51,57 +64,41 @@ def trajopt_solver(N, dt, Q, R, v_max, p_max, u_max, Nobs, Qf=None):
     g_lb = []
     g_ub = []
 
-    state_bound = cs.DM([p_max, p_max, v_max, v_max]).T
-    input_bound = cs.DM([u_max, u_max]).T
-
-    x_lb = cs.repmat(-state_bound, N + 1, 1)
-    x_ub = cs.repmat(state_bound, N + 1, 1)
-    u_lb = cs.repmat(-input_bound, N, 1)
-    u_ub = cs.repmat(input_bound, N, 1)
-
-    A = cs.DM([[1.0, 0, dt, 0], [0, 1.0, 0, dt], [0, 0, 1.0, 0], [0, 0, 0, 1.0]])
-    B = cs.DM([[0, 0], [0, 0], [dt, 0], [0, dt]])
+    z_lb = ca.repmat(z_min.T, N + 1, 1)
+    z_ub = ca.repmat(z_max.T, N + 1, 1)
+    v_lb = ca.repmat(v_min.T, N, 1)
+    v_ub = ca.repmat(v_max.T, N, 1)
 
     for k in range(N):
         # cost function
-        obj += (x[k, :] - p_xf) @ Q @ (x[k, :] - p_xf).T + u[k, :] @ R @ u[k, :].T
-
-        # state constraints
-        # g = cs.horzcat(g, x[k, :])
-        # g_lb = cs.horzcat(g_lb, -state_bound)
-        # g_ub = cs.horzcat(g_ub, state_bound)
-        #
-        # # input constraints
-        # g = cs.horzcat(g, u[k, :])
-        # g_lb = cs.horzcat(g_lb, -input_bound)
-        # g_ub = cs.horzcat(g_ub, input_bound)
+        obj += (z[k, :] - p_zf) @ Q @ (z[k, :] - p_zf).T + v[k, :] @ R @ v[k, :].T
 
         # dynamics
-        g = cs.horzcat(g, (A @ x[k, :].T + B @ u[k, :].T).T - x[k + 1, :])
-        g_lb = cs.horzcat(g_lb, cs.DM([0, 0, 0, 0]).T)
-        g_ub = cs.horzcat(g_ub, cs.DM([0, 0, 0, 0]).T)
+        g = ca.horzcat(g, pm.f(z[k, :].T, v[k, :].T).T - z[k + 1, :])
+        g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((pm.n,))).T)
+        g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((pm.n,))).T)
 
         # obstacle constraints
         for i in range(Nobs):
-            g = cs.horzcat(g, cs.sum2((x[k, :2] - p_obs_c[i, :])**2) - p_obs_r[i, :]**2)
-            g_lb = cs.horzcat(g_lb, cs.DM([0]))
-            g_ub = cs.horzcat(g_ub, cs.DM.inf())
+            g = ca.horzcat(g, ca.sum2((z[k, :2] - p_obs_c[i, :]) ** 2) - p_obs_r[i, :] ** 2)
+            g_lb = ca.horzcat(g_lb, ca.DM([0]))
+            g_ub = ca.horzcat(g_ub, ca.DM.inf())
 
     # Terminal cost/constraints
-    obj += (x[N, :] - p_xf) @ Qf @ (x[N, :] - p_xf).T
+    obj += (z[N, :] - p_zf) @ Qf @ (z[N, :] - p_zf).T
 
     # Initial condition
-    g = cs.horzcat(g, x[0, :] - p_x0)
-    g_lb = cs.horzcat(g_lb, cs.DM([0, 0, 0, 0]).T)
-    g_ub = cs.horzcat(g_ub, cs.DM([0, 0, 0, 0]).T)
+    g = ca.horzcat(g, z[0, :] - p_z0)
+    g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((pm.n,))).T)
+    g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((pm.n,))).T)
 
     # Generate solver
-    x_nlp = cs.vertcat(cs.reshape(x, (N + 1) * 4, 1), cs.reshape(u, N * 2, 1))
-    lbx = cs.vertcat(cs.reshape(x_lb, (N + 1) * 4, 1), cs.reshape(u_lb, N * 2, 1))
-    ubx = cs.vertcat(cs.reshape(x_ub, (N + 1) * 4, 1), cs.reshape(u_ub, N * 2, 1))
-    p_nlp = cs.vertcat(p_x0.T, p_xf.T, cs.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
+    z_nlp = ca.vertcat(ca.reshape(z, (N + 1) * pm.n, 1), ca.reshape(v, N * pm.m, 1))
+    lbz = ca.vertcat(ca.reshape(z_lb, (N + 1) * pm.n, 1), ca.reshape(v_lb, N * pm.m, 1))
+    ubz = ca.vertcat(ca.reshape(z_ub, (N + 1) * pm.n, 1), ca.reshape(v_ub, N * pm.m, 1))
+    p_nlp = ca.vertcat(p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
     nlp_dict = {
-        "x": x_nlp,
+        "x": z_nlp,
         "f": obj,
         "g": g,
         "p": p_nlp
@@ -115,26 +112,29 @@ def trajopt_solver(N, dt, Q, R, v_max, p_max, u_max, Nobs, Qf=None):
         "print_time": True,
     }
 
-    nlp_solver = cs.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
+    nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
-    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx}
+    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbz, "ubx": ubz}
 
     return solver
 
 
-def generate_trajectory(x0, xf, N, dt, Q, R, v_max, p_max, u_max, obs, Qf=None):
+def generate_trajectory(plan_model, z0, zf, N, Q, R, z_min, z_max, v_min, v_max, Qf=None):
     Nobs = len(obs['r'])
 
-    nlp = trajopt_solver(N, dt, Q, R, v_max, p_max, u_max, Nobs, Qf=Qf)
+    nlp = trajopt_solver(plan_model, N, Q, R, z_min, z_max, v_min, v_max, Nobs, Qf=Qf)
 
-    params = np.vstack([x0[:, None], xf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
+    params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
-    u_init = np.zeros((N, 2))
-    # x_init = np.repeat(xf[:, None], N + 1, 1)
-    # x_init = np.repeat(x0[:, None], N + 1, 1)
-    x_init = np.outer(np.linspace(0, 1, N+1), (xf - x0)) + x0
+    v_init = np.zeros((N, plan_model.m))
+    # z_init = np.repeat(xf[:, None], N + 1, 1)
+    # z_init = np.repeat(x0[:, None], N + 1, 1)
+    z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
 
-    x_init = np.vstack([np.reshape(x_init, ((N + 1) * 4, 1)), np.reshape(u_init, (N * 2, 1))])
+    x_init = np.vstack([
+        np.reshape(z_init, ((N + 1) * plan_model.n, 1)),
+        np.reshape(v_init, (N * plan_model.m, 1))
+    ])
 
     tic = time.perf_counter_ns()
     sol = nlp["solver"](x0=x_init, p=params, lbg=nlp["lbg"], ubg=nlp["ubg"], lbx=nlp["lbx"], ubx=nlp["ubx"])
@@ -142,31 +142,23 @@ def generate_trajectory(x0, xf, N, dt, Q, R, v_max, p_max, u_max, obs, Qf=None):
     print(f"Solve Time: {(toc - tic) / 1e6}ms")
 
     # extract solution
-    x_sol = np.array(sol["x"][:(N + 1) * 4, :].reshape((N + 1, 4)))
-    u_sol = np.array(sol["x"][(N + 1) * 4:, :].reshape((N, 2)))
+    z_sol = np.array(sol["x"][:(N + 1) * plan_model.n, :].reshape((N + 1, plan_model.n)))
+    v_sol = np.array(sol["x"][(N + 1) * plan_model.n:, :].reshape((N, plan_model.m)))
 
-    plt.figure()
-    plt.subplot(2,1,1)
-    plt.plot(np.linspace(0, N * dt, N + 1), x_sol)
-    plt.xlabel('Time (s)')
-    plt.ylabel('State')
-    plt.legend(['x', 'y', 'vx', 'vy'])
-
-    plt.subplot(2, 1, 2)
-    plt.plot(np.linspace(0, (N - 1) * dt, N), u_sol)
-    plt.xlabel('Time (s)')
-    plt.ylabel('Input')
-    plt.legend(['ux', 'uy'])
+    fig, axs = plt.subplots(2,1)
+    plan_model.plot_ts(axs, z_sol, v_sol)
     plt.show()
 
     fig, ax = plt.subplots()
     for i in range(Nobs):
-        circ = plt.Circle(obs['c'][:, i], obs['r'][i], color='r', alpha=0.5)
+        xc = obs['c'][0, i]
+        yc = obs['c'][1, i]
+        circ = plt.Circle((xc, yc), obs['r'][i], color='r', alpha=0.5)
         ax.add_patch(circ)
-    plt.plot(x0[0], x0[1], 'rx')
-    plt.plot(xf[0], xf[1], 'go')
+    plt.plot(z0[0], z0[1], 'rx')
+    plt.plot(zf[0], zf[1], 'go')
 
-    plt.plot(x_sol[:, 0], x_sol[:, 1], 'k')
+    plan_model.plot_spacial(ax, z_sol)
     plt.axis("square")
     plt.show()
 
@@ -174,4 +166,70 @@ def generate_trajectory(x0, xf, N, dt, Q, R, v_max, p_max, u_max, obs, Qf=None):
 
 
 if __name__ == "__main__":
-    generate_trajectory(x0, xf, N, dt, Q, R, v_max, p_max, u_max, obs)
+    if model == "SingleInt2D":
+        planning_model = SingleInt2D(dt)
+        z_max = np.array([pos_max, pos_max])
+        v_max = np.array([vel_max, vel_max])
+        Q = 10 * np.eye(2)
+        R = 0.1 * np.eye(2)
+        z0 = start[:2]
+        zf = goal[:2]
+        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, -v_max, v_max)
+
+    elif model == "DoubleInt2D":
+        planning_model = DoubleInt2D(dt)
+        z_max = np.array([pos_max, pos_max, vel_max, vel_max])
+        v_max = np.array([acc_max, acc_max])
+        Q = np.diag([10, 10, 5, 5])
+        R = 0.1 * np.eye(2)
+        z0 = np.hstack([start[:2], np.zeros((2,))])
+        zf = np.hstack([goal[:2], np.zeros((2,))])
+        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, -v_max, v_max)
+
+    elif model == "Unicycle":
+        planning_model = Unicycle(dt)
+        z_max = np.array([pos_max, pos_max, np.inf])
+        v_max = np.array([vel_max, omega_max])
+        v_min = np.array([-vel_max / 2, -omega_max])
+        Q = np.diag([10, 10, 0])
+        Qf = np.diag([100, 100, 1])
+        R = 0.1 * np.eye(2)
+        z0 = start
+        zf = goal
+        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, v_min, v_max, Qf=Qf)
+
+    elif model == "LateralUnicycle":
+        planning_model = LateralUnicycle(dt)
+        z_max = np.array([pos_max, pos_max, np.inf])
+        v_max = np.array([vel_max, vel_max / 2, omega_max])
+        v_min = np.array([-vel_max / 2, -vel_max / 2, -omega_max])
+        Q = np.diag([10, 10, 0])
+        Qf = np.diag([100, 100, 1])
+        R = np.diag([0.1, 1, 0.1])
+        z0 = start
+        zf = goal
+        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, v_min, v_max, Qf=Qf)
+
+    elif model == "ExtendedUnicycle":
+        planning_model = ExtendedUnicycle(dt)
+        z_max = np.array([pos_max, pos_max, np.inf, vel_max, omega_max])
+        z_min = -np.array([pos_max, pos_max, np.inf, vel_max / 2, omega_max])
+        v_max = np.array([acc_max, alpha_max])
+        Q = np.diag([10, 10, 0, 5, 5])
+        Qf = np.diag([100, 100, 1, 100, 100])
+        R = 0.1 * np.eye(2)
+        z0 = np.hstack([start, np.zeros((2,))])
+        zf = np.hstack([goal, np.zeros((2,))])
+        generate_trajectory(planning_model, z0, zf, N, Q, R, z_min, z_max, -v_max, v_max, Qf=Qf)
+
+    elif model == "ExtendedLateralUnicycle":
+        planning_model = ExtendedLateralUnicycle(dt)
+        z_max = np.array([pos_max, pos_max, np.inf, vel_max, vel_max / 2, omega_max])
+        z_min = -np.array([pos_max, pos_max, np.inf, vel_max / 2, vel_max / 2, omega_max])
+        v_max = np.array([acc_max, acc_max / 2, alpha_max])
+        Q = np.diag([10, 10, 0, 5, 5, 5])
+        Qf = np.diag([100, 100, 1, 100, 100, 100])
+        R = 0.1 * np.eye(3)
+        z0 = np.hstack([start, np.zeros((3,))])
+        zf = np.hstack([goal, np.zeros((3,))])
+        generate_trajectory(planning_model, z0, zf, N, Q, R, z_min, z_max, -v_max, v_max, Qf=Qf)
