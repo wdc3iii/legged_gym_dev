@@ -7,12 +7,22 @@ class RomDynamics(ABC):
     n: int
     m: int
 
-    def __init__(self, dt):
+    def __init__(self, dt, z_min, z_max, v_min, v_max):
         self.dt = dt
+        self.v_min = v_min
+        self.v_max = v_max
+        self.z_min = z_min
+        self.z_max = z_max
 
     @abstractmethod
     def f(self, x, u):
         raise NotImplementedError
+
+    def sample_uniform_v(self):
+        return np.random.uniform(self.v_min, self.v_max)
+
+    def sample_uniform_z(self):
+        return np.random.uniform(self.z_min, self.z_max)
 
     @staticmethod
     def plot_spacial(ax, xt, c='-k'):
@@ -34,8 +44,8 @@ class DoubleInt2D(RomDynamics):
     n = 4   # [x, y, vx, vy]
     m = 2   # [ax, ay]
 
-    def __init__(self, dt):
-        super().__init__(dt)
+    def __init__(self, dt, z_min, z_max, v_min, v_max):
+        super().__init__(dt, z_min, z_max, v_min, v_max)
         self.A = ca.DM([[1.0, 0, dt, 0], [0, 1.0, 0, dt], [0, 0, 1.0, 0], [0, 0, 0, 1.0]])
         self.B = ca.DM([[0, 0], [0, 0], [dt, 0], [0, dt]])
 
@@ -52,8 +62,8 @@ class SingleInt2D(RomDynamics):
     n = 2   # [x, y]
     m = 2   # [vx, vy]
 
-    def __init__(self, dt):
-        super().__init__(dt)
+    def __init__(self, dt, z_min, z_max, v_min, v_max):
+        super().__init__(dt, z_min, z_max, v_min, v_max)
         self.A = ca.DM([[1.0, 0], [0, 1.0]])
         self.B = ca.DM([[dt, 0], [0, dt]])
 
@@ -70,8 +80,8 @@ class Unicycle(RomDynamics):
     n = 3   # [x, y, theta]
     m = 2   # [v, omega]
 
-    def __init__(self, dt):
-        super().__init__(dt)
+    def __init__(self, dt, z_min, z_max, v_min, v_max):
+        super().__init__(dt, z_min, z_max, v_min, v_max)
 
     def f(self, x, u):
         g = ca.MX(self.n, self.m)
@@ -95,9 +105,6 @@ class LateralUnicycle(Unicycle):
     n = 3   # [x, y, theta]
     m = 3   # [v, v_perp, omega]
 
-    def __init__(self, dt):
-        super().__init__(dt)
-
     def f(self, x, u):
         g = ca.MX(self.n, self.m)
         g[0, 0] = ca.cos(x[2])
@@ -117,9 +124,6 @@ class ExtendedUnicycle(Unicycle):
     n = 5   # [x, y, theta, v, omega]
     m = 2   # [a, alpha]
 
-    def __init__(self, dt):
-        super().__init__(dt)
-
     def f(self, x, u):
         gu = ca.MX(self.n, 1)
         gu[0, 0] = x[3] * ca.cos(x[2])
@@ -138,9 +142,6 @@ class ExtendedUnicycle(Unicycle):
 class ExtendedLateralUnicycle(Unicycle):
     n = 6   # [x, y, theta, v, v_perp, omega]
     m = 3   # [a, a_perp, alpha]
-
-    def __init__(self, dt):
-        super().__init__(dt)
 
     def f(self, x, u):
         gu = ca.MX(self.n, 1)

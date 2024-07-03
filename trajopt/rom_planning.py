@@ -38,15 +38,15 @@ obs = {
 # }
 
 
-def trajopt_solver(pm, N, Q, R, z_min, z_max, v_min, v_max, Nobs, Qf=None):
+def trajopt_solver(pm, N, Q, R, Nobs, Qf=None):
     if Qf is None:
         Qf = Q
     Q = ca.DM(Q)
     Qf = ca.DM(Qf)
-    z_min = ca.DM(z_min)
-    z_max = ca.DM(z_max)
-    v_min = ca.DM(v_min)
-    v_max = ca.DM(v_max)
+    z_min = ca.DM(pm.z_min)
+    z_max = ca.DM(pm.z_max)
+    v_min = ca.DM(pm.v_min)
+    v_max = ca.DM(pm.v_max)
 
     # Make decision variables (2D double integrator)
     z = ca.MX.sym("z", N + 1, pm.n)
@@ -119,10 +119,10 @@ def trajopt_solver(pm, N, Q, R, z_min, z_max, v_min, v_max, Nobs, Qf=None):
     return solver
 
 
-def generate_trajectory(plan_model, z0, zf, N, Q, R, z_min, z_max, v_min, v_max, Qf=None):
+def generate_trajectory(plan_model, z0, zf, N, Q, R, Qf=None):
     Nobs = len(obs['r'])
 
-    nlp = trajopt_solver(plan_model, N, Q, R, z_min, z_max, v_min, v_max, Nobs, Qf=Qf)
+    nlp = trajopt_solver(plan_model, N, Q, R, Nobs, Qf=Qf)
 
     params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
@@ -167,69 +167,78 @@ def generate_trajectory(plan_model, z0, zf, N, Q, R, z_min, z_max, v_min, v_max,
 
 if __name__ == "__main__":
     if model == "SingleInt2D":
-        planning_model = SingleInt2D(dt)
         z_max = np.array([pos_max, pos_max])
         v_max = np.array([vel_max, vel_max])
+        planning_model = SingleInt2D(dt, -z_max, z_max, -v_max, v_max)
+
         Q = 10 * np.eye(2)
         R = 0.1 * np.eye(2)
         z0 = start[:2]
         zf = goal[:2]
-        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, -v_max, v_max)
+
+        generate_trajectory(planning_model, z0, zf, N, Q, R)
 
     elif model == "DoubleInt2D":
-        planning_model = DoubleInt2D(dt)
         z_max = np.array([pos_max, pos_max, vel_max, vel_max])
         v_max = np.array([acc_max, acc_max])
+        planning_model = DoubleInt2D(dt, -z_max, z_max, -v_max, v_max)
+
         Q = np.diag([10, 10, 5, 5])
         R = 0.1 * np.eye(2)
         z0 = np.hstack([start[:2], np.zeros((2,))])
         zf = np.hstack([goal[:2], np.zeros((2,))])
-        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, -v_max, v_max)
+
+        generate_trajectory(planning_model, z0, zf, N, Q, R)
 
     elif model == "Unicycle":
-        planning_model = Unicycle(dt)
         z_max = np.array([pos_max, pos_max, np.inf])
         v_max = np.array([vel_max, omega_max])
         v_min = np.array([-vel_max / 2, -omega_max])
+        planning_model = Unicycle(dt, -z_max, z_max, v_min, v_max)
+
         Q = np.diag([10, 10, 0])
         Qf = np.diag([100, 100, 1])
         R = 0.1 * np.eye(2)
         z0 = start
         zf = goal
-        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, v_min, v_max, Qf=Qf)
+        generate_trajectory(planning_model, z0, zf, N, Q, R, Qf=Qf)
 
     elif model == "LateralUnicycle":
-        planning_model = LateralUnicycle(dt)
         z_max = np.array([pos_max, pos_max, np.inf])
         v_max = np.array([vel_max, vel_max / 2, omega_max])
         v_min = np.array([-vel_max / 2, -vel_max / 2, -omega_max])
+        planning_model = LateralUnicycle(dt, -z_max, z_max, v_min, v_max)
+
         Q = np.diag([10, 10, 0])
         Qf = np.diag([100, 100, 1])
         R = np.diag([0.1, 1, 0.1])
         z0 = start
         zf = goal
-        generate_trajectory(planning_model, z0, zf, N, Q, R, -z_max, z_max, v_min, v_max, Qf=Qf)
+
+        generate_trajectory(planning_model, z0, zf, N, Q, R, Qf=Qf)
 
     elif model == "ExtendedUnicycle":
-        planning_model = ExtendedUnicycle(dt)
         z_max = np.array([pos_max, pos_max, np.inf, vel_max, omega_max])
         z_min = -np.array([pos_max, pos_max, np.inf, vel_max / 2, omega_max])
         v_max = np.array([acc_max, alpha_max])
+        planning_model = ExtendedUnicycle(dt, z_min, z_max, -v_max, v_max)
+
         Q = np.diag([10, 10, 0, 5, 5])
         Qf = np.diag([100, 100, 1, 100, 100])
         R = 0.1 * np.eye(2)
         z0 = np.hstack([start, np.zeros((2,))])
         zf = np.hstack([goal, np.zeros((2,))])
-        generate_trajectory(planning_model, z0, zf, N, Q, R, z_min, z_max, -v_max, v_max, Qf=Qf)
+        generate_trajectory(planning_model, z0, zf, N, Q, R, Qf=Qf)
 
     elif model == "ExtendedLateralUnicycle":
-        planning_model = ExtendedLateralUnicycle(dt)
         z_max = np.array([pos_max, pos_max, np.inf, vel_max, vel_max / 2, omega_max])
         z_min = -np.array([pos_max, pos_max, np.inf, vel_max / 2, vel_max / 2, omega_max])
         v_max = np.array([acc_max, acc_max / 2, alpha_max])
+        planning_model = ExtendedLateralUnicycle(dt, z_min, z_max, -v_max, v_max)
+
         Q = np.diag([10, 10, 0, 5, 5, 5])
         Qf = np.diag([100, 100, 1, 100, 100, 100])
         R = 0.1 * np.eye(3)
         z0 = np.hstack([start, np.zeros((3,))])
         zf = np.hstack([goal, np.zeros((3,))])
-        generate_trajectory(planning_model, z0, zf, N, Q, R, z_min, z_max, -v_max, v_max, Qf=Qf)
+        generate_trajectory(planning_model, z0, zf, N, Q, R, Qf=Qf)
