@@ -1,13 +1,27 @@
 import numpy as np
 import casadi as ca
+import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 
 
 class RomDynamics(ABC):
-    n: int
-    m: int
+    """
+    Abstract class for Reduced order Model Dynamics
+    """
+    n: int  # Dimension of state
+    m: int  # Dimension of input
 
     def __init__(self, dt, z_min, z_max, v_min, v_max, backend='casadi'):
+        """
+        Common constructor functionality
+        :param dt: time discretization
+        :param z_min: lower state bound
+        :param z_max: upper state bound
+        :param v_min: lower input bound
+        :param v_max: upper input bound
+        :param backend: 'casadi' for when using dynamics for a casadi optimization program,
+               'numpy' for use with numpy arrays
+        """
         self.dt = dt
         self.v_min = v_min
         self.v_max = v_max
@@ -27,25 +41,77 @@ class RomDynamics(ABC):
             self.cos = lambda x: np.cos(x)
 
     @abstractmethod
-    def f(self, x, u):
+    def f(self, z, v):
+        """
+        Dynamics function
+        :param z: current state
+        :param v: input
+        :return: next state
+        """
         raise NotImplementedError
 
     @abstractmethod
     def sample_uniform_bounded_v(self, z):
+        """
+        Samples an input, v which respects input bounds, and, when the dynamics are applied,
+        will not result in velocities which violate the state bounds (when applicable)
+        :param z: current state
+        :return: valid input in the given state
+        """
         raise NotImplementedError
 
     @abstractmethod
     def clip_v(self, z, v):
+        """
+        Clips the input, v, to a valid input which respects input bounds, and when the dyamics are applied,
+        will not result in velocities which violate the state bounds (when applicable)
+        :param z: state
+        :param v: input
+        :return: clipped input which is valid in the given state
+        """
         raise NotImplementedError
 
     def sample_uniform_v(self):
+        """
+        Samples an input uniformly at random from within the input bounds
+        :return: uniformly random input
+        """
         return np.random.uniform(self.v_min, self.v_max)
 
     @staticmethod
     def plot_spacial(ax, xt, c='-b'):
+        """
+        Plots the x, y spatial trajectory on the given axes
+        :param ax: axes on which to plot
+        :param xt: state trajectory
+        :param c: color/line type
+        """
         ax.plot(xt[:, 0], xt[:, 1], c)
 
+    @staticmethod
+    def plot_tube(ax, xt, wt, c='g'):
+        """
+        Plots the tube on given axes
+        :param ax: axes on which to plot
+        :param xt: state trajectory
+        :param wt: tube width
+        :param c: color/line type
+        """
+        for i in range(xt.shape[0]):
+            # TODO: vector tube plotting
+            if wt.shape[1] == 1:
+                xc = xt[i, 0]
+                yc = xt[i, 1]
+                circ = plt.Circle((xc, yc), wt[i], color=c, fill=False)
+                ax.add_patch(circ)
+
     def plot_ts(self, axs, xt, ut):
+        """
+        Plots states and inputs over time
+        :param axs: size 2 array of axes on which to plot states (first) and inputs (second)
+        :param xt: state trajectory
+        :param ut: input trajectory
+        """
         N = xt.shape[0]
         ts = np.linspace(0, N * self.dt, N)
         axs[0].plot(ts, xt)
@@ -93,17 +159,26 @@ class DoubleInt2D(RomDynamics):
     def f(self, x, u):
         return self.A @ x + self.B @ u
 
-    def compute_state_dependent_v_bounds(self, z):
+    def compute_state_dependent_input_bounds(self, z):
+        """
+        Because there are state bounds on the velocity, in some states we cannot use the full input range.
+        For instance, if the x velocity is at its maximum, applying a positive x acceleration
+        will move the state outside the state bounds.
+        This function computes new input bounds which ensure that inputs within these bounds will not result in state
+        violation (for the velocity state bounds)
+        :param z: current state
+        :return: state-dependent input bounds (lower, upper)
+        """
         v_max_z = np.minimum(self.v_max, (self.z_max[2:] - z[2:]) / self.dt)
         v_min_z = np.maximum(self.v_min, (self.z_min[2:] - z[2:]) / self.dt)
         return v_min_z, v_max_z
 
     def sample_uniform_bounded_v(self, z):
-        v_min_z, v_max_z = self.compute_state_dependent_v_bounds(z)
+        v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.random.uniform(v_min_z, v_max_z)
 
     def clip_v(self, z, v):
-        v_min_z, v_max_z = self.compute_state_dependent_v_bounds(z)
+        v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.maximum(np.minimum(v, v_max_z), v_min_z)
 
     def plot_ts(self, axs, xt, ut):
@@ -175,17 +250,26 @@ class ExtendedUnicycle(Unicycle):
         gu[4] = u[1]
         return x + self.dt * gu
 
-    def compute_state_dependent_v_bounds(self, z):
+    def compute_state_dependent_input_bounds(self, z):
+        """
+        Because there are state bounds on the velocity, in some states we cannot use the full input range.
+        For instance, if the x velocity is at its maximum, applying a positive x acceleration
+        will move the state outside the state bounds.
+        This function computes new input bounds which ensure that inputs within these bounds will not result in state
+        violation (for the velocity state bounds)
+        :param z: current state
+        :return: state-dependent input bounds (lower, upper)
+        """
         v_max_z = np.minimum(self.v_max, (self.z_max[3:] - z[3:]) / self.dt)
         v_min_z = np.maximum(self.v_min, (self.z_min[3:] - z[3:]) / self.dt)
         return v_min_z, v_max_z
 
     def sample_uniform_bounded_v(self, z):
-        v_min_z, v_max_z = self.compute_state_dependent_v_bounds(z)
+        v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.random.uniform(v_min_z, v_max_z)
 
     def clip_v(self, z, v):
-        v_min_z, v_max_z = self.compute_state_dependent_v_bounds(z)
+        v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.maximum(np.minimum(v, v_max_z), v_min_z)
 
     def plot_ts(self, axs, xt, ut):
