@@ -1,5 +1,6 @@
 import numpy as np
 import casadi as ca
+import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 
 
@@ -86,6 +87,23 @@ class RomDynamics(ABC):
         :param c: color/line type
         """
         ax.plot(xt[:, 0], xt[:, 1], c)
+
+    @staticmethod
+    def plot_tube(ax, xt, wt, c='g'):
+        """
+        Plots the tube on given axes
+        :param ax: axes on which to plot
+        :param xt: state trajectory
+        :param wt: tube width
+        :param c: color/line type
+        """
+        for i in range(xt.shape[0]):
+            # TODO: vector tube plotting
+            if wt.shape[1] == 1:
+                xc = xt[i, 0]
+                yc = xt[i, 1]
+                circ = plt.Circle((xc, yc), wt[i], color=c, fill=False)
+                ax.add_patch(circ)
 
     def plot_ts(self, axs, xt, ut):
         """
