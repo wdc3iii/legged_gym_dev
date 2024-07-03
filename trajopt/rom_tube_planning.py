@@ -44,6 +44,24 @@ def trajopt_error_tube_solver(pm, N, Q, R, Nobs, Qf=None):
     raise NotImplementedError
 
 
+def add_obs(pm, k, z, w, p_obs_c, p_obs_r, tube_dim, Nobs, g_lb, g_ub):
+    for i in range(Nobs):
+        if tube_dim == 1:
+            # Simply increase distance from center by tube dimension
+            g = ca.horzcat(g, ca.sum2((z[k, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[k, :]) ** 2)
+            g_lb = ca.horzcat(g_lb, ca.DM([0]))
+            g_ub = ca.horzcat(g_ub, ca.DM.inf())
+        elif tube_dim == pm.n:
+            ellipse = (z[k, 0] - p_obs_c[i, 0]) ** 2 / (2 * (w[k, 0] + p_obs_r[i]) ** 2) + \
+                      (z[k, 1] - p_obs_c[i, 1]) ** 2 / (2 * (w[k, 0] + p_obs_r[i]) ** 2)
+            g = ca.horzcat(g, ellipse - 1)
+            g_lb = ca.horzcat(g_lb, ca.DM([0]))
+            g_ub = ca.horzcat(g_ub, ca.DM.inf())
+        else:
+            raise ValueError(f"Tube Dimension {tube_dim} not supported for obstacles")
+    return g, g_lb, g_ub
+
+
 # TODO: tube solver
 def trajopt_tube_solver(pm, tube_dyn_model, tube_dim, w_max, N, Q, R, Nobs, Qf=None, device='cpu'):
     if Qf is None:
@@ -97,27 +115,40 @@ def trajopt_tube_solver(pm, tube_dyn_model, tube_dim, w_max, N, Q, R, Nobs, Qf=N
         g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((tube_dim,))).T)
 
         # obstacle constraints
-        # TODO: vector tube based obstacle constraints
-        for i in range(Nobs):
-            if tube_dim == 1:
-                # Simply increase distance from center by tube dimension
-                g = ca.horzcat(g, ca.sum2((z[k, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[k, :]) ** 2)
-                g_lb = ca.horzcat(g_lb, ca.DM([0]))
-                g_ub = ca.horzcat(g_ub, ca.DM.inf())
-            else:
-                raise ValueError(f"Tube Dimension {tube_dim} not supported for obstacles")
+        # TODO: check outer ellipse approximation for vector tube based obstacle constraints
+        # for i in range(Nobs):
+        #     if tube_dim == 1:
+        #         # Simply increase distance from center by tube dimension
+        #         g = ca.horzcat(g, ca.sum2((z[k, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[k, :]) ** 2)
+        #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
+        #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
+        #     elif tube_dim == pm.n:
+        #         ellipse = (z[k, 0] - p_obs_c[i, 0]) ** 2 / (2 * (w[k, 0] + p_obs_r[i])**2) + \
+        #                   (z[k, 1] - p_obs_c[i, 1]) ** 2 / (2 * (w[k, 0] + p_obs_r[i])**2)
+        #         g = ca.horzcat(g, ellipse - 1)
+        #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
+        #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
+        #     else:
+        #         raise ValueError(f"Tube Dimension {tube_dim} not supported for obstacles")
+        g, g_lb, g_ub = add_obs(pm, k, z, w, p_obs_c, p_obs_r, tube_dim, Nobs, g_lb, g_ub)
 
     # Terminal cost/constraints
-    # TODO: vector tube based obstacle constraints
     obj += (z[N, :] - p_zf) @ Qf @ (z[N, :] - p_zf).T
-    for i in range(Nobs):
-        if tube_dim == 1:
-            # Simply increase distance from center by tube dimension
-            g = ca.horzcat(g, ca.sum2((z[N, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[N, :]) ** 2)
-            g_lb = ca.horzcat(g_lb, ca.DM([0]))
-            g_ub = ca.horzcat(g_ub, ca.DM.inf())
-        else:
-            raise ValueError(f"Tube Dimension {tube_dim} not supported for obstacles")
+    # for i in range(Nobs):
+    #     if tube_dim == 1:
+    #         # Simply increase distance from center by tube dimension
+    #         g = ca.horzcat(g, ca.sum2((z[N, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[N, :]) ** 2)
+    #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
+    #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
+    #     elif tube_dim == pm.n:
+    #         ellipse = (z[N, 0] - p_obs_c[i, 0]) ** 2 / (2 * (w[N, 0] + p_obs_r[i]) ** 2) + \
+    #                   (z[N, 1] - p_obs_c[i, 1]) ** 2 / (2 * (w[N, 0] + p_obs_r[i]) ** 2)
+    #         g = ca.horzcat(g, ellipse - 1)
+    #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
+    #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
+    #     else:
+    #         raise ValueError(f"Tube Dimension {tube_dim} not supported for obstacles")
+    g, g_lb, g_ub = add_obs(pm, N, z, w, p_obs_c, p_obs_r, tube_dim, Nobs, g_lb, g_ub)
 
     # Initial condition
     if tube_dim == 1:
