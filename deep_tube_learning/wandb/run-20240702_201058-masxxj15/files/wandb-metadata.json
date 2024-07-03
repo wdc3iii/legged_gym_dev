@@ -1,0 +1,44 @@
+{
+    "os": "macOS-10.16-x86_64-i386-64bit",
+    "python": "3.9.12",
+    "heartbeatAt": "2024-07-03T03:10:59.359855",
+    "startedAt": "2024-07-03T03:10:58.659655",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "Learning.ipynb",
+    "codePathLocal": "Learning.ipynb",
+    "root": "/Users/colejohnson/Desktop/legged_gym_dev",
+    "git": {
+        "remote": "https://github.com/wdc3iii/legged_gym_dev.git",
+        "commit": "d80cb17061c339e36c826b03f28ff883d52d22f7"
+    },
+    "email": "coleonguard@gmail.com",
+    "host": "coles-mbp.lan",
+    "username": "colejohnson",
+    "executable": "/Users/colejohnson/opt/anaconda3/bin/python",
+    "cpu_count": 4,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 2000,
+        "min": 2000,
+        "max": 2000
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2000,
+            "min": 2000,
+            "max": 2000
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 465.62699127197266,
+            "used": 439.2103576660156
+        }
+    },
+    "memory": {
+        "total": 16.0
+    }
+}

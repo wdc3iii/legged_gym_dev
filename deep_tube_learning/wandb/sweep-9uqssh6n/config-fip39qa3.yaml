@@ -1,0 +1,10 @@
+wandb_version: 1
+
+alpha:
+  value: 0.8
+learning_rate:
+  value: 0.1
+num_layers:
+  value: 1
+num_units:
+  value: 64
