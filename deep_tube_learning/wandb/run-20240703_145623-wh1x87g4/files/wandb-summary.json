@@ -1,0 +1,1 @@
+{"Train Loss": 9.219273341302376e-07, "Epoch": 499, "_timestamp": 1720043845.870494, "_runtime": 62.42263889312744, "_step": 999, "Test Loss": 1.702041285689404e-06, "Proportion y_pred > w_{t+1}": 0.890927624872579, "Avg Abs Diff y_pred < w_{t+1}": 0.004393221777313133, "_wandb": {"runtime": 62}}
