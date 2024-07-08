@@ -32,7 +32,7 @@ def load_and_prepare_data(filename, tube_type):
     for col in list_columns:
         df[col] = df[col].apply(safe_eval)
 
-    X = torch.tensor(df[feature_columns].apply(convert_to_tensor_input, axis=1).tolist(), dtype=torch.float32)
+    X = torch.tensor(df[feature_columns].apply(convert_to_tensor_input, axis=1).tolist(), dtype=torch.float32, requires_grad=True)
     
     if tube_type == 'rectangular':
         target_columns = ['w_xy_t', 'w_xy_{t+1}']
@@ -94,27 +94,35 @@ class AsymmetricLoss(nn.Module):
             loss = torch.where(norm_residual <= 0, self.alpha * norm_residual, (1 - self.alpha) * norm_residual.abs())
             return self.huber(loss, torch.zeros_like(loss))
 
+def monotonicity_loss(output, inputs):
+    grads = torch.autograd.grad(outputs=output, inputs=inputs,
+                                grad_outputs=torch.ones_like(output),
+                                create_graph=True)[0]
+    monotonic_loss = -torch.minimum(grads, torch.zeros_like(grads)).sum()
+    return monotonic_loss
+
 def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, alpha, num_epochs=500):
-    best_test_loss = float('inf')  # Initialize with a large value
+    best_test_loss = float('inf')
 
     for epoch in tqdm(range(num_epochs), desc="Epochs", position=0, leave=True):
         model.train()
         train_loss = 0
+        monotonic_loss_total = 0
         for data, targets in tqdm(train_loader, desc="Training Batches", leave=False):
             optimizer.zero_grad()
             outputs = model(data)
-            loss = criterion(outputs, targets, tube_type)
-            loss.backward()
+            
+            primary_loss = criterion(outputs, targets, tube_type)
+            mono_loss = monotonicity_loss(outputs, data)
+            total_loss = primary_loss + mono_loss
+            
+            total_loss.backward()
             optimizer.step()
-            train_loss += loss.item()
+            train_loss += total_loss.item()
+            monotonic_loss_total += mono_loss.item()
         
-        # Log train loss to wandb
-        wandb.log({'Train Loss': train_loss / len(train_loader), 'Epoch': epoch})
-
-        # Evaluate the model
+        wandb.log({'Train Loss': train_loss / len(train_loader), 'Monotonicity Loss': monotonic_loss_total / len(train_loader), 'Epoch': epoch})
         test_loss, metrics = evaluate_model(model, test_loader, criterion, tube_type)
-        
-        # Log metrics to wandb
         wandb.log({'Test Loss': test_loss, **metrics, 'Epoch': epoch})
         
         if test_loss < best_test_loss:
@@ -123,45 +131,39 @@ def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
             torch.save(model.state_dict(), model_path)
             
-            wandb.save(model_path)  # Saves the checkpoint to wandb
+            wandb.save(model_path)
 
 def evaluate_model(model, test_loader, criterion, tube_type):
     model.eval()
     test_loss = 0
     differences = []
-    total_predictions = 0  # Total number of predictions
-    count_y_pred_gt_wt1 = 0  # Count of predictions greater than target
+    total_predictions = 0
+    count_y_pred_gt_wt1 = 0
 
     with torch.no_grad():
         for data, targets in test_loader:
             outputs = model(data)
             test_loss += criterion(outputs, targets, tube_type).item()
 
-            # Increase total predictions
             total_predictions += outputs.size(0)
 
             if tube_type == 'sphere':
-                # Sphere-specific metric calculations
                 greater_mask = outputs > targets
                 count_y_pred_gt_wt1 += greater_mask.sum().item()
-                # Calculate differences where predictions are less than targets
                 less_mask = outputs < targets
                 differences.extend((targets[less_mask] - outputs[less_mask]).abs().tolist())
 
             elif tube_type == 'rectangular':
-                # Rectangular-specific metric calculations
                 targets = targets.squeeze(1) # again... singular braincell human being...
                 outputs_x_norm = outputs[:, 0]
                 outputs_y_norm = outputs[:, 1]
                 targets_x_norm = targets[:, 0]
                 targets_y_norm = targets[:, 1]
                 
-                # Check if either x or y prediction is greater than the target
                 greater_mask_x = outputs_x_norm > targets_x_norm
                 greater_mask_y = outputs_y_norm > targets_y_norm
                 count_y_pred_gt_wt1 += (greater_mask_x | greater_mask_y).sum().item()
 
-                # Calculate differences for x and y separately where predictions are less than targets
                 differences_x = (targets_x_norm - outputs_x_norm)[outputs_x_norm < targets_x_norm].abs().tolist()
                 differences_y = (targets_y_norm - outputs_y_norm)[outputs_y_norm < targets_y_norm].abs().tolist()
                 differences.extend(differences_x)
@@ -170,13 +172,14 @@ def evaluate_model(model, test_loader, criterion, tube_type):
     avg_diff = sum(differences) / len(differences) if differences else 0
     test_loss /= len(test_loader)
     proportion_y_pred_gt_wt1 = count_y_pred_gt_wt1 / total_predictions if total_predictions > 0 else 0
-    
+
     metrics = {
         'Test Loss': test_loss,
         'Proportion y_pred > w_{t+1}': proportion_y_pred_gt_wt1,
         'Avg Abs Diff y_pred < w_{t+1}': avg_diff
     }
     return test_loss, metrics
+
 
 def main(tube_type, alpha, filename):
     # Initialize wandb
