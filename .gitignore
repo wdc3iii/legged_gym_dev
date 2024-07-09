@@ -63,3 +63,4 @@ __pycache__
 *.pth
 deep_tube_learning/models/*
 deep_tube_learning/wandb/*
+*.pickle

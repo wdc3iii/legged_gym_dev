@@ -35,7 +35,7 @@ def data_creation_main(cfg):
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
     wandb.init(project="RoM_Tracking_Data",
-               # entity="=coleonguard-Georgia%20Institute%20of%20Technology",
+               entity="coleonguard-Georgia Institute of Technology",
                name=cfg.dataset_name,
                config=cfg_dict)
     data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{wandb.run.id}")
@@ -80,7 +80,7 @@ def data_creation_main(cfg):
         z = np.zeros((int(env.max_episode_length) + 1, num_robots, rom.n))
         pz_x = np.zeros((int(env.max_episode_length) + 1, num_robots, rom.n))
         v = np.zeros((int(env.max_episode_length), num_robots, rom.m))
-        done = np.zeros((int(env.max_episode_length) + 1, num_robots), dtype='bool')
+        done = np.zeros((int(env.max_episode_length), num_robots), dtype='bool')
 
         # Initialization
         base = env.root_states.cpu().numpy()
@@ -142,7 +142,6 @@ def data_creation_main(cfg):
             pz_x[t + 1, :, :] = rom.proj_z(base)
 
         # Log Data
-        # TODO: Write to local
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
             epoch_data = {
                 'x': x,
@@ -154,7 +153,6 @@ def data_creation_main(cfg):
             }
             pickle.dump(epoch_data, f)
 
-    # TODO: Write to wandb
     artifact = wandb.Artifact(
         type="rom_tracking_data",
         name=f"{wandb.run.id}_rom_tracking_data"
