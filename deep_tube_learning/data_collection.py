@@ -4,10 +4,13 @@ from legged_gym.utils import get_args, task_registry
 
 import hydra
 import torch
+import wandb
+import pickle
 import numpy as np
+import pandas as pd
 from pathlib import Path
+from omegaconf import OmegaConf
 from hydra.utils import instantiate
-
 
 from deep_tube_learning.utils import quat2yaw, yaw2rot
 
@@ -29,6 +32,15 @@ def get_state(base, joint_pos, joint_vel):
     version_base="1.2",
 )
 def data_creation_main(cfg):
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
+    wandb.init(project="RoM_Tracking_Data",
+               # entity="=coleonguard-Georgia%20Institute%20of%20Technology",
+               name=cfg.dataset_name,
+               config=cfg_dict)
+    data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{wandb.run.id}")
+    os.makedirs(data_path, exist_ok=True)
+
     # Load configuration
     num_robots = cfg.num_robots
     rom = instantiate(cfg.reduced_order_model)
@@ -131,11 +143,25 @@ def data_creation_main(cfg):
 
         # Log Data
         # TODO: Write to local
+        with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
+            epoch_data = {
+                'x': x,
+                'u': u,
+                'z': z,
+                'v': v,
+                'pz_x': pz_x,
+                'done': done
+            }
+            pickle.dump(epoch_data, f)
 
-        # TODO: Write to wandb
-
-
-
+    # TODO: Write to wandb
+    artifact = wandb.Artifact(
+        type="rom_tracking_data",
+        name=f"{wandb.run.id}_rom_tracking_data"
+    )
+    artifact.add_dir(str(data_path))
+    wandb.run.log_artifact(artifact)
+    print("[INFO] Finished saving particles. Waiting for wandb to finish...")
 
 
 if __name__ == "__main__":

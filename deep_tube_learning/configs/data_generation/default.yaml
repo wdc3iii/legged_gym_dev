@@ -1,8 +1,8 @@
 seed: 42
 dataset_name: "debugging_dataset_collection"
 
-num_robots: 2
-epochs: 1000
+num_robots: 11
+epochs: 2
 task: "anymal_c_flat"
 
 track_yaw: False
@@ -43,16 +43,20 @@ reduced_order_model:
     object:
       - ${vel_max}
       - ${vel_max}
+  n_robots: ${num_robots}
   backend: "numpy"
 
-Kp: 2
-u_vel_max: 1
-u_vel_min: -1
-u_vel_par_max: 1
-u_vel_perp_max: 0.5
-u_vel_par_min: -0.5
-u_omega_max: 1
-u_omega_min: -1
+Kp:
+  _target_: numpy.diag
+  v: [2, 2, 2]
+
+u_vel_max: 1.5
+u_vel_min: -1.5
+u_vel_par_max: 1.5
+u_vel_perp_max: 0.75
+u_vel_par_min: -0.75
+u_omega_max: 1.5
+u_omega_min: -1.5
 u_min:
   _target_: numpy.array
   object:
@@ -71,5 +75,6 @@ sample_hold_dt:
   _target_: deep_tube_learning.utils.UniformSampleHoldDT
   t_low: 1
   t_high: 100
+  n_robots: ${num_robots}
 
 

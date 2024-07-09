@@ -3,12 +3,17 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 import isaacgym
 from legged_gym.envs import *
 from legged_gym.utils import get_args, export_policy_as_jit, task_registry, Logger
-from rom_dynamics import SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle, ExtendedLateralUnicycle
+from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle, ExtendedLateralUnicycle
 import numpy as np
 import csv
 import torch
+from scipy.spatial.transform import Rotation
+
 
 data_prefix = "debugging_"
+track_yaw = False
+
+
 def initialize_rom(rom_type, dt):
     acc_max = 2
     alpha_max = 4
@@ -67,7 +72,7 @@ def randomize_turn_intervals(base_interval, range_offset, num):
 
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
-    num_robots = 1  # Adjust the number of robots as needed
+    num_robots = 2  # Adjust the number of robots as needed
     randomness_scale = 0.5  # Scaling factor for randomness
 
     # Override some parameters for testing
@@ -103,8 +108,7 @@ def play(args):
     camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
     img_idx = 0
     num_iterations = 1000  # Number of iterations per episode
-    Kp = 1.5
-    Kd = 0.5
+    Kp = 2
 
     def initialize_and_generate_trajectories(env):
         # Initialize SingleInt2D ROM
@@ -165,58 +169,62 @@ def play(args):
     joint_velocities = [[] for _ in range(num_robots)]
     unnormalized_direction_vectors_all = [[] for _ in range(num_robots)]
     desired_direction_vectors = np.zeros((num_robots, pm.m))
-    max_x_speed = 2
-    max_y_speed = 1
+    max_parallel_speed = 2
+    max_perpendicular_speed = 1
     max_yaw_rate = 2
     time_of_last_turns = np.zeros(num_robots)
 
     for i in range(num_iterations * int(env.max_episode_length)):
+        desired_pos = np.vstack([trajectories[j][0][i, :] for j in range(num_robots)])
+        desired_vel = np.vstack([trajectories[j][0][i, :] for j in range(num_robots)])
+        desired_yaw = np.zeros((num_robots,))
+        desired_yaw_rate = np.zeros((num_robots,))
+
         for robot_idx in range(num_robots):
-            traj_idx = min(i, len(trajectories[robot_idx][0]) - 1)
-            ideal_positions_step = trajectories[robot_idx][0][traj_idx]
-            desired_direction_vectors[robot_idx] = trajectories[robot_idx][1][traj_idx]
+            ideal_positions[robot_idx].append(desired_pos[robot_idx, :].copy())
+            unnormalized_direction_vectors_all[robot_idx].append(trajectories[robot_index][1][i])
 
-            ideal_positions[robot_idx].append(ideal_positions_step.copy())
-            temp_dir_vecs = desired_direction_vectors[robot_idx].tolist()
-            unnormalized_direction_vectors_all[robot_idx].append(temp_dir_vecs)
+        robot_pos = env.root_states[:, :2].cpu().numpy()
+        quat = env.root_states[:, 3:7].cpu().numpy()
+        rot = Rotation.from_quat(quat)
+        eul = rot.as_euler('xyz', degrees=False)
+        robot_yaw = eul[:, -1]
 
-        # TODO: Grab the heading yaw
-        base_lin_vels = env.base_lin_vel.cpu().numpy()[:, :2]
-        current_positions = env.root_states[:, :2].cpu().numpy()
+        pos_errors = desired_pos - robot_pos
+        parallel_error = np.cos(robot_yaw) * pos_errors[:, 0] + np.sin(robot_yaw) * pos_errors[:, 1]      # TODO: Compute parallel error
+        perp_error = -np.sin(robot_yaw) * pos_errors[:, 0] + np.cos(robot_yaw) * pos_errors[:, 1]
+        yaw_errors = desired_yaw - robot_yaw
 
-        position_errors = ideal_positions_step - current_positions[:, :2]
-        yaw_errors = np.zeros(num_robots)  # No yaw for SingleInt2D
+        control_commands_parallel = desired_vel[:, 0] + Kp * parallel_error
+        control_commands_perpendicular = desired_vel[:, 1] + Kp * perp_error
 
-        # TODO: Correct the yaw here
-        control_commands_x = desired_direction_vectors[:, 0] + Kp * position_errors[:, 0] + Kd * (position_errors[:, 0] - prev_position_errors[:, 0]) / delta_t
-        control_commands_y = desired_direction_vectors[:, 1] + Kp * position_errors[:, 1] + Kd * (position_errors[:, 1] - prev_position_errors[:, 1]) / delta_t
-        control_commands_yaw = np.zeros(num_robots)  # No yaw for SingleInt2D
+        if track_yaw:
+            control_commands_yaw = desired_yaw_rate + Kp * yaw_errors
+        else:
+            control_commands_yaw = np.zeros(num_robots)  # No yaw for SingleInt2D
 
         # Scale commands
-        # control_speeds = np.sqrt(control_commands_x**2 + control_commands_y**2)
+        # control_speeds = np.sqrt(control_commands_x**2 + control_commands_perpendicular**2)
         # scale = np.minimum(1, max_speed / control_speeds)
         # control_commands_x *= scale
-        # control_commands_y *= scale
+        # control_commands_perpendicular *= scale
 
         # Clip commands
-        control_commands_x = np.clip(control_commands_x, -max_x_speed, max_x_speed)
-        control_commands_y = np.clip(control_commands_y, -max_y_speed, max_y_speed)
-        control_commands_yaw = np.clip(control_commands_y, -max_yaw_rate, max_yaw_rate)
-
-        prev_position_errors = position_errors
-        prev_yaw_errors = yaw_errors
+        control_commands_parallel = np.clip(control_commands_parallel, -max_parallel_speed, max_parallel_speed)
+        control_commands_perpendicular = np.clip(control_commands_perpendicular, -max_perpendicular_speed, max_perpendicular_speed)
+        control_commands_yaw = np.clip(control_commands_perpendicular, -max_yaw_rate, max_yaw_rate)
 
         for robot_idx in range(num_robots):
-            temp_pos = current_positions[robot_idx].tolist()
+            temp_pos = robot_pos[robot_idx, :].tolist()
             positions[robot_idx].append(temp_pos)
-            velocities[robot_idx].append([control_commands_x[robot_idx], control_commands_y[robot_idx], 0])  # No yaw for SingleInt2D
+            velocities[robot_idx].append([control_commands_parallel[robot_idx], control_commands_perpendicular[robot_idx], control_commands_yaw[robot_idx]])
             joint_positions[robot_idx].append(env.dof_pos[robot_idx].cpu().numpy().tolist())
             joint_velocities[robot_idx].append(env.dof_vel[robot_idx].cpu().numpy().tolist())
 
-        for robot_idx in range(num_robots):
-            obs[robot_idx, CMD_LIN_VEL_X_IDX] = control_commands_x[robot_idx]
-            obs[robot_idx, CMD_LIN_VEL_Y_IDX] = control_commands_y[robot_idx]
-            obs[robot_idx, CMD_ANG_VEL_YAW_IDX] = 0  # No yaw for SingleInt2D
+
+        obs[:, CMD_LIN_VEL_X_IDX] = torch.from_numpy(control_commands_parallel).float()
+        obs[:, CMD_LIN_VEL_Y_IDX] = torch.from_numpy(control_commands_perpendicular).float()
+        obs[:, CMD_ANG_VEL_YAW_IDX] = torch.from_numpy(control_commands_yaw).float()
 
         actions = policy(obs.detach())
         obs, _, rews, dones, infos = env.step(actions.detach())
@@ -282,25 +290,25 @@ def play(args):
             camera_position += camera_vel * env.dt
             env.set_camera(camera_position, camera_position + camera_direction)
 
-        if i < stop_state_log:
-            logger.log_states(
-                {
-                    'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,
-                    'dof_pos': env.dof_pos[robot_index, joint_index].item(),
-                    'dof_vel': env.dof_vel[robot_index, joint_index].item(),
-                    'dof_torque': env.torques[robot_index, joint_index].item(),
-                    'command_x': env.commands[robot_index, 0].item(),
-                    'command_y': env.commands[robot_index, 1].item(),
-                    'command_yaw': env.commands[robot_index, 2].item(),
-                    'base_vel_x': env.base_lin_vel[robot_index, 0].item(),
-                    'base_vel_y': env.base_lin_vel[robot_index, 1].item(),
-                    'base_vel_z': env.base_lin_vel[robot_index, 2].item(),
-                    'base_vel_yaw': env.base_ang_vel[robot_index, 2].item(),
-                    'contact_forces_z': env.contact_forces[robot_index, env.feet_indices, 2].cpu().numpy()
-                }
-            )
-        elif i == stop_state_log:
-            logger.plot_states()
+        # if i < stop_state_log:
+        #     logger.log_states(
+        #         {
+        #             'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,
+        #             'dof_pos': env.dof_pos[robot_index, joint_index].item(),
+        #             'dof_vel': env.dof_vel[robot_index, joint_index].item(),
+        #             'dof_torque': env.torques[robot_index, joint_index].item(),
+        #             'command_x': env.commands[robot_index, 0].item(),
+        #             'command_y': env.commands[robot_index, 1].item(),
+        #             'command_yaw': env.commands[robot_index, 2].item(),
+        #             'base_vel_x': env.base_lin_vel[robot_index, 0].item(),
+        #             'base_vel_y': env.base_lin_vel[robot_index, 1].item(),
+        #             'base_vel_z': env.base_lin_vel[robot_index, 2].item(),
+        #             'base_vel_yaw': env.base_ang_vel[robot_index, 2].item(),
+        #             'contact_forces_z': env.contact_forces[robot_index, env.feet_indices, 2].cpu().numpy()
+        #         }
+        #     )
+        # elif i == stop_state_log:
+        #     logger.plot_states()
         if 0 < i < stop_rew_log:
             if infos["episode"]:
                 num_episodes = torch.sum(env.reset_buf).item()
