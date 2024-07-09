@@ -10,6 +10,9 @@ save_debugging_data: True
 upload_to_wandb: False
 
 track_yaw: False
+Kp:
+  _target_: numpy.diag
+  v: [10, 10, 10]
 
 reduced_order_model:
   _target_: trajopt.rom_dynamics.DoubleInt2D
