@@ -3,6 +3,7 @@ import casadi as ca
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
+from deep_tube_learning.utils import yaw2rot
 
 
 class RomDynamics(ABC):
@@ -199,7 +200,8 @@ class DoubleInt2D(RomDynamics):
         return self.stack((x[..., :2], x[..., 7:9]))
 
     def des_pose_vel(self, z, v):
-        return self.stack((z[:, :2], self.arctan2(z[:, 3], z[:, 2]))), self.stack((z[:, 2:], self.zero_mat(v.shape[0], 1)))
+        return (self.stack((z[:, :2], self.arctan2(z[:, 3], z[:, 2])[:, None])),
+                self.stack((z[:, 2:], self.zero_mat(v.shape[0], 1))))
 
     def compute_state_dependent_input_bounds(self, z):
         """
@@ -247,7 +249,7 @@ class Unicycle(RomDynamics):
         quat = x[:, 3:7]
         rot = Rotation.from_quat(quat)
         eul = rot.as_euler('xyz', degrees=False)
-        return self.stack((x[..., :2], eul[..., -1]))
+        return self.stack((x[..., :2], eul[..., -1][:, None]))
 
     def des_pose_vel(self, z, v):
         return z[:, :3], self.f(z, v)[:, :3]
@@ -301,9 +303,11 @@ class ExtendedUnicycle(Unicycle):
 
     def proj_z(self, x):
         quat = x[:, 3:7]
+        v = x[:, 7:9]
         rot = Rotation.from_quat(quat)
         eul = rot.as_euler('xyz', degrees=False)
-        return self.stack((x[..., :2], eul[..., -1], ))
+        v_local = np.squeeze(yaw2rot(eul[..., -1]) @ v[:, :, None])
+        return self.stack((x[..., :2], eul[..., -1][:, None], v_local[:, 0][:, None], x[:, -1][:, None]))
 
     def compute_state_dependent_input_bounds(self, z):
         """
@@ -346,6 +350,14 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
         gu[:, 4] = u[:, 1]
         gu[:, 5] = u[:, 2]
         return x + self.dt * gu
+
+    def proj_z(self, x):
+        quat = x[:, 3:7]
+        v = x[:, 7:9]
+        rot = Rotation.from_quat(quat)
+        eul = rot.as_euler('xyz', degrees=False)
+        v_local = np.squeeze(yaw2rot(eul[..., -1]) @ v[:, :, None])
+        return self.stack((x[..., :2], eul[..., -1][:, None], v_local, x[:, -1][:, None]))
 
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)

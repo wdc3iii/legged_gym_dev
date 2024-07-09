@@ -245,6 +245,8 @@ def get_args():
         {"name": "--seed", "type": int, "help": "Random seed. Overrides config file if provided."},
         {"name": "--max_iterations", "type": int,
          "help": "Maximum number of training iterations. Overrides config file if provided."},
+        {"name": "--config-name", "type": str,
+         "help": "hydra configuration file name. Overrides default file if provided."}
     ]
     # parse arguments
     args = gymutil.parse_arguments(

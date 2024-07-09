@@ -1,0 +1,35 @@
+defaults:
+  - default
+  - _self_
+
+dataset_name: "unicycle"
+
+num_robots: 11
+epochs: 2
+save_debugging_data: True
+upload_to_wandb: False
+
+reduced_order_model:
+  _target_: trajopt.rom_dynamics.Unicycle
+  z_min:
+    _target_: numpy.array
+    object:
+      - ${pos_min}
+      - ${pos_min}
+      - ${pos_min}
+  z_max:
+    _target_: numpy.array
+    object:
+      - ${pos_max}
+      - ${pos_max}
+      - ${pos_max}
+  v_min:
+    _target_: numpy.array
+    object:
+      - ${vel_par_min}
+      - ${omega_min}
+  v_max:
+    _target_: numpy.array
+    object:
+      - ${vel_par_max}
+      - ${omega_max}

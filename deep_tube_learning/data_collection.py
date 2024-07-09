@@ -2,6 +2,7 @@ import isaacgym
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 
+from tqdm import tqdm
 import hydra
 import torch
 import wandb
@@ -34,11 +35,17 @@ def get_state(base, joint_pos, joint_vel):
 def data_creation_main(cfg):
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
-    wandb.init(project="RoM_Tracking_Data",
-               entity="coleonguard-Georgia Institute of Technology",
-               name=cfg.dataset_name,
-               config=cfg_dict)
-    data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{wandb.run.id}")
+    if cfg.upload_to_wandb:
+        wandb.init(project="RoM_Tracking_Data",
+                   entity="coleonguard-Georgia Institute of Technology",
+                   name=cfg.dataset_name,
+                   config=cfg_dict)
+        run_id = wandb.run.id
+    else:
+        import random
+        import string
+        run_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{cfg.dataset_name}_{run_id}")
     os.makedirs(data_path, exist_ok=True)
 
     # Load configuration
@@ -63,6 +70,7 @@ def data_creation_main(cfg):
 
     # Prepare environment
     args = get_args()
+    args.headless = cfg.headless
     env, _ = task_registry.make_env(name=cfg.task, args=args, env_cfg=env_cfg)
     obs = env.get_observations()
     x_n = env.dof_pos.shape[1] + env.dof_vel.shape[1] + env.root_states.shape[1]
@@ -73,7 +81,7 @@ def data_creation_main(cfg):
     policy = ppo_runner.get_inference_policy(device=env.device)
 
     # Loop over epochs
-    for epoch in range(cfg.epochs):
+    for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
         # Data structures
         x = np.zeros((int(env.max_episode_length) + 1, num_robots, x_n))  # Epochs, steps, states
         u = np.zeros((int(env.max_episode_length), num_robots, 3))
@@ -161,30 +169,41 @@ def data_creation_main(cfg):
 
         # Log Data
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
-            epoch_data = {
-                'x': x,
-                'u': u,
-                'z': z,
-                'v': v,
-                'pz_x': pz_x,
-                'done': done,
-                'des_pose': des_pose_all,
-                'des_vel': des_vel_all,
-                'des_vel_local': des_vel_local_all,
-                'robot_pose': robot_pose_all,
-                'robot_vel': robot_vel_all,
-                'err_local': err_local_all,
-                'err_global': err_global_all
-            }
+            if cfg.save_debugging_data:
+                epoch_data = {
+                    'x': x,
+                    'u': u,
+                    'z': z,
+                    'v': v,
+                    'pz_x': pz_x,
+                    'done': done,
+                    'des_pose': des_pose_all,
+                    'des_vel': des_vel_all,
+                    'des_vel_local': des_vel_local_all,
+                    'robot_pose': robot_pose_all,
+                    'robot_vel': robot_vel_all,
+                    'err_local': err_local_all,
+                    'err_global': err_global_all
+                }
+            else:
+                epoch_data = {
+                    'z': z,
+                    'v': v,
+                    'pz_x': pz_x,
+                    'done': done
+                }
             pickle.dump(epoch_data, f)
 
-    artifact = wandb.Artifact(
-        type="rom_tracking_data",
-        name=f"{wandb.run.id}_rom_tracking_data"
-    )
-    artifact.add_dir(str(data_path))
-    wandb.run.log_artifact(artifact)
-    print("[INFO] Finished saving particles. Waiting for wandb to finish...")
+    if cfg.upload_to_wandb:
+        artifact = wandb.Artifact(
+            type="rom_tracking_data",
+            name=f"{cfg.dataset_name}_{wandb.run.id}"
+        )
+        artifact.add_dir(str(data_path))
+        wandb.run.log_artifact(artifact)
+        print("[INFO] Finished generating data. Waiting for wandb to finish uploading...")
+
+    print(f"\nrun ID: {run_id}\ndataset name: {cfg.dataset_name}\nlocal folder: {cfg.dataset_name}_{run_id}")
 
 
 if __name__ == "__main__":
