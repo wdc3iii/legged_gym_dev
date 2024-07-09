@@ -118,7 +118,6 @@ def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_
             
             wandb.save(model_path)
 
-
 def evaluate_model(model, test_loader, criterion, tube_type):
     model.eval()
     metrics = {}
@@ -172,7 +171,6 @@ def evaluate_model(model, test_loader, criterion, tube_type):
 
     return metrics
 
-
 def parse_list(arg):
     return [item.strip() for item in arg.split(',')]
 
@@ -181,6 +179,7 @@ def main(tube_type, filename):
     config = wandb.config
 
     X, y = load_and_prepare_data(filename, tube_type)
+    print(len(X))
     train_loader, test_loader = create_data_loaders(X, y, batch_size=64)
 
     input_size = 7
