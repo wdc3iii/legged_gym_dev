@@ -81,6 +81,13 @@ def data_creation_main(cfg):
         pz_x = np.zeros((int(env.max_episode_length) + 1, num_robots, rom.n))
         v = np.zeros((int(env.max_episode_length), num_robots, rom.m))
         done = np.zeros((int(env.max_episode_length), num_robots), dtype='bool')
+        des_pose_all = np.zeros((int(env.max_episode_length), num_robots, 3))
+        des_vel_all = np.zeros((int(env.max_episode_length), num_robots, 3))
+        des_vel_local_all = np.zeros((int(env.max_episode_length), num_robots, 3))
+        robot_pose_all = np.zeros((int(env.max_episode_length), num_robots, 3))
+        robot_vel_all = np.zeros((int(env.max_episode_length), num_robots, 3))
+        err_global_all = np.zeros((int(env.max_episode_length), num_robots, 3))
+        err_local_all = np.zeros((int(env.max_episode_length), num_robots, 3))
 
         # Initialization
         base = env.root_states.cpu().numpy()
@@ -112,18 +119,29 @@ def data_creation_main(cfg):
 
             # Get desired pose and velocity
             des_pose, des_vel = rom.des_pose_vel(z[t, :, :], vt)
+            des_pose_all[t, :, :] = des_pose.copy()
+            des_vel_all[t, :, :] = des_vel.copy()
 
             # Get robot pose
             robot_pose = np.hstack((base[:, :2], quat2yaw(base[:, 3:7])[:, None]))
+            robot_pose_all[t, :, :] = robot_pose.copy()
+            robot_vel_all[t, :, :] = np.hstack((base[:, 7:9], base[:, -1][:, None]))
+            y2r = yaw2rot(robot_pose[:, 2])
 
             # Compute pose error
-            err = des_pose - robot_pose
-            err[:, :2] = np.squeeze(yaw2rot(robot_pose[:, 2]) @ err[:, :2][:, :, None])  # Place error in local frame
+            err_global = des_pose - robot_pose
             if not track_yaw:
-                err[:, 2] = 0
+                err_global[:, 2] = 0
+            err_global_all[t, :, :] = err_global.copy()
+            err_local = err_global.copy()
+            err_local[:, :2] = np.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
+            err_local_all[t, :, :] = err_local.copy()
 
             # Compute control action via velocity tracking (P control)
-            ut = des_vel + (Kp @ err.T).T
+            des_vel_local = des_vel.copy()
+            des_vel_local[:, :2] = np.squeeze(y2r @ des_vel[:, :2, None])
+            des_vel_local_all[t, :, :] = des_vel_local
+            ut = des_vel_local + (Kp @ err_local.T).T
             ut = np.clip(ut, u_min, u_max)
 
             # Step environment
@@ -149,7 +167,14 @@ def data_creation_main(cfg):
                 'z': z,
                 'v': v,
                 'pz_x': pz_x,
-                'done': done
+                'done': done,
+                'des_pose': des_pose_all,
+                'des_vel': des_vel_all,
+                'des_vel_local': des_vel_local_all,
+                'robot_pose': robot_pose_all,
+                'robot_vel': robot_vel_all,
+                'err_local': err_local_all,
+                'err_global': err_global_all
             }
             pickle.dump(epoch_data, f)
 

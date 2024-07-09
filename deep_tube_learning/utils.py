@@ -28,7 +28,14 @@ def quat2yaw(quat):
 
 
 def yaw2rot(yaw):
-    return np.stack([[np.cos(yaw), np.sin(yaw)], [-np.sin(yaw), np.cos(yaw)]]).reshape((-1, 2, 2))
+    cy = np.cos(yaw)
+    sy = np.sin(yaw)
+    y2r = np.zeros((yaw.shape[0], 2, 2))
+    y2r[:, 0, 0] = cy
+    y2r[:, 0, 1] = sy
+    y2r[:, 1, 0] = -sy
+    y2r[:, 1, 1] = cy
+    return y2r
 
 
 def unnormalize_dict(normalized_dict, sep="/"):
