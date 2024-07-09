@@ -1,5 +1,3 @@
-import os
-from legged_gym import LEGGED_GYM_ROOT_DIR
 import isaacgym
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
@@ -11,7 +9,7 @@ from pathlib import Path
 from hydra.utils import instantiate
 
 
-from deep_tube_learning.utils import quat2yaw
+from deep_tube_learning.utils import quat2yaw, yaw2rot
 
 
 CMD_START_IDX = 9
@@ -20,8 +18,10 @@ CMD_LIN_VEL_PERP_IDX = CMD_START_IDX + 1
 CMD_ANG_VEL_YAW_IDX = CMD_START_IDX + 2
 CMD = np.array([CMD_LIN_VEL_PAR_IDX, CMD_LIN_VEL_PERP_IDX, CMD_ANG_VEL_YAW_IDX])
 
-def get_state(base, joints):
-    return np.concatenate((base[:, :7], joints[:, :12], base[:, 7:], joints[:, 12:]), axis=1)
+
+def get_state(base, joint_pos, joint_vel):
+    return np.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), axis=1)
+
 
 @hydra.main(
     config_path=str(Path(__file__).parent / "configs" / "data_generation"),
@@ -33,7 +33,7 @@ def data_creation_main(cfg):
     num_robots = cfg.num_robots
     rom = instantiate(cfg.reduced_order_model)
     sample_hold_dt = instantiate(cfg.sample_hold_dt)
-    Kp = cfg.Kp
+    Kp = instantiate(cfg.Kp)
     track_yaw = cfg.track_yaw
     u_min = instantiate(cfg.u_min)
     u_max = instantiate(cfg.u_max)
@@ -53,6 +53,7 @@ def data_creation_main(cfg):
     args = get_args()
     env, _ = task_registry.make_env(name=cfg.task, args=args, env_cfg=env_cfg)
     obs = env.get_observations()
+    x_n = env.dof_pos.shape[1] + env.dof_vel.shape[1] + env.root_states.shape[1]
 
     # Load policy
     train_cfg.runner.resume = True
@@ -62,36 +63,37 @@ def data_creation_main(cfg):
     # Loop over epochs
     for epoch in range(cfg.epochs):
         # Data structures
-        x = np.zeros((int(env.max_episode_length) + 1, num_robots, env.dof_state.T.shape[1] + env.root_states.shape[1]))  # Epochs, steps, states
+        x = np.zeros((int(env.max_episode_length) + 1, num_robots, x_n))  # Epochs, steps, states
         u = np.zeros((int(env.max_episode_length), num_robots, 3))
         z = np.zeros((int(env.max_episode_length) + 1, num_robots, rom.n))
+        pz_x = np.zeros((int(env.max_episode_length) + 1, num_robots, rom.n))
         v = np.zeros((int(env.max_episode_length), num_robots, rom.m))
-        dones = np.ones((num_robots,), dtype=bool)
+        done = np.zeros((int(env.max_episode_length) + 1, num_robots), dtype='bool')
 
         # Initialization
-        x[0, :, :] = get_state(env.root_states.cpu().numpy(), env.dof_state.T.cpu().numpy())
+        base = env.root_states.cpu().numpy()
+        x[0, :, :] = get_state(base, env.dof_pos.cpu().numpy(), env.dof_vel.cpu().numpy())
+        z[0, :, :] = rom.proj_z(base)
+        pz_x[0, :, :] = rom.proj_z(base)
 
         v_nom = rom.sample_uniform_bounded_v(z[0, :, :])
-        t_since_new_v = torch.zeros((num_robots,))
+        t_since_new_v = np.zeros((num_robots,))
         t_sample_hold = sample_hold_dt.sample()
 
-        # Loop over timesteps
-        for t in range(env.max_episode_length):
-            # Any environments which have terminated should be reset to zero tracking error
-            z[t, dones, :] = rom.proj_z(env.root_states).cpu().numpy()[dones, :]
-
+        # Loop over time steps
+        for t in range(int(env.max_episode_length)):
             # Decide on rom action
             new_v_nom = rom.sample_uniform_bounded_v(z[t, :, :])
             new_t_sample_hold = sample_hold_dt.sample()
 
-            update_inds = (t_since_new_v >= t_sample_hold).copy()
+            update_inds = (t_since_new_v >= t_sample_hold)
 
-            v_nom[update_inds, :] = new_v_nom
+            v_nom[update_inds, :] = new_v_nom[update_inds, :]
             t_since_new_v[update_inds] = 0
-            t_sample_hold[update_inds] = new_t_sample_hold
+            t_sample_hold[update_inds] = new_t_sample_hold[update_inds]
             t_since_new_v += 1
 
-            vt = rom.clip_v_z(v_nom)
+            vt = rom.clip_v_z(z[t, :, :], v_nom)
 
             # Execute rom action
             zt_p1 = rom.f(z[t, :, :], vt)
@@ -100,30 +102,36 @@ def data_creation_main(cfg):
             des_pose, des_vel = rom.des_pose_vel(z[t, :, :], vt)
 
             # Get robot pose
-            robot_pose = np.vstack((env.root_states[:, :2], quat2yaw(env.root_states[:, 3:7])))
+            robot_pose = np.hstack((base[:, :2], quat2yaw(base[:, 3:7])[:, None]))
 
             # Compute pose error
             err = des_pose - robot_pose
-            # TODO: Rotate properly
-            err[:, :2] = rot(robot_pose[:, 2]) @ err[:, :2]  # Place error in local frame
+            err[:, :2] = np.squeeze(yaw2rot(robot_pose[:, 2]) @ err[:, :2][:, :, None])  # Place error in local frame
+            if not track_yaw:
+                err[:, 2] = 0
 
             # Compute control action via velocity tracking (P control)
-            ut = des_vel + Kp @ err
-            ut = torch.clip(ut, u_min, u_max)
+            ut = des_vel + (Kp @ err.T).T
+            ut = np.clip(ut, u_min, u_max)
 
             # Step environment
-            obs[:, CMD] = ut
+            obs[:, CMD] = torch.from_numpy(ut).float().to(env.device)
             actions = policy(obs.detach())
             obs, _, _, dones, _ = env.step(actions.detach())
 
             # Save Data
-            u[t, :, :] = ut.cpu().numpy()
-            v[t, :, :] = vt.cpu().numpy()
-            x[t + 1, :, :] = get_state(env.root_states.cpu().numpy(), env.dof_state.T.cpu().numpy())
-            z[t + 1, :, :] = zt_p1.cpu().numpy()
+            base = env.root_states.cpu().numpy()
+            done[t, :] = dones.cpu().numpy()  # Termination should not be used for tube training
+            u[t, :, :] = ut
+            v[t, :, :] = vt
+            x[t + 1, :, :] = get_state(base, env.dof_pos.cpu().numpy(), env.dof_vel.cpu().numpy())
+            z[t + 1, :, :] = zt_p1
+            z[t + 1, done[t, :], :] = rom.proj_z(base)[done[t, :], :]  # Terminated envs reset to zero tracking error
+            pz_x[t + 1, :, :] = rom.proj_z(base)
 
         # Log Data
         # TODO: Write to local
+
         # TODO: Write to wandb
 
 

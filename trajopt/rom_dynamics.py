@@ -2,6 +2,7 @@ import numpy as np
 import casadi as ca
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
+from scipy.spatial.transform import Rotation
 
 
 class RomDynamics(ABC):
@@ -11,7 +12,7 @@ class RomDynamics(ABC):
     n: int  # Dimension of state
     m: int  # Dimension of input
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, backend='casadi'):
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
         """
         Common constructor functionality
         :param dt: time discretization
@@ -27,13 +28,16 @@ class RomDynamics(ABC):
         self.v_max = v_max
         self.z_min = z_min
         self.z_max = z_max
+        self.n_robots = n_robots
         if backend == 'casadi':
             self.zero_mat = lambda r, c: ca.MX(r, c)
             self.zero_vec = lambda n: ca.MX(n, 1)
             self.const_mat = lambda m: ca.DM(m)
             self.sin = lambda x: ca.sin(x)
             self.cos = lambda x: ca.cos(x)
-            self.stack = lambda lst: ca.horzcat(**lst)
+            self.stack = lambda lst: ca.horzcat(*lst)
+            self.vstack = lambda lst: ca.vertcat(*lst)
+            self.arctan = lambda y, x: ca.arctan2(y, x)
         elif backend == 'numpy':
             self.zero_mat = lambda r, c: np.zeros((r, c))
             self.zero_vec = lambda n: np.zeros((n,))
@@ -41,6 +45,8 @@ class RomDynamics(ABC):
             self.sin = lambda x: np.sin(x)
             self.cos = lambda x: np.cos(x)
             self.stack = lambda lst: np.hstack(lst)
+            self.vstack = lambda lst: np.vstack(lst)
+            self.arctan2 = lambda y, x: np.arctan2(y, x)
 
     @abstractmethod
     def f(self, z, v):
@@ -58,6 +64,16 @@ class RomDynamics(ABC):
         Projects the full order robot's CoM state (p, q, v, w) in R^13 onto the RoM state
         :param x: the robot's CoM state
         :return: projection of the full order state onto the CoM state
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def des_pose_vel(self, z, v):
+        """
+        Computes the desired pose (x,y,yaw) and velocity (xdot, ydot, yawdot) given the RoM state and input
+        :param z: RoM state
+        :param v: RoM input
+        :return: the desired pose and velocity of the robot
         """
         raise NotImplementedError
 
@@ -90,7 +106,7 @@ class RomDynamics(ABC):
         Samples an input uniformly at random from within the input bounds
         :return: uniformly random input
         """
-        return np.random.uniform(self.v_min, self.v_max)
+        return np.random.uniform(self.v_min, self.v_max, size=(self.n_robots, self.v_max.shape[0]))
 
     @staticmethod
     def plot_spacial(ax, xt, c='-b'):
@@ -141,16 +157,19 @@ class SingleInt2D(RomDynamics):
     n = 2   # [x, y]
     m = 2   # [vx, vy]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
         self.A = self.const_mat([[1.0, 0], [0, 1.0]])
         self.B = self.const_mat([[dt, 0], [0, dt]])
 
     def f(self, x, u):
-        return self.A @ x + self.B @ u
+        return (self.A @ x.T).T + (self.B @ u.T).T
 
     def proj_z(self, x):
         return x[..., :2]
+
+    def des_pose_vel(self, z, v):
+        return self.stack((z, self.arctan2(v[:, 1], v[:, 0])[:, None])), self.stack((v, self.zero_mat(v.shape[0], 1)))
 
     def sample_uniform_bounded_v(self, z):
         return self.sample_uniform_v()
@@ -168,16 +187,19 @@ class DoubleInt2D(RomDynamics):
     n = 4   # [x, y, vx, vy]
     m = 2   # [ax, ay]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
         self.A = self.const_mat([[1.0, 0, dt, 0], [0, 1.0, 0, dt], [0, 0, 1.0, 0], [0, 0, 0, 1.0]])
         self.B = self.const_mat([[0, 0], [0, 0], [dt, 0], [0, dt]])
 
     def f(self, x, u):
-        return self.A @ x + self.B @ u
+        return (self.A @ x.T).T + (self.B @ u.T).T
 
     def proj_z(self, x):
         return self.stack((x[..., :2], x[..., 7:9]))
+
+    def des_pose_vel(self, z, v):
+        return self.stack((z[:, :2], self.arctan2(z[:, 3], z[:, 2]))), self.stack((z[:, 2:], self.zero_mat(v.shape[0], 1)))
 
     def compute_state_dependent_input_bounds(self, z):
         """
@@ -189,8 +211,8 @@ class DoubleInt2D(RomDynamics):
         :param z: current state
         :return: state-dependent input bounds (lower, upper)
         """
-        v_max_z = np.minimum(self.v_max, (self.z_max[2:] - z[2:]) / self.dt)
-        v_min_z = np.maximum(self.v_min, (self.z_min[2:] - z[2:]) / self.dt)
+        v_max_z = np.minimum(self.v_max, (self.z_max[2:] - z[:, 2:]) / self.dt)
+        v_min_z = np.maximum(self.v_min, (self.z_min[2:] - z[:, 2:]) / self.dt)
         return v_min_z, v_max_z
 
     def sample_uniform_bounded_v(self, z):
@@ -211,21 +233,24 @@ class Unicycle(RomDynamics):
     n = 3   # [x, y, theta]
     m = 2   # [v, omega]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
 
     def f(self, x, u):
-        g = self.zero_mat(self.n, self.m)
-        g[0, 0] = self.cos(x[2])
-        g[1, 0] = self.sin(x[2])
-        g[2, 1] = 1.0
-        return x + self.dt * g @ u
+        gu = self.zero_mat(self.n_robots, self.n)
+        gu[:, 0] = u[:, 0] * self.cos(x[:, 2])
+        gu[:, 1] = u[:, 0] * self.sin(x[:, 2])
+        gu[:, 2] = u[:, 1]
+        return x + self.dt * gu
 
     def proj_z(self, x):
         quat = x[:, 3:7]
         rot = Rotation.from_quat(quat)
         eul = rot.as_euler('xyz', degrees=False)
         return self.stack((x[..., :2], eul[..., -1]))
+
+    def des_pose_vel(self, z, v):
+        return z[:, :3], self.f(z, v)[:, :3]
 
     def sample_uniform_bounded_v(self, z):
         return self.sample_uniform_v()
@@ -249,13 +274,11 @@ class LateralUnicycle(Unicycle):
     m = 3   # [v, v_perp, omega]
 
     def f(self, x, u):
-        g = self.zero_mat(self.n, self.m)
-        g[0, 0] = self.cos(x[2])
-        g[0, 1] = -self.sin(x[2])
-        g[1, 0] = self.sin(x[2])
-        g[1, 1] = self.cos(x[2])
-        g[2, 2] = 1.0
-        return x + self.dt * g @ u
+        gu = self.zero_mat(self.n_robots, self.n)
+        gu[:, 0] = u[:, 0] * self.cos(x[:, 2]) - u[:, 1] * self.sin(x[:, 2])
+        gu[:, 1] = u[:, 0] * self.sin(x[:, 2]) + u[:, 1] * self.cos(x[:, 2])
+        gu[:, 2] = u[:, 2]
+        return x + self.dt * gu
 
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)
@@ -268,12 +291,12 @@ class ExtendedUnicycle(Unicycle):
     m = 2   # [a, alpha]
 
     def f(self, x, u):
-        gu = self.zero_vec(self.n)
-        gu[0] = x[3] * self.cos(x[2])
-        gu[1] = x[3] * self.sin(x[2])
-        gu[2] = x[4]
-        gu[3] = u[0]
-        gu[4] = u[1]
+        gu = self.zero_mat(self.n_robots, self.n)
+        gu[:, 0] = x[:, 3] * self.cos(x[:, 2])
+        gu[:, 1] = x[:, 3] * self.sin(x[:, 2])
+        gu[:, 2] = x[:, 4]
+        gu[:, 3] = u[:, 0]
+        gu[:, 4] = u[:, 1]
         return x + self.dt * gu
 
     def proj_z(self, x):
@@ -292,8 +315,8 @@ class ExtendedUnicycle(Unicycle):
         :param z: current state
         :return: state-dependent input bounds (lower, upper)
         """
-        v_max_z = np.minimum(self.v_max, (self.z_max[3:] - z[3:]) / self.dt)
-        v_min_z = np.maximum(self.v_min, (self.z_min[3:] - z[3:]) / self.dt)
+        v_max_z = np.minimum(self.v_max, (self.z_max[3:] - z[:, 3:]) / self.dt)
+        v_min_z = np.maximum(self.v_min, (self.z_min[3:] - z[:, 3:]) / self.dt)
         return v_min_z, v_max_z
 
     def sample_uniform_bounded_v(self, z):
@@ -315,13 +338,13 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
     m = 3   # [a, a_perp, alpha]
 
     def f(self, x, u):
-        gu = self.zero_vec(self.n)
-        gu[0] = x[3] * self.cos(x[2]) - x[4] * self.sin(x[2])
-        gu[1] = x[3] * self.sin(x[2]) + x[4] * self.cos(x[2])
-        gu[2] = x[5]
-        gu[3] = u[0]
-        gu[4] = u[1]
-        gu[5] = u[2]
+        gu = self.zero_mat(self.n_robots, self.n)
+        gu[:, 0] = x[:, 3] * self.cos(x[:, 2]) - x[:, 4] * self.sin(x[:, 2])
+        gu[:, 1] = x[:, 3] * self.sin(x[:, 2]) + x[:, 4] * self.cos(x[:, 2])
+        gu[:, 2] = x[:, 5]
+        gu[:, 3] = u[:, 0]
+        gu[:, 4] = u[:, 1]
+        gu[:, 5] = u[:, 2]
         return x + self.dt * gu
 
     def plot_ts(self, axs, xt, ut):

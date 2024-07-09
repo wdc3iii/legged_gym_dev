@@ -74,7 +74,7 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None):
         obj += (z[k, :] - p_zf) @ Q @ (z[k, :] - p_zf).T + v[k, :] @ R @ v[k, :].T
 
         # dynamics
-        g = ca.horzcat(g, pm.f(z[k, :].T, v[k, :].T).T - z[k + 1, :])
+        g = ca.horzcat(g, pm.f(z[k, :], v[k, :]) - z[k + 1, :])
         g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((pm.n,))).T)
         g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((pm.n,))).T)
 
