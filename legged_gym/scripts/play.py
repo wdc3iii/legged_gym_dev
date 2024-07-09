@@ -177,15 +177,20 @@ def play(args):
     max_yaw_rate = 2
     time_of_last_turns = np.zeros(num_robots)
 
-    for i in range(num_iterations * int(env.max_episode_length)):
-        for robot_idx in range(num_robots):
-            traj_idx = min(i, len(trajectories[robot_idx][0]) - 1)
-            ideal_positions_step = trajectories[robot_idx][0][traj_idx]
-            desired_direction_vectors[robot_idx] = trajectories[robot_idx][1][traj_idx]
+    trajectories_positions = np.stack([traj[0] for traj in trajectories], axis=0)
+    trajectories_directions = np.stack([traj[1] for traj in trajectories], axis=0)
+    num_steps = num_iterations * int(env.max_episode_length)
+    indices = np.minimum(np.arange(num_steps), trajectories_positions.shape[1] - 1)
+    ideal_positions_steps = trajectories_positions[:, indices, :]
+    desired_direction_vectors_steps = trajectories_directions[:, indices, :]
 
-            ideal_positions[robot_idx].append(ideal_positions_step.copy())
-            temp_dir_vecs = desired_direction_vectors[robot_idx].tolist()
-            unnormalized_direction_vectors_all[robot_idx].append(temp_dir_vecs)
+    for robot_idx in range(num_robots):
+        ideal_positions[robot_idx].extend(ideal_positions_steps[robot_idx])
+        unnormalized_direction_vectors_all[robot_idx].extend(desired_direction_vectors_steps[robot_idx])
+
+    for i in range(num_steps):
+        ideal_positions_step = ideal_positions_steps[:, i, :]
+        desired_direction_vectors = desired_direction_vectors_steps[:, i, :]
 
         # TODO: Grab the heading yaw
         base_lin_vels = env.base_lin_vel.cpu().numpy()[:, :2]
