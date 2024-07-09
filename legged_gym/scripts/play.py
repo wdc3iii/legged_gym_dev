@@ -75,9 +75,16 @@ def play(args):
     env_cfg.terrain.num_rows = 5
     env_cfg.terrain.num_cols = 5
     env_cfg.terrain.curriculum = False
-    env_cfg.noise.add_noise = False
-    env_cfg.domain_rand.randomize_friction = False
-    env_cfg.domain_rand.push_robots = False
+    env_cfg.env.episode_length_s = 20                   # duration of episode (in seconds)
+    env_cfg.noise.add_noise = False                     # domain randomizations:
+    env_cfg.domain_rand.randomize_friction = False      # |
+    env_cfg.domain_rand.friction_range = [.5, 1.25]     # |
+    env_cfg.domain_rand.randomize_base_mass = False     # |
+    env_cfg.domain_rand.added_mass_range = [-.5, .5]    # ---
+    env_cfg.terrain.mesh_type = 'plane'                 # terrain randomization: switch to trimesh for random
+    env_cfg.domain_rand.push_robots = False             # perturbation randomization:
+    env_cfg.domain_rand.push_interval_s = 15            # | 
+    env_cfg.domain_rand.max_push_vel_xy = 1.            # |
 
     # Prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
