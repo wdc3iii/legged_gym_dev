@@ -252,7 +252,10 @@ class Unicycle(RomDynamics):
         return self.stack((x[..., :2], eul[..., -1][:, None]))
 
     def des_pose_vel(self, z, v):
-        return z[:, :3], self.f(z, v)[:, :3]
+        vx = v[:, 0] * self.cos(z[:, 2])
+        vy = v[:, 0] * self.sin(z[:, 2])
+        om = v[:, 1]
+        return z[:, :3], self.stack((vx[:, None], vy[:, None], om[:, None]))
 
     def sample_uniform_bounded_v(self, z):
         return self.sample_uniform_v()
@@ -282,6 +285,12 @@ class LateralUnicycle(Unicycle):
         gu[:, 2] = u[:, 2]
         return x + self.dt * gu
 
+    def des_pose_vel(self, z, v):
+        vx = v[:, 0] * self.cos(z[:, 2]) - v[:, 1] * self.sin(z[:, 2])
+        vy = v[:, 0] * self.sin(z[:, 2]) + v[:, 1] * self.cos(z[:, 2])
+        om = v[:, 1]
+        return z[:, :3], self.stack((vx[:, None], vy[:, None], om[:, None]))
+
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)
         axs[0].legend(['x', 'y', 'theta'])
@@ -300,6 +309,12 @@ class ExtendedUnicycle(Unicycle):
         gu[:, 3] = u[:, 0]
         gu[:, 4] = u[:, 1]
         return x + self.dt * gu
+
+    def des_pose_vel(self, z, v):
+        vx = z[:, 3] * self.cos(z[:, 2])
+        vy = z[:, 3] * self.sin(z[:, 2])
+        om = z[:, 4]
+        return z[:, :3], self.stack((vx[:, None], vy[:, None], om[:, None]))
 
     def proj_z(self, x):
         quat = x[:, 3:7]
@@ -350,6 +365,12 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
         gu[:, 4] = u[:, 1]
         gu[:, 5] = u[:, 2]
         return x + self.dt * gu
+
+    def des_pose_vel(self, z, v):
+        vx = z[:, 3] * self.cos(z[:, 2]) - z[:, 4] * self.sin(z[:, 2])
+        vy = z[:, 3] * self.sin(z[:, 2]) + z[:, 4] * self.cos(z[:, 2])
+        om = z[:, 5]
+        return z[:, :3], self.stack((vx[:, None], vy[:, None], om[:, None]))
 
     def proj_z(self, x):
         quat = x[:, 3:7]

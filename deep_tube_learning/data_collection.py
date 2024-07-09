@@ -2,13 +2,13 @@ import isaacgym
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 
-from tqdm import tqdm
 import hydra
 import torch
 import wandb
 import pickle
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from pathlib import Path
 from omegaconf import OmegaConf
 from hydra.utils import instantiate

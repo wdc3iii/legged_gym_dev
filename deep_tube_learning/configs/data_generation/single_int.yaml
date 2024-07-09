@@ -4,12 +4,15 @@ defaults:
 
 dataset_name: "single_integrator"
 
-num_robots: 1000
+num_robots: 11
 epochs: 2
-save_debugging_data: False
-upload_to_wandb: True
+save_debugging_data: True
+upload_to_wandb: False
 
 track_yaw: False
+Kp:
+  _target_: numpy.diag
+  v: [5, 5, 5]
 
 reduced_order_model:
   _target_: trajopt.rom_dynamics.SingleInt2D

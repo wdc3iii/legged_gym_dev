@@ -9,6 +9,10 @@ epochs: 2
 save_debugging_data: True
 upload_to_wandb: False
 
+Kp:
+  _target_: numpy.diag
+  v: [5, 5, 2]
+
 reduced_order_model:
   _target_: trajopt.rom_dynamics.LateralUnicycle
   z_min:
