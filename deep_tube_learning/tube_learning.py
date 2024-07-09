@@ -90,13 +90,15 @@ class AsymmetricLoss(nn.Module):
             loss = torch.where(norm_residual <= 0, alpha * norm_residual, (1 - alpha) * norm_residual.abs())
             return self.huber(loss, torch.zeros_like(loss))
 
-def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, num_epochs=500):
+def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, num_epochs=500, device='cpu'):
     best_test_loss = float('inf')
+    model.to(device)
 
     for epoch in tqdm(range(num_epochs), desc="Epochs", position=0, leave=True):
         model.train()
         train_loss = 0
         for data, targets in tqdm(train_loader, desc="Training Batches", leave=False):
+            data, targets = data.to(device), targets.to(device)
             optimizer.zero_grad()
             outputs = model(data)
             alpha = data[:, 0]
@@ -106,7 +108,7 @@ def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_
             train_loss += loss.item()
         
         wandb.log({'Train Loss': train_loss / len(train_loader), 'Epoch': epoch})
-        metrics = evaluate_model(model, test_loader, criterion, tube_type)
+        metrics = evaluate_model(model, test_loader, criterion, tube_type, device)
         for metric_name, metric_value in metrics.items():
             wandb.log({metric_name: metric_value, 'Epoch': epoch})
         
@@ -118,7 +120,7 @@ def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_
             
             wandb.save(model_path)
 
-def evaluate_model(model, test_loader, criterion, tube_type):
+def evaluate_model(model, test_loader, criterion, tube_type, device):
     model.eval()
     metrics = {}
 
@@ -130,6 +132,7 @@ def evaluate_model(model, test_loader, criterion, tube_type):
             count_y_pred_gt_wt1 = 0
 
             for data, targets in test_loader:
+                data, targets = data.to(device), targets.to(device)
                 alpha_tensor = torch.full((data.size(0), 1), alpha)
                 data_with_alpha = torch.cat((alpha_tensor, data[:, 1:]), dim=1)
 
@@ -175,11 +178,11 @@ def parse_list(arg):
     return [item.strip() for item in arg.split(',')]
 
 def main(tube_type, filename):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     wandb.init()
     config = wandb.config
 
     X, y = load_and_prepare_data(filename, tube_type)
-    print(len(X))
     train_loader, test_loader = create_data_loaders(X, y, batch_size=64)
 
     input_size = 7
@@ -189,7 +192,7 @@ def main(tube_type, filename):
     criterion = AsymmetricLoss(delta=1.0)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     
-    train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, num_epochs=config.num_epochs)
+    train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, num_epochs=config.num_epoch, device=device)
 
     wandb.finish()
 
