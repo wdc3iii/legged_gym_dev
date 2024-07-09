@@ -38,6 +38,15 @@ def yaw2rot(yaw):
     return y2r
 
 
+def wrap_angles(ang):
+    """
+    Wraps angles to [-pi, pi]
+    :param ang: angles to wrap
+    :return: wrapped angles
+    """
+    return ((ang + np.pi) % (2 * np.pi)) - np.pi
+
+
 def unnormalize_dict(normalized_dict, sep="/"):
     """
     Unnormalize a dictionary with keys separated by a separator

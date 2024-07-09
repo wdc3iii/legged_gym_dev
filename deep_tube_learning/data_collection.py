@@ -13,7 +13,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
 
-from deep_tube_learning.utils import quat2yaw, yaw2rot
+from deep_tube_learning.utils import quat2yaw, yaw2rot, wrap_angles
 
 
 CMD_START_IDX = 9
@@ -138,8 +138,7 @@ def data_creation_main(cfg):
 
             # Compute pose error
             err_global = des_pose - robot_pose
-            if not track_yaw:
-                err_global[:, 2] = 0
+            err_global[:, 2] = np.where(track_yaw, wrap_angles(err_global[:, 2]), 0)
             err_global_all[t, :, :] = err_global.copy()
             err_local = err_global.copy()
             err_local[:, :2] = np.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
