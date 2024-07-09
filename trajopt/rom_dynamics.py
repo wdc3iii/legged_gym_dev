@@ -33,12 +33,14 @@ class RomDynamics(ABC):
             self.const_mat = lambda m: ca.DM(m)
             self.sin = lambda x: ca.sin(x)
             self.cos = lambda x: ca.cos(x)
+            self.stack = lambda lst: ca.horzcat(**lst)
         elif backend == 'numpy':
             self.zero_mat = lambda r, c: np.zeros((r, c))
             self.zero_vec = lambda n: np.zeros((n,))
             self.const_mat = lambda m: np.array(m)
             self.sin = lambda x: np.sin(x)
             self.cos = lambda x: np.cos(x)
+            self.stack = lambda lst: np.hstack(lst)
 
     @abstractmethod
     def f(self, z, v):
@@ -47,6 +49,15 @@ class RomDynamics(ABC):
         :param z: current state
         :param v: input
         :return: next state
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def proj_z(self, x):
+        """
+        Projects the full order robot's CoM state (p, q, v, w) in R^13 onto the RoM state
+        :param x: the robot's CoM state
+        :return: projection of the full order state onto the CoM state
         """
         raise NotImplementedError
 
@@ -60,8 +71,11 @@ class RomDynamics(ABC):
         """
         raise NotImplementedError
 
+    def clip_v(self, v):
+        return np.maximum(np.minimum(v, self.v_max), self.v_min)
+
     @abstractmethod
-    def clip_v(self, z, v):
+    def clip_v_z(self, z, v):
         """
         Clips the input, v, to a valid input which respects input bounds, and when the dyamics are applied,
         will not result in velocities which violate the state bounds (when applicable)
@@ -135,10 +149,13 @@ class SingleInt2D(RomDynamics):
     def f(self, x, u):
         return self.A @ x + self.B @ u
 
+    def proj_z(self, x):
+        return x[..., :2]
+
     def sample_uniform_bounded_v(self, z):
         return self.sample_uniform_v()
 
-    def clip_v(self, z, v):
+    def clip_v_z(self, z, v):
         return v
 
     def plot_ts(self, axs, xt, ut):
@@ -159,6 +176,9 @@ class DoubleInt2D(RomDynamics):
     def f(self, x, u):
         return self.A @ x + self.B @ u
 
+    def proj_z(self, x):
+        return self.stack((x[..., :2], x[..., 7:9]))
+
     def compute_state_dependent_input_bounds(self, z):
         """
         Because there are state bounds on the velocity, in some states we cannot use the full input range.
@@ -177,7 +197,7 @@ class DoubleInt2D(RomDynamics):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.random.uniform(v_min_z, v_max_z)
 
-    def clip_v(self, z, v):
+    def clip_v_z(self, z, v):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.maximum(np.minimum(v, v_max_z), v_min_z)
 
@@ -201,10 +221,16 @@ class Unicycle(RomDynamics):
         g[2, 1] = 1.0
         return x + self.dt * g @ u
 
+    def proj_z(self, x):
+        quat = x[:, 3:7]
+        rot = Rotation.from_quat(quat)
+        eul = rot.as_euler('xyz', degrees=False)
+        return self.stack((x[..., :2], eul[..., -1]))
+
     def sample_uniform_bounded_v(self, z):
         return self.sample_uniform_v()
 
-    def clip_v(self, z, v):
+    def clip_v_z(self, z, v):
         return v
 
     @staticmethod
@@ -250,6 +276,12 @@ class ExtendedUnicycle(Unicycle):
         gu[4] = u[1]
         return x + self.dt * gu
 
+    def proj_z(self, x):
+        quat = x[:, 3:7]
+        rot = Rotation.from_quat(quat)
+        eul = rot.as_euler('xyz', degrees=False)
+        return self.stack((x[..., :2], eul[..., -1], ))
+
     def compute_state_dependent_input_bounds(self, z):
         """
         Because there are state bounds on the velocity, in some states we cannot use the full input range.
@@ -268,7 +300,7 @@ class ExtendedUnicycle(Unicycle):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.random.uniform(v_min_z, v_max_z)
 
-    def clip_v(self, z, v):
+    def clip_v_z(self, z, v):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.maximum(np.minimum(v, v_max_z), v_min_z)
 
