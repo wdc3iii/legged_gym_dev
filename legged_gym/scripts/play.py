@@ -80,9 +80,16 @@ def play(args):
     env_cfg.terrain.num_rows = 5
     env_cfg.terrain.num_cols = 5
     env_cfg.terrain.curriculum = False
-    env_cfg.noise.add_noise = False
-    env_cfg.domain_rand.randomize_friction = False
-    env_cfg.domain_rand.push_robots = False
+    env_cfg.env.episode_length_s = 20                   # duration of episode (in seconds)
+    env_cfg.noise.add_noise = False                     # domain randomizations:
+    env_cfg.domain_rand.randomize_friction = False      # |
+    env_cfg.domain_rand.friction_range = [.5, 1.25]     # |
+    env_cfg.domain_rand.randomize_base_mass = False     # |
+    env_cfg.domain_rand.added_mass_range = [-.5, .5]    # ---
+    env_cfg.terrain.mesh_type = 'plane'                 # terrain randomization: switch to trimesh for random
+    env_cfg.domain_rand.push_robots = False             # perturbation randomization:
+    env_cfg.domain_rand.push_interval_s = 15            # |
+    env_cfg.domain_rand.max_push_vel_xy = 1.            # |
 
     # Prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
@@ -183,12 +190,25 @@ def play(args):
         for robot_idx in range(num_robots):
             ideal_positions[robot_idx].append(desired_pos[robot_idx, :].copy())
             unnormalized_direction_vectors_all[robot_idx].append(trajectories[robot_index][1][i])
+    trajectories_positions = np.stack([traj[0] for traj in trajectories], axis=0)
+    trajectories_directions = np.stack([traj[1] for traj in trajectories], axis=0)
+    num_steps = num_iterations * int(env.max_episode_length)
+    indices = np.minimum(np.arange(num_steps), trajectories_positions.shape[1] - 1)
+    ideal_positions_steps = trajectories_positions[:, indices, :]
+    desired_direction_vectors_steps = trajectories_directions[:, indices, :]
+
+    for robot_idx in range(num_robots):
+        ideal_positions[robot_idx].extend(ideal_positions_steps[robot_idx])
+        unnormalized_direction_vectors_all[robot_idx].extend(desired_direction_vectors_steps[robot_idx])
 
         robot_pos = env.root_states[:, :2].cpu().numpy()
         quat = env.root_states[:, 3:7].cpu().numpy()
         rot = Rotation.from_quat(quat)
         eul = rot.as_euler('xyz', degrees=False)
         robot_yaw = eul[:, -1]
+    for i in range(num_steps):
+        ideal_positions_step = ideal_positions_steps[:, i, :]
+        desired_direction_vectors = desired_direction_vectors_steps[:, i, :]
 
         pos_errors = desired_pos - robot_pos
         parallel_error = np.cos(robot_yaw) * pos_errors[:, 0] + np.sin(robot_yaw) * pos_errors[:, 1]      # TODO: Compute parallel error

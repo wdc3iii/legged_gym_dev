@@ -60,3 +60,6 @@ __pycache__
 
 # data
 *.csv
+*.pth
+deep_tube_learning/models/*
+deep_tube_learning/wandb/*
