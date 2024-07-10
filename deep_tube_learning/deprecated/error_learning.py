@@ -28,7 +28,7 @@ def load_and_process_data(run_id):
     return processed_data
 
 def save_data(run_id, data):
-    output_path = Path('rom_tracking_data', run_id, "processed_data_with_errors.pickle")
+    output_path = Path('../rom_tracking_data', run_id, "processed_data_with_errors.pickle")
     with open(output_path, "wb") as f:
         pickle.dump(data, f)
 
@@ -37,7 +37,7 @@ def convert_to_tensor_input(data):
     targets = torch.tensor(data['e_p1'], dtype=torch.float32)
     return features, targets
 
-def create_data_loaders(X, y, batch_size=64):
+def create_data_loaders(X, y, batch_size=16384):
     dataset = TensorDataset(X, y)
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
@@ -68,9 +68,13 @@ class CustomErrorDynamicsLoss(nn.Module):
 
 def train_and_test(model, criterion, optimizer, train_loader, test_loader, device, num_epochs=50):
     for epoch in range(num_epochs):
+        print(epoch)
         model.train()
         total_train_loss = 0
+        ii = 0
         for data, targets in train_loader:
+            print("\t", ii)
+            ii += 1
             data, targets = data.to(device), targets.to(device)
             optimizer.zero_grad()
             outputs = model(data)
@@ -107,6 +111,7 @@ def main(run_id):
 
     input_dim = X.size(1)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
     model = ErrorDynamicsModel(input_dim, config.num_units, config.num_layers).to(device)
     criterion = CustomErrorDynamicsLoss()
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)

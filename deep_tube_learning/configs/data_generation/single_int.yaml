@@ -4,7 +4,7 @@ defaults:
 
 dataset_name: "single_integrator"
 
-num_robots: 11
+num_robots: 1000
 epochs: 2
 save_debugging_data: True
 upload_to_wandb: False

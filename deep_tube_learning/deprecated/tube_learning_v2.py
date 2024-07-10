@@ -108,6 +108,7 @@ def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_
             
             wandb.save(model_path)
 
+
 def evaluate_model(model, test_loader, criterion, tube_type, device):
     model.eval()
     metrics = {}

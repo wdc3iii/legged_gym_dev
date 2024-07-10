@@ -33,6 +33,11 @@ def get_state(base, joint_pos, joint_vel):
     version_base="1.2",
 )
 def data_creation_main(cfg):
+    # Seed RNG
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
+
+    # Send config to wandb
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
     if cfg.upload_to_wandb:
@@ -44,7 +49,7 @@ def data_creation_main(cfg):
     else:
         import random
         import string
-        run_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        run_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
     data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{cfg.dataset_name}_{run_id}")
     os.makedirs(data_path, exist_ok=True)
 
