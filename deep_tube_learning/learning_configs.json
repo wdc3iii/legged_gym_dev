@@ -1,0 +1,48 @@
+{
+    "tube": {
+      "method": "grid",
+      "metric": {
+        "name": "Test Loss",
+        "goal": "minimize"
+      },
+      "parameters": {
+        "learning_rate": {
+          "values": [0.001]
+        },
+        "num_units": {
+          "values": [32]
+        },
+        "num_layers": {
+          "values": [2]
+        },
+        "tube_type": {
+          "value": "rectangular"
+        },
+        "num_epochs": {
+          "value": 50
+        }
+      }
+    },
+    "error": {
+      "method": "grid",
+      "metric": {
+        "name": "Test Loss",
+        "goal": "minimize"
+      },
+      "parameters": {
+        "learning_rate": {
+          "values": [0.001]
+        },
+        "num_units": {
+          "values": [32]
+        },
+        "num_layers": {
+          "values": [2]
+        },
+        "num_epochs": {
+          "value": 50
+        }
+      }
+    }
+  }
+  

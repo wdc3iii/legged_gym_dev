@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
 import argparse
+import json
 
 def load_and_process_data(run_id):
     file_path = f"rom_tracking_data/{run_id}/dataset.pickle"
@@ -121,17 +122,10 @@ if __name__ == "__main__":
 
     wandb.login(key="70954bb73c536b7f5b23ef315c7c19b511e8a406")
 
-    sweep_config = {
-            'method': 'grid',
-            'metric': {'name': 'Test Loss', 'goal': 'minimize'},
-            'parameters': {
-                'learning_rate': {'values': [0.001]},
-                'num_units': {'values': [32]},
-                'num_layers': {'values': [2]},
-                'num_epochs': {'value': 50}
-            }
-        }
+    with open('sweep_config.json', 'r') as file:
+        all_configs = json.load(file)
+        sweep_config = all_configs.get('error', all_configs['default'])
 
-    project_name = "model_training_sweep"
+    project_name = f"model_training_sweep_{args.config_key}"
     sweep_id = wandb.sweep(sweep_config, project=project_name)
     wandb.agent(sweep_id, lambda: main(args.run_id))
