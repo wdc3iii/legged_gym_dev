@@ -87,11 +87,11 @@ def get_dataset(wandb_experiment):
 
 class TubeDataset(Dataset):
 
-    def __init__(self):
-        self.data = None
-        self.target = None
-        self.input_dim = None
-        self.output_dim = None
+    def __init__(self, data, target, input_dim, output_dim):
+        self.data = data
+        self.target = target
+        self.input_dim = input_dim
+        self.output_dim = output_dim
 
     def __len__(self):
         return self.data.shape[0]
@@ -102,56 +102,84 @@ class TubeDataset(Dataset):
     def update(self):
         pass
 
+    def random_split(self, split_proportion):
+        """
+        Splits the dataset into two random contiguous pieces
+        :param split_proportion:
+        :return:
+        """
+        split_len = int(len(self) * split_proportion)
+        idx = np.random.randint(len(self) - split_len)
+
+        data1 = self.data[idx:split_len + idx]
+        data2 = torch.vstack((self.data[:idx], self.data[split_len + idx:]))
+        target1 = self.target[idx:split_len + idx]
+        target2 = torch.vstack((self.target[:idx], self.target[split_len + idx:]))
+
+        return type(self)(data1, target1, self.input_dim, self.output_dim), type(self)(data2, target2, self.input_dim, self.output_dim)
+
 
 class ScalarTubeDataset(TubeDataset):
 
-    def __init__(self, wandb_experiment):
-        super(ScalarTubeDataset, self).__init__()
+    @classmethod
+    def from_wandb(cls, wandb_experiment):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
         # TODO: is just applying the norm here correct?
         w = np.linalg.norm(dataset['z'] - dataset['pz_x'], axis=1)
         w_p1 = np.linalg.norm(dataset['z_p1'] - dataset['pz_x_p1'], axis=1)
-        self.data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v']))).float()
-        self.target = torch.from_numpy(w_p1[:, None]).float()
+        data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v']))).float()
+        target = torch.from_numpy(w_p1[:, None]).float()
 
-        self.input_dim = self.data.shape[1]
-        self.output_dim = 1
+        input_dim = data.shape[1]
+        output_dim = 1
+        return cls(data, target, input_dim, output_dim)
+
+    def __init__(self, data, target, input_dim, output_dim):
+        super(ScalarTubeDataset, self).__init__(data, target, input_dim, output_dim)
 
 
 class VectorTubeDataset(TubeDataset):
 
-    def __init__(self, wandb_experiment):
-        super(VectorTubeDataset, self).__init__()
+    @classmethod
+    def from_wandb(cls, wandb_experiment):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
         w = np.abs(dataset['z'] - dataset['pz_x'])
         w_p1 = np.abs(dataset['z_p1'] - dataset['pz_x_p1'])
-        self.data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v']))).float()
-        self.target = torch.from_numpy(w_p1).float()
+        data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v']))).float()
+        target = torch.from_numpy(w_p1).float()
 
-        self.input_dim = self.data.shape[1]
-        self.output_dim = self.target.shape[1]
+        input_dim = data.shape[1]
+        output_dim = target.shape[1]
+        return cls(data, target, input_dim, output_dim)
+
+    def __init__(self, data, target, input_dim, output_dim):
+        super(VectorTubeDataset, self).__init__(data, target, input_dim, output_dim)
 
 
 class AlphaScalarTubeDataset(TubeDataset):
 
-    def __init__(self, wandb_experiment):
-        super(AlphaScalarTubeDataset, self).__init__()
+    @classmethod
+    def from_wandb(cls, wandb_experiment):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
         # TODO: is just applying the norm here correct?
         w = np.linalg.norm(dataset['z'] - dataset['pz_x'], axis=1)
         w_p1 = np.linalg.norm(dataset['z_p1'] - dataset['pz_x_p1'], axis=1)
-        alpha = np.random.uniform(size=(self.data[0], 1))
-        self.data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v'], alpha))).float()
-        self.target = torch.from_numpy(w_p1[:, None]).float()
+        alpha = np.random.uniform(size=(dataset.shape[0], 1))
+        data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v'], alpha))).float()
+        target = torch.from_numpy(w_p1[:, None]).float()
 
-        self.input_dim = self.data.shape[1]
-        self.output_dim = 1
+        input_dim = data.shape[1]
+        output_dim = 1
+        return cls(data, target, input_dim, output_dim)
+
+    def __init__(self, data, target, input_dim, output_dim):
+        super(AlphaScalarTubeDataset, self).__init__(data, target, input_dim, output_dim)
 
     def update(self):
         self.data[:, -1] = torch.rand(size=(len(self),))
@@ -159,19 +187,23 @@ class AlphaScalarTubeDataset(TubeDataset):
 
 class AlphaVectorTubeDataset(TubeDataset):
 
-    def __init__(self, wandb_experiment):
-        super(AlphaVectorTubeDataset, self).__init__()
+    @classmethod
+    def from_wandb(cls, wandb_experiment):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
         w = np.abs(dataset['z'] - dataset['pz_x'])
         w_p1 = np.abs(dataset['z_p1'] - dataset['pz_x_p1'])
-        alpha = np.random.uniform(size=(self.data[0], 1))
-        self.data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v'], alpha))).float()
-        self.target = torch.from_numpy(w_p1).float()
+        alpha = np.random.uniform(size=(dataset.shape[0], 1))
+        data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v'], alpha))).float()
+        target = torch.from_numpy(w_p1).float()
 
-        self.input_dim = self.data.shape[1]
-        self.output_dim = self.target.shape[1]
+        input_dim = data.shape[1]
+        output_dim = target.shape[1]
+        return cls(data, target, input_dim, output_dim)
+
+    def __init__(self, data, target, input_dim, output_dim):
+        super(AlphaVectorTubeDataset, self).__init__(data, target, input_dim, output_dim)
 
     def update(self):
         self.data[:, -1] = torch.rand(size=(len(self),))

@@ -133,7 +133,7 @@ def evaluate_model(model, test_loader, criterion, tube_type, device):
 
             for data, targets in test_loader:
                 data, targets = data.to(device), targets.to(device)
-                alpha_tensor = torch.full((data.size(0), 1), alpha)
+                alpha_tensor = torch.full((data.size(0), 1), alpha).to(device)
                 data_with_alpha = torch.cat((alpha_tensor, data[:, 1:]), dim=1)
 
                 outputs = model(data_with_alpha)
@@ -192,7 +192,7 @@ def main(tube_type, filename):
     criterion = AsymmetricLoss(delta=1.0)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     
-    train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, num_epochs=config.num_epoch, device=device)
+    train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, num_epochs=config.num_epochs, device=device)
 
     wandb.finish()
 

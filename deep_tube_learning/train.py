@@ -9,7 +9,8 @@ from tqdm import tqdm
 from pathlib import Path
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
+from deep_tube_learning.datasets import TubeDataset
 
 
 class CheckPointManager:
@@ -41,10 +42,8 @@ class CheckPointManager:
         torch.save(model.state_dict(), f"{self.ckpt_path}/model.pth")
 
 
-def create_data_loaders(dataset, batch_size, validation_split):
-    train_size = int(validation_split * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+def create_data_loaders(dataset: TubeDataset, batch_size, validation_split):
+    train_dataset, test_dataset = dataset.random_split(validation_split)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
@@ -123,7 +122,7 @@ def main(cfg):
                 },
                 step=step,
             )
-            pbar.set_postfix({"loss": loss, "lr": lr_scheduler.get_last_lr()[0]})
+            pbar.set_postfix({"loss": loss.item(), "lr": lr_scheduler.get_last_lr()[0]})
             epoch_loss += loss
             if step % cfg.steps_per_model_checkpoint == 0:
                 ckpt_manager.save(model, loss.item(), epoch=epoch, step=step)

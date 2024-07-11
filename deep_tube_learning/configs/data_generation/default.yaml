@@ -52,6 +52,7 @@ reduced_order_model:
       - ${omega_max}
   n_robots: ${num_robots}
   backend: "numpy"
+  seed: ${seed}
 
 Kp:
   _target_: numpy.diag

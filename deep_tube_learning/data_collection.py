@@ -208,6 +208,7 @@ def data_creation_main(cfg):
         print("[INFO] Finished generating data. Waiting for wandb to finish uploading...")
 
     print(f"\nrun ID: {run_id}\ndataset name: {cfg.dataset_name}\nlocal folder: {cfg.dataset_name}_{run_id}")
+    return epoch_data
 
 
 if __name__ == "__main__":

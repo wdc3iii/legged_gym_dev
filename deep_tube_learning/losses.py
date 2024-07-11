@@ -10,7 +10,8 @@ class ScalarTubeLoss(nn.Module):
 
     def forward(self, fw, w, data):
         residual = w - fw
-        loss = torch.where(residual <= 0, self.alpha * residual, (1 - self.alpha) * residual.abs())
+        # TODO: Check with Cole direction of residual inequality
+        loss = torch.where(residual > 0, self.alpha * residual, (1 - self.alpha) * residual.abs())
         return self.huber(loss, torch.zeros_like(loss))
 
 

@@ -6,7 +6,7 @@ validation_split: 0.8
 
 experiment_name: "default"
 
-lr: 1e-2
+lr: 1e-3
 
 aux_logger:
   all:
@@ -14,7 +14,7 @@ aux_logger:
     _partial_: true
 
 dataset:
-  _target_: deep_tube_learning.datasets.ScalarTubeDataset
+  _target_: deep_tube_learning.datasets.ScalarTubeDataset.from_wandb
   wandb_experiment: "single_integrator_6u8wikhv"
 
 optimizer:
@@ -25,22 +25,22 @@ optimizer:
 lr_scheduler:
   _target_: torch.optim.lr_scheduler.StepLR
   _partial_: true
-  step_size: 100000
+  step_size: 10000
   gamma: 0.1
 
 model:
   _target_: deep_tube_learning.models.MLP
   _partial_: true
-  num_units: 64
-  num_layers: 3
+  num_units: 32
+  num_layers: 2
   activation:
     _target_: torch.nn.ReLU
-  final_activation:
-    _target_: torch.nn.Softplus  # all tube widths should be positive
+#  final_activation:
+#    _target_: torch.nn.Softplus  # all tube widths should be positive
 
 loss:
   _target_: deep_tube_learning.losses.ScalarTubeLoss
-  alpha: 0.8
+  alpha: 0.99
 
 steps_per_model_checkpoint: 100
 steps_per_model_evaluation: 100

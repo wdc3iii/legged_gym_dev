@@ -13,7 +13,7 @@ class RomDynamics(ABC):
     n: int  # Dimension of state
     m: int  # Dimension of input
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', seed=42):
         """
         Common constructor functionality
         :param dt: time discretization
@@ -30,6 +30,7 @@ class RomDynamics(ABC):
         self.z_min = z_min
         self.z_max = z_max
         self.n_robots = n_robots
+        self.rng = np.random.RandomState(seed)
         if backend == 'casadi':
             self.zero_mat = lambda r, c: ca.MX(r, c)
             self.zero_vec = lambda n: ca.MX(n, 1)
@@ -107,7 +108,7 @@ class RomDynamics(ABC):
         Samples an input uniformly at random from within the input bounds
         :return: uniformly random input
         """
-        return np.random.uniform(self.v_min, self.v_max, size=(self.n_robots, self.v_max.shape[0]))
+        return self.rng.uniform(self.v_min, self.v_max, size=(self.n_robots, self.v_max.shape[0]))
 
     @staticmethod
     def plot_spacial(ax, xt, c='-b'):
@@ -158,8 +159,8 @@ class SingleInt2D(RomDynamics):
     n = 2   # [x, y]
     m = 2   # [vx, vy]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', seed=42):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, seed=seed)
         self.A = self.const_mat([[1.0, 0], [0, 1.0]])
         self.B = self.const_mat([[dt, 0], [0, dt]])
 
@@ -188,8 +189,8 @@ class DoubleInt2D(RomDynamics):
     n = 4   # [x, y, vx, vy]
     m = 2   # [ax, ay]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', seed=42):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, seed=seed)
         self.A = self.const_mat([[1.0, 0, dt, 0], [0, 1.0, 0, dt], [0, 0, 1.0, 0], [0, 0, 0, 1.0]])
         self.B = self.const_mat([[0, 0], [0, 0], [dt, 0], [0, dt]])
 
@@ -219,7 +220,7 @@ class DoubleInt2D(RomDynamics):
 
     def sample_uniform_bounded_v(self, z):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
-        return np.random.uniform(v_min_z, v_max_z)
+        return self.rng.uniform(v_min_z, v_max_z)
 
     def clip_v_z(self, z, v):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
@@ -235,8 +236,8 @@ class Unicycle(RomDynamics):
     n = 3   # [x, y, theta]
     m = 2   # [v, omega]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', seed=42):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, seed=seed)
 
     def f(self, x, u):
         gu = self.zero_mat(self.n_robots, self.n)
@@ -340,7 +341,7 @@ class ExtendedUnicycle(Unicycle):
 
     def sample_uniform_bounded_v(self, z):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
-        return np.random.uniform(v_min_z, v_max_z)
+        return self.rng.uniform(v_min_z, v_max_z)
 
     def clip_v_z(self, z, v):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)

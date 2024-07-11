@@ -48,6 +48,17 @@ def wrap_angles(ang):
     return ((ang + np.pi) % (2 * np.pi)) - np.pi
 
 
+def unnormalize_dict(normalized_dict, sep="/"):
+    result = {}
+    for key, value in normalized_dict.items():
+        keys = key.split(sep)
+        d = result
+        for k in keys[:-1]:
+            d = d.setdefault(k, {})
+        d[keys[-1]] = value
+    return result
+
+
 def evaluate_scalar_tube(test_dataset, loss_fn, device):
 
     def eval_model(model):
@@ -55,19 +66,17 @@ def evaluate_scalar_tube(test_dataset, loss_fn, device):
         metrics = {}
 
         with torch.no_grad():
-            data, targets = test_dataset.dataset.data.to(device), test_dataset.dataset.target.to(device)
+            data, w = test_dataset.data.to(device), test_dataset.target.to(device)
 
-            outputs = model(data)
-            test_loss = loss_fn(outputs, targets, data)
+            fw = model(data)
+            test_loss = loss_fn(fw, w, data)
 
-            greater_mask = outputs > targets
-            less_mask = outputs < targets
-            differences = (targets[less_mask] - outputs[less_mask]).abs()
-
+            correct_mask = fw > w
+            differences = (w[correct_mask] - fw[correct_mask]).abs()
 
             metrics[f'Test Loss (alpha={loss_fn.alpha:.1f})'] = test_loss
-            metrics[f'Proportion y_pred > w_{{t+1}} (alpha={loss_fn.alpha:.1f})'] = greater_mask.float().mean()
-            metrics[f'Avg Abs Diff y_pred < w_{{t+1}} (alpha={loss_fn.alpha:.1f})'] = differences.mean()
+            metrics[f'Proportion Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = correct_mask.float().mean()
+            metrics[f'Mean Error when Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = differences.mean()
 
         return metrics
 
