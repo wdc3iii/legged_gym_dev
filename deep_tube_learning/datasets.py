@@ -73,10 +73,11 @@ def get_dataset(wandb_experiment):
     data_folder = f"rom_tracking_data/{wandb_experiment}"
     dataset_file = f"{data_folder}/dataset.pickle"
     if not os.path.isfile(dataset_file):
-        experiment = f"coleonguard-Georgia Institute of Technology/RoM_Tracking_Data/{wandb_experiment}:latest"
-        api = wandb.Api()
-        artifact = api.artifact(experiment)
-        artifact.download(root=Path(data_folder))
+        if not os.path.isfile(f"{data_folder}/epoch_0.pickle"):
+            experiment = f"coleonguard-Georgia Institute of Technology/RoM_Tracking_Data/{wandb_experiment}:latest"
+            api = wandb.Api()
+            artifact = api.artifact(experiment)
+            artifact.download(root=Path(data_folder))
         dataset = construct_dataset(data_folder)
     else:
         with open(dataset_file, "rb") as f:

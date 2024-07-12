@@ -1,43 +1,28 @@
-from deep_tube_learning.data_collection import data_creation_main
-
 import torch
 import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 from hydra.utils import instantiate
-from deep_tube_learning.utils import wandb_model_load, wandb_load_artifact
+from deep_tube_learning.utils import wandb_model_load
+from deep_tube_learning.simple_data_collection import main
+from trajopt.rom_dynamics import SingleInt2D
 
 
 def eval_model():
     # Experiment whose model to evaluate
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/zwjj264s"
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0qtznszg"
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
     model_cfg, state_dict = wandb_model_load(api, model_name)
-
-    dataset = instantiate(model_cfg.dataset)
-    model = instantiate(model_cfg.model)(dataset.input_dim, dataset.output_dim)
+    model = instantiate(model_cfg.model)(6, 2)
     model.load_state_dict(state_dict)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
 
-    data_name = f"coleonguard-Georgia Institute of Technology/RoM_Tracking_Data/{model_cfg.dataset.wandb_experiment}:latest"
-    data_cfg, _ = wandb_load_artifact(api, data_name)
-    data_cfg.seed = 0
-
     n_robots = 1
-    data_cfg.epochs = 1
-    data_cfg.num_robots = n_robots
-    data_cfg.sample_hold_dt.n_robots = n_robots
-    data_cfg.reduced_order_model.n_robots = n_robots
-    data_cfg.reduced_order_model.seed = data_cfg.seed
-    data_cfg.upload_to_wandb = False
-    data_cfg.save_debugging_data = True
-
-    epoch_data = data_creation_main(data_cfg)
-    rom = instantiate(data_cfg.reduced_order_model)
+    epoch_data = main(n_robots, 1)
 
     with torch.no_grad():
         err_total, err_os_total = 0, 0
@@ -45,16 +30,16 @@ def eval_model():
             z = epoch_data['z'][:-1, ii, :]
             pz_x = epoch_data['pz_x'][:-1, ii, :]
             v = epoch_data['v'][:, ii, :]
-            e = epoch_data['pz_x'][:-1, ii, :] - z
-            fe = e.copy()
+            e = pz_x - z
+
             single_data = torch.from_numpy(np.hstack((e, z, v))).float().to(device)
             fe_single = model(single_data).cpu().numpy()
+            fe_single = np.vstack((e[0, :], fe_single[:-1, :]))
 
+            fe = e.copy()
             for t in range(e.shape[0] - 1):
                 data = torch.from_numpy(np.hstack((fe[t, :], z[t, :], v[t, :]))).float().to(device)
                 fe[t + 1, :] = model(data).cpu().numpy()
-
-            fe_single = np.vstack((e[0, :], fe_single[:-1, :]))
 
             plt.figure()
             plt.plot(e, '--')
@@ -95,17 +80,17 @@ def eval_model():
             plt.show()
 
             fig, ax = plt.subplots()
-            rom.plot_spacial(ax, z, 'k-')
-            rom.plot_spacial(ax, pz_x, 'b-')
-            rom.plot_spacial(ax, z + fe, 'r-')
+            SingleInt2D.plot_spacial(ax, z, 'k-')
+            SingleInt2D.plot_spacial(ax, pz_x, 'b-')
+            SingleInt2D.plot_spacial(ax, z + fe, 'r-')
             plt.axis("square")
             plt.legend(['z', 'Pz_x', 'z + fe'])
             plt.show()
 
             fig, ax = plt.subplots()
-            rom.plot_spacial(ax, z, 'k-')
-            rom.plot_spacial(ax, pz_x, 'b-')
-            rom.plot_spacial(ax, z + fe_single, 'r-')
+            SingleInt2D.plot_spacial(ax, z, 'k-')
+            SingleInt2D.plot_spacial(ax, pz_x, 'b-')
+            SingleInt2D.plot_spacial(ax, z + fe_single, 'r-')
             plt.axis("square")
             plt.legend(['z', 'Pz_x', 'z + fe_single'])
             plt.show()

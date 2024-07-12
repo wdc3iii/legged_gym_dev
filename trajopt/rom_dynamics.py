@@ -557,3 +557,39 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
         super().plot_ts(axs, xt, ut)
         axs[0].legend(['x', 'y', 'theta', 'v', 'v_perp', 'omega'])
         axs[1].legend(['a', 'a_perp', 'alpha'])
+
+
+# class TripleIntPaper(RomDynamics):
+#
+#     def __init__(self, n_robots=1, backend='casadi', seed=42):
+#         dt = 0.1
+#         v_bound = 1
+#         z_max = np.array([np.inf, np.inf, v_bound, v_bound, np.inf, np.inf])
+#         u_bound = 1
+#         v_max = np.array([u_bound, u_bound])
+#         super().__init__(dt, -z_max, z_max, -v_max, v_max, n_robots=n_robots, backend=backend, seed=seed)
+#
+#         kf = 0.1
+#         self.A = self.const_mat([
+#             [0, 0, 1.0, 0, 0, 0],
+#             [0, 0, 0, 1.0, 0, 0],
+#             [0, 0, 0, 0, 1.0, 0],
+#             [0, 0, 0, 0, 0, 1.0],
+#             [0, 0, 0, 0, -kf, 0],
+#             [0, 0, 0, 0, 0, -kf]])
+#         self.B = self.const_mat([
+#             [0, 0],
+#             [0, 0],
+#             [0, 0],
+#             [0, 0],
+#             [1.0, 0],
+#             [0, 1.0]
+#         ])
+#
+#     def f(self, x, u):
+#         return x + self.dt * (self.A @ x.T).T + (self.B @ u.T).T
+#
+#     def proj_z(self, x):
+#         return x[:, :4]
+#
+#

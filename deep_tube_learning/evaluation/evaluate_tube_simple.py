@@ -1,45 +1,29 @@
-from deep_tube_learning.data_collection import data_creation_main
-
 import torch
 import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 from hydra.utils import instantiate
-from deep_tube_learning.utils import wandb_model_load, wandb_load_artifact
+from deep_tube_learning.utils import wandb_model_load
+from deep_tube_learning.simple_data_collection import main
+from trajopt.rom_dynamics import SingleInt2D
 
 
 def eval_model():
     # Experiment whose model to evaluate
-    exp_name = f"coleonguard-Georgia Institute of Technology/Deep_Tube_Training/zy9vmqvn"
-    # exp_name = f"coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l3abqwtu"
+    exp_name = f"coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yt4zlljz"
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
     model_cfg, state_dict = wandb_model_load(api, model_name)
-    print(f"alpha: {model_cfg.loss.alpha}")
-
-    dataset = instantiate(model_cfg.dataset)
-    model = instantiate(model_cfg.model)(dataset.input_dim, dataset.output_dim)
+    model = instantiate(model_cfg.model)(5, 1)
     model.load_state_dict(state_dict)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
-
-    data_name = f"coleonguard-Georgia Institute of Technology/RoM_Tracking_Data/{model_cfg.dataset.wandb_experiment}:latest"
-    data_cfg, _ = wandb_load_artifact(api, data_name)
-    data_cfg.seed = 0
+    print(f"alpha: {model_cfg.loss.alpha}")
 
     n_robots = 1
-    data_cfg.epochs = 1
-    data_cfg.num_robots = n_robots
-    data_cfg.sample_hold_dt.n_robots = n_robots
-    data_cfg.reduced_order_model.n_robots = n_robots
-    data_cfg.reduced_order_model.seed = data_cfg.seed
-    data_cfg.upload_to_wandb = False
-    data_cfg.save_debugging_data = True
-
-    epoch_data = data_creation_main(data_cfg)
-    rom = instantiate(data_cfg.reduced_order_model)
+    epoch_data = main(n_robots, 1)
 
     with torch.no_grad():
         succ_rate_single_total, succ_rate_total = 0, 0
@@ -47,7 +31,7 @@ def eval_model():
             z = epoch_data['z'][:-1, ii, :]
             pz_x = epoch_data['pz_x'][:-1, ii, :]
             v = epoch_data['v'][:, ii, :]
-            w = np.linalg.norm(epoch_data['pz_x'][:-1, ii, :] - z, axis=-1)
+            w = np.linalg.norm(pz_x - z, axis=-1)
             w_p1 = w.copy()
             fw = w.copy()
             w_p1[1:] = w[:-1]
@@ -99,17 +83,17 @@ def eval_model():
             plt.show()
 
             fig, ax = plt.subplots()
-            rom.plot_tube(ax, z[::10], fw[::10, None])
-            rom.plot_spacial(ax, z[::10], 'k.-')
-            rom.plot_spacial(ax, pz_x[::10], 'b.-')
+            SingleInt2D.plot_tube(ax, z[::2], fw[::2, None])
+            SingleInt2D.plot_spacial(ax, z[::2], 'k.-')
+            SingleInt2D.plot_spacial(ax, pz_x[::2], 'b.-')
             plt.axis("square")
             plt.title("Horizon Tube")
             plt.show()
 
             fig, ax = plt.subplots()
-            rom.plot_tube(ax, z[::10], fw_single[::10])
-            rom.plot_spacial(ax, z[::10], 'k.-')
-            rom.plot_spacial(ax, pz_x[::10], 'b.-')
+            SingleInt2D.plot_tube(ax, z[::2], fw_single[::2])
+            SingleInt2D.plot_spacial(ax, z[::2], 'k.-')
+            SingleInt2D.plot_spacial(ax, pz_x[::2], 'b.-')
             plt.axis("square")
             plt.title("Single Tube")
             plt.show()

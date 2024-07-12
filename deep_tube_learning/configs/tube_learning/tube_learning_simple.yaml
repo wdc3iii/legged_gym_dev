@@ -1,0 +1,17 @@
+defaults:
+  - default
+  - _self_
+
+experiment_name: "deep_tube_learning"
+
+dataset:
+  _target_: deep_tube_learning.datasets.ScalarTubeDataset.from_wandb
+  wandb_experiment: "simple_1rdub312"
+
+loss:
+  _target_: deep_tube_learning.losses.ScalarTubeLoss
+  alpha: 0.9
+
+lr_scheduler:
+  step_size: 1000
+  gamma: 0.75

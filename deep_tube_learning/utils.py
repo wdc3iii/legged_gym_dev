@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+from pathlib import Path
+from omegaconf import OmegaConf
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
@@ -56,6 +58,25 @@ def unnormalize_dict(normalized_dict, sep="/"):
             d = d.setdefault(k, {})
         d[keys[-1]] = value
     return result
+
+
+
+def wandb_model_load(api, artifact_name):
+    config, artifact = wandb_load_artifact(api, artifact_name)
+
+    dir_name = artifact.download(root=Path("/tmp/wandb_downloads"))
+    state_dict = torch.load(str(Path(dir_name) / "model.pth"))
+    return config, state_dict
+
+
+def wandb_load_artifact(api, artifact_name):
+    artifact = api.artifact(artifact_name)
+    run = artifact.logged_by()
+    config = run.config
+    config = unnormalize_dict(config)
+    config = OmegaConf.create(config)
+
+    return config, artifact
 
 
 def evaluate_scalar_tube(test_dataset, loss_fn, device):
