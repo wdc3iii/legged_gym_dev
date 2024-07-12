@@ -8,11 +8,6 @@ experiment_name: "default"
 
 lr: 1e-3
 
-aux_logger:
-  all:
-    _target_: "utils.hjb_loss_summary"
-    _partial_: true
-
 dataset:
   _target_: deep_tube_learning.datasets.ScalarTubeDataset.from_wandb
   wandb_experiment: "single_integrator_6u8wikhv"
@@ -35,12 +30,9 @@ model:
   num_layers: 2
   activation:
     _target_: torch.nn.ReLU
-#  final_activation:
-#    _target_: torch.nn.Softplus  # all tube widths should be positive
 
 loss:
   _target_: deep_tube_learning.losses.ScalarTubeLoss
-  alpha: 0.99
 
 steps_per_model_checkpoint: 100
 steps_per_model_evaluation: 100

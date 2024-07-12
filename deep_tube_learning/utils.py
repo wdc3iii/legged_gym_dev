@@ -83,3 +83,21 @@ def evaluate_scalar_tube(test_dataset, loss_fn, device):
     return eval_model
 
 
+def evaluate_error_dynamics(test_dataset, loss_fn, device):
+
+    def eval_model(model):
+        model.eval()
+        metrics = {}
+
+        with torch.no_grad():
+            data, e = test_dataset.data.to(device), test_dataset.target.to(device)
+
+            fe = model(data)
+            test_loss = loss_fn(fe, e, data)
+
+            metrics[f'Test Loss'] = test_loss
+
+        return metrics
+
+    return eval_model
+

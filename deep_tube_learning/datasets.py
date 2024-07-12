@@ -41,9 +41,9 @@ def construct_dataset(data_folder):
             pz_x = np.vstack((pz_x, pz_x_e))
 
     # Translate arrays by one for next steps
-    z_p1 = z
+    z_p1 = z.copy()
     z_p1[:-1, :] = z[1:, :]
-    pz_x_p1 = pz_x
+    pz_x_p1 = pz_x.copy()
     pz_x_p1[:-1, :] = pz_x[1:, :]
 
     # Remove 'done' transitions
@@ -126,9 +126,8 @@ class ScalarTubeDataset(TubeDataset):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
-        # TODO: is just applying the norm here correct?
-        w = np.linalg.norm(dataset['z'] - dataset['pz_x'], axis=1)
-        w_p1 = np.linalg.norm(dataset['z_p1'] - dataset['pz_x_p1'], axis=1)
+        w = np.linalg.norm(dataset['pz_x'] - dataset['z'], axis=1)
+        w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=1)
         data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v']))).float()
         target = torch.from_numpy(w_p1[:, None]).float()
 
@@ -147,8 +146,8 @@ class VectorTubeDataset(TubeDataset):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
-        w = np.abs(dataset['z'] - dataset['pz_x'])
-        w_p1 = np.abs(dataset['z_p1'] - dataset['pz_x_p1'])
+        w = np.abs(dataset['pz_x'] - dataset['z'])
+        w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
         data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v']))).float()
         target = torch.from_numpy(w_p1).float()
 
@@ -167,9 +166,8 @@ class AlphaScalarTubeDataset(TubeDataset):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
-        # TODO: is just applying the norm here correct?
-        w = np.linalg.norm(dataset['z'] - dataset['pz_x'], axis=1)
-        w_p1 = np.linalg.norm(dataset['z_p1'] - dataset['pz_x_p1'], axis=1)
+        w = np.linalg.norm(dataset['pz_x'] - dataset['z'], axis=1)
+        w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=1)
         alpha = np.random.uniform(size=(dataset.shape[0], 1))
         data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v'], alpha))).float()
         target = torch.from_numpy(w_p1[:, None]).float()
@@ -192,8 +190,8 @@ class AlphaVectorTubeDataset(TubeDataset):
         dataset = get_dataset(wandb_experiment)
 
         # Compute error terms
-        w = np.abs(dataset['z'] - dataset['pz_x'])
-        w_p1 = np.abs(dataset['z_p1'] - dataset['pz_x_p1'])
+        w = np.abs(dataset['pz_x'] - dataset['z'])
+        w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
         alpha = np.random.uniform(size=(dataset.shape[0], 1))
         data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v'], alpha))).float()
         target = torch.from_numpy(w_p1).float()
@@ -207,3 +205,23 @@ class AlphaVectorTubeDataset(TubeDataset):
 
     def update(self):
         self.data[:, -1] = torch.rand(size=(len(self),))
+
+
+class ErrorDynamicsDataset(TubeDataset):
+
+    @classmethod
+    def from_wandb(cls, wandb_experiment):
+        dataset = get_dataset(wandb_experiment)
+
+        # Compute error terms
+        e = dataset['pz_x'] - dataset['z']
+        e_p1 = dataset['pz_x_p1'] - dataset['z_p1']
+        data = torch.from_numpy(np.hstack((e, dataset['z'], dataset['v']))).float()
+        target = torch.from_numpy(e_p1).float()
+
+        input_dim = data.shape[1]
+        output_dim = target.shape[1]
+        return cls(data, target, input_dim, output_dim)
+
+    def __init__(self, data, target, input_dim, output_dim):
+        super(ErrorDynamicsDataset, self).__init__(data, target, input_dim, output_dim)
