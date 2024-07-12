@@ -19,14 +19,17 @@ def construct_dataset(data_folder):
         # Note that by removing N+1 element from z, Pz_x, all arrays now have same leading axis
         # Enforce last element of leading axis always has done=True, so
         # removing 'num_robots' axis will not lead to spurious transition
-        z_e = epoch_data['z'][:-1, :, :]
-        data_shape = z_e.shape
-        z_e = z_e.reshape((data_shape[0] * data_shape[1], -1), order='F')
-        v_e = epoch_data['v'].reshape((data_shape[0] * data_shape[1], -1), order='F')
+        z_e = epoch_data['z']
+        v_e = epoch_data['v']
         done_e = epoch_data['done']
         done_e[-1, :] = True
-        done_e = done_e.reshape((data_shape[0] * data_shape[1], -1), order='F')
-        pz_x_e = epoch_data['pz_x'][:-1, :, :].reshape((data_shape[0] * data_shape[1], -1), order='F')
+        pz_x_e = epoch_data['pz_x']
+
+        # Place the 'robots' axis first, 'time' axis second
+        z_e = np.swapaxes(z_e, 0, 1)
+        v_e = np.swapaxes(v_e, 0, 1)
+        pz_x_e = np.swapaxes(pz_x_e, 0, 1)
+        done_e = np.swapaxes(done_e, 0, 1)
 
         # Concatenate with other data
         if z is None:
@@ -35,38 +38,40 @@ def construct_dataset(data_folder):
             done = done_e
             pz_x = pz_x_e
         else:
-            z = np.vstack((z, z_e))
-            v = np.vstack((v, v_e))
-            done = np.vstack((done, done_e))
-            pz_x = np.vstack((pz_x, pz_x_e))
+            z = np.concatenate((z, z_e), axis=0)
+            v = np.concatenate((v, v_e), axis=0)
+            done = np.concatenate((done, done_e), axis=0)
+            pz_x = np.concatenate((pz_x, pz_x_e), axis=0)
 
     # Translate arrays by one for next steps
-    z_p1 = z.copy()
-    z_p1[:-1, :] = z[1:, :]
-    pz_x_p1 = pz_x.copy()
-    pz_x_p1[:-1, :] = pz_x[1:, :]
-
-    # Remove 'done' transitions
-    done = np.squeeze(done)
-    z = z[np.logical_not(done), :]
-    v = v[np.logical_not(done), :]
-    pz_x = pz_x[np.logical_not(done), :]
-    z_p1 = z_p1[np.logical_not(done), :]
-    pz_x_p1 = pz_x_p1[np.logical_not(done), :]
+    z_p1 = z[:, 1:, :].copy()
+    pz_x_p1 = pz_x[:, 1:, :].copy()
 
     # Save dataset
+    # TODO: change this so that z is dataset x time x state, where dataset = robots x epochs
     dataset = {
         'z': z,
         'pz_x': pz_x,
         'v': v,
         'z_p1': z_p1,
         'pz_x_p1': pz_x_p1,
+        'done': done
     }
 
     with open(f"{data_folder}/dataset.pickle", "wb") as f:
         pickle.dump(dataset, f)
 
     return dataset
+
+
+def get_slice(data, i, dN):
+    dc = data.copy()
+    slc = np.flip(np.arange(dc.shape[-2] - (i * dN) - 1, -1, step=-dN))
+    return np.concatenate((np.zeros((dc.shape[0], dc.shape[-2] - len(slc), dc.shape[2])), dc[:, slc, :]), axis=-2)
+
+
+def sliding_window(data, N, dN):
+    return np.concatenate([get_slice(data, i, dN) for i in range(N)], axis=-1)
 
 
 def get_dataset(wandb_experiment):
@@ -85,6 +90,10 @@ def get_dataset(wandb_experiment):
 
     return dataset
 
+
+def cat_dataset(dataset, target):
+
+    return dataset, target
 
 class TubeDataset(Dataset):
 
@@ -123,15 +132,28 @@ class TubeDataset(Dataset):
 class ScalarTubeDataset(TubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment):
+    def from_wandb(cls, wandb_experiment, N=1, dN=1):
         dataset = get_dataset(wandb_experiment)
 
-        # Compute error terms
-        w = np.linalg.norm(dataset['pz_x'] - dataset['z'], axis=1)
-        w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=1)
-        data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v']))).float()
-        target = torch.from_numpy(w_p1[:, None]).float()
+        z = dataset['z'][:, :-1, :]
+        pz_x = dataset['pz_x'][:, :-1, :]
 
+        # Compute error terms
+        w = np.linalg.norm(pz_x - z, axis=-1)
+        w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=-1)
+        data = np.concatenate((w[:, :, None], z, dataset['v']), axis=-1)
+
+        data = sliding_window(data, N, dN)
+        shp = data.shape
+        data = data.reshape((shp[0] * shp[1], shp[2]))
+        done = dataset['done'].reshape((shp[0] * shp[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+
+        data = data[np.logical_not(done), :]
+        w_p1 = w_p1[np.logical_not(done)]
+
+        data = torch.from_numpy(data).float()
+        target = torch.from_numpy(w_p1[:, None]).float()
         input_dim = data.shape[1]
         output_dim = 1
         return cls(data, target, input_dim, output_dim)
@@ -143,17 +165,30 @@ class ScalarTubeDataset(TubeDataset):
 class VectorTubeDataset(TubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment):
+    def from_wandb(cls, wandb_experiment, N=1, dN=1):
         dataset = get_dataset(wandb_experiment)
 
-        # Compute error terms
-        w = np.abs(dataset['pz_x'] - dataset['z'])
-        w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
-        data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v']))).float()
-        target = torch.from_numpy(w_p1).float()
+        z = dataset['z'][:, :-1, :]
+        pz_x = dataset['pz_x'][:, :-1, :]
 
+        # Compute error terms
+        w = np.abs(pz_x - z)
+        w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
+        data = np.concatenate((w, z, dataset['v']), axis=-1)
+
+        data = sliding_window(data, N, dN)
+        shp = data.shape
+        data = data.reshape((shp[0] * shp[1], shp[2]))
+        done = dataset['done'].reshape((shp[0] * shp[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+
+        data = data[np.logical_not(done), :]
+        w_p1 = w_p1[np.logical_not(done)]
+
+        data = torch.from_numpy(data).float()
+        target = torch.from_numpy(w_p1).float()
         input_dim = data.shape[1]
-        output_dim = target.shape[1]
+        output_dim = 1
         return cls(data, target, input_dim, output_dim)
 
     def __init__(self, data, target, input_dim, output_dim):
@@ -163,16 +198,31 @@ class VectorTubeDataset(TubeDataset):
 class AlphaScalarTubeDataset(TubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment):
+    def from_wandb(cls, wandb_experiment, N=1, dN=1):
         dataset = get_dataset(wandb_experiment)
 
-        # Compute error terms
-        w = np.linalg.norm(dataset['pz_x'] - dataset['z'], axis=1)
-        w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=1)
-        alpha = np.random.uniform(size=(dataset.shape[0], 1))
-        data = torch.from_numpy(np.hstack((w[:, None], dataset['z'], dataset['v'], alpha))).float()
-        target = torch.from_numpy(w_p1[:, None]).float()
+        z = dataset['z'][:, :-1, :]
+        pz_x = dataset['pz_x'][:, :-1, :]
 
+        # Compute error terms
+        w = np.linalg.norm(pz_x - z, axis=-1)
+        w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=-1)
+        data = np.concatenate((w[:, :, None], z, dataset['v']), axis=-1)
+
+        data = sliding_window(data, N, dN)
+        shp = data.shape
+        data = data.reshape((shp[0] * shp[1], shp[2]))
+        done = dataset['done'].reshape((shp[0] * shp[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+
+        data = data[np.logical_not(done), :]
+        w_p1 = w_p1[np.logical_not(done)]
+
+        alpha = np.random.uniform(size=(data.shape[0], 1))
+        data = np.hstack((data, alpha))
+
+        data = torch.from_numpy(data).float()
+        target = torch.from_numpy(w_p1[:, None]).float()
         input_dim = data.shape[1]
         output_dim = 1
         return cls(data, target, input_dim, output_dim)
@@ -187,18 +237,33 @@ class AlphaScalarTubeDataset(TubeDataset):
 class AlphaVectorTubeDataset(TubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment):
+    def from_wandb(cls, wandb_experiment, N=1, dN=1):
         dataset = get_dataset(wandb_experiment)
 
-        # Compute error terms
-        w = np.abs(dataset['pz_x'] - dataset['z'])
-        w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
-        alpha = np.random.uniform(size=(dataset.shape[0], 1))
-        data = torch.from_numpy(np.hstack((w, dataset['z'], dataset['v'], alpha))).float()
-        target = torch.from_numpy(w_p1).float()
+        z = dataset['z'][:, :-1, :]
+        pz_x = dataset['pz_x'][:, :-1, :]
 
+        # Compute error terms
+        w = np.abs(pz_x - z)
+        w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
+        data = np.concatenate((w, z, dataset['v']), axis=-1)
+
+        data = sliding_window(data, N, dN)
+        shp = data.shape
+        data = data.reshape((shp[0] * shp[1], shp[2]))
+        done = dataset['done'].reshape((shp[0] * shp[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+
+        data = data[np.logical_not(done), :]
+        w_p1 = w_p1[np.logical_not(done)]
+
+        alpha = np.random.uniform(size=(data.shape[0], 1))
+        data = np.hstack((data, alpha))
+
+        data = torch.from_numpy(data).float()
+        target = torch.from_numpy(w_p1).float()
         input_dim = data.shape[1]
-        output_dim = target.shape[1]
+        output_dim = 1
         return cls(data, target, input_dim, output_dim)
 
     def __init__(self, data, target, input_dim, output_dim):
@@ -211,17 +276,30 @@ class AlphaVectorTubeDataset(TubeDataset):
 class ErrorDynamicsDataset(TubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment):
+    def from_wandb(cls, wandb_experiment, N=1, dN=1):
         dataset = get_dataset(wandb_experiment)
 
-        # Compute error terms
-        e = dataset['pz_x'] - dataset['z']
-        e_p1 = dataset['pz_x_p1'] - dataset['z_p1']
-        data = torch.from_numpy(np.hstack((e, dataset['z'], dataset['v']))).float()
-        target = torch.from_numpy(e_p1).float()
+        z = dataset['z'][:, :-1, :]
+        pz_x = dataset['pz_x'][:, :-1, :]
 
+        # Compute error terms
+        w = pz_x - z
+        w_p1 = dataset['pz_x_p1'] - dataset['z_p1']
+        data = np.concatenate((w, z, dataset['v']), axis=-1)
+
+        data = sliding_window(data, N, dN)
+        shp = data.shape
+        data = data.reshape((shp[0] * shp[1], shp[2]))
+        done = dataset['done'].reshape((shp[0] * shp[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+
+        data = data[np.logical_not(done), :]
+        w_p1 = w_p1[np.logical_not(done)]
+
+        data = torch.from_numpy(data).float()
+        target = torch.from_numpy(w_p1).float()
         input_dim = data.shape[1]
-        output_dim = target.shape[1]
+        output_dim = 1
         return cls(data, target, input_dim, output_dim)
 
     def __init__(self, data, target, input_dim, output_dim):
