@@ -14,7 +14,7 @@ class RomDynamics(ABC):
     n: int  # Dimension of state
     m: int  # Dimension of input
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', method='uniform', seed=42):
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', methods=['uniform'], weights=[1.0], seed=42):
         """
         Common constructor functionality
         :param dt: time discretization
@@ -24,7 +24,8 @@ class RomDynamics(ABC):
         :param v_max: upper input bound
         :param backend: 'casadi' for when using dynamics for a casadi optimization program,
                'numpy' for use with numpy arrays
-        :param method: 'uniform' for uniform sampling dynamics, 'ramp', 'sin', and 'extreme'
+        :param methods: list of methods to generate trajectories
+        :param weights: weights for linear combination of trajectories
         """
         self.dt = dt
         self.v_min = v_min
@@ -32,7 +33,8 @@ class RomDynamics(ABC):
         self.z_min = z_min
         self.z_max = z_max
         self.n_robots = n_robots
-        self.method = method
+        self.methods = methods
+        self.weights = weights
         self.precomputed_v = None
         self.rng = np.random.RandomState(seed)
         if backend == 'casadi':
@@ -212,13 +214,30 @@ class RomDynamics(ABC):
         return np.array([[self.rng.choice([vmin, vmax, 0]) for vmin, vmax in zip(self.v_min, self.v_max)] for _ in
                          range(self.n_robots)])
 
+    def generate_and_store_multiple_trajectories(self, z, methods, length, weights):
+        """
+        Generates multiple trajectories and combines them using the given weights
+        :param z: initial state
+        :param methods: list of methods to generate trajectories
+        :param length: length of the trajectory
+        :param weights: weights for linear combination of trajectories
+        """
+        trajectories = np.zeros((len(methods), length, self.n_robots, self.m))
+        for i, method in enumerate(methods):
+            self.generate_and_store_trajectory(z, method, length)
+            trajectories[i] = self.precomputed_v
+
+        self.precomputed_v = np.tensordot(weights, trajectories, axes=([0], [0]))
+
 
 class SingleInt2D(RomDynamics):
     n = 2   # [x, y]
     m = 2   # [vx, vy]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', method='uniform', seed=42):
-        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, method=method, seed=seed)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi',
+                 methods=['uniform'], weights=[1.0], seed=42):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend,
+                         methods=methods, weights=weights, seed=seed)
         self.A = self.const_mat([[1.0, 0], [0, 1.0]])
         self.B = self.const_mat([[dt, 0], [0, dt]])
 
@@ -226,13 +245,13 @@ class SingleInt2D(RomDynamics):
         return (self.A @ x.T).T + (self.B @ u.T).T
 
     def generate_and_store_trajectory(self, z, method, length):
-        if self.method == 'uniform':
+        if method == 'uniform':
             self.precomputed_v = self.sample_uniform_bounded_v(z, length)
-        elif self.method == 'ramp':
+        elif method == 'ramp':
             self.precomputed_v = self.sample_ramp_bounded_v(z, length)
-        elif self.method == 'sin':
+        elif method == 'sin':
             self.precomputed_v = self.sample_sin_bounded_v(z, length)
-        elif self.method == 'extreme':
+        elif method == 'extreme':
             self.precomputed_v = self.sample_extreme_bounded_v(z, length)
 
     def proj_z(self, x):
@@ -245,22 +264,24 @@ class SingleInt2D(RomDynamics):
         return np.tile(self.sample_uniform_v(), (length, 1, 1))
 
     def sample_extreme_bounded_v(self, z, length):
-        return np.tile(self.sample_extreme_v(z), (length, 1, 1))
+        extreme_v = np.array([self.sample_extreme_v(z) for _ in range(length)])
+        return extreme_v
 
     def sample_sin_bounded_v(self, z, length):
-        amplitude = np.random.uniform(low=self.v_min, high=self.v_max, size=2)
-        frequency = np.random.uniform(low=0.5, high=1.5, size=2)
-        c = np.random.uniform(low=(amplitude - self.v_min), high=(amplitude - self.v_max), size=2)  # Randomize offset values within acceptable range
+        amplitude = np.random.uniform(low=self.v_min, high=self.v_max, size=(self.n_robots, 2))
+        frequency = np.random.uniform(low=0.5, high=1.5, size=(self.n_robots, 2))
+        c = np.random.uniform(low=(amplitude - self.v_min), high=(amplitude - self.v_max), size=(self.n_robots, 2))
         t_final = length * self.dt
         sin_func = self.sample_sin_v(amplitude, frequency, c, t_final)
         return np.array([sin_func(t * self.dt) for t in range(length)])
 
     def sample_ramp_bounded_v(self, z, length):
-        from_v = np.random.uniform(low=self.v_min, high=self.v_max, size=2)
-        to_v = np.random.uniform(low=self.v_min, high=self.v_max, size=2)
+        from_v = np.random.uniform(low=self.v_min, high=self.v_max, size=(self.n_robots, 2))
+        to_v = np.random.uniform(low=self.v_min, high=self.v_max, size=(self.n_robots, 2))
         t_start = 0.0
         t_end = length * self.dt
-        return np.array([self.sample_ramp_v(from_v, to_v, t_start, t_end, t * self.dt) for t in range(length)])
+        ramp_v = np.array([self.sample_ramp_v(from_v, to_v, t_start, t_end, t * self.dt) for t in range(length)])
+        return ramp_v
 
     def clip_v_z(self, z, v):
         return v

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
-
+import matplotlib.pyplot as plt
 
 class AbstractSampleHoldDT(ABC):
 
@@ -26,7 +26,6 @@ def quat2yaw(quat):
     rot = Rotation.from_quat(quat)
     eul = rot.as_euler('xyz', degrees=False)
     return eul[:, -1]
-
 
 def yaw2rot(yaw):
     cy = np.cos(yaw)

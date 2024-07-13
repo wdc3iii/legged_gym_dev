@@ -1,12 +1,12 @@
 seed: 42
 dataset_name: "dataset"
 
-num_robots: 1000
+num_robots: 2
 epochs: 10
 task: "anymal_c_flat"
-headless: True
+headless: False
 save_debugging_data: False
-upload_to_wandb: True
+upload_to_wandb: False
 
 track_yaw: True
 
@@ -26,7 +26,7 @@ pos_max: 1e9
 pos_min: -1e9
 
 reduced_order_model:
-  _target_: trajopt.rom_dynamics.Unicycle
+  _target_: trajopt.rom_dynamics.SingleInt2D
   dt: 0.02
   z_min:
     _target_: numpy.array
@@ -53,6 +53,12 @@ reduced_order_model:
   n_robots: ${num_robots}
   backend: "numpy"
   seed: ${seed}
+  methods:
+    - 'uniform'
+    - 'ramp'
+    - 'sin'
+    - 'extreme'
+  weights: [.25, .25, .25, .25]
 
 Kp:
   _target_: numpy.diag

@@ -12,6 +12,7 @@ from tqdm import tqdm
 from pathlib import Path
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
+import matplotlib.pyplot as plt
 
 from deep_tube_learning.utils import quat2yaw, yaw2rot, wrap_angles
 
@@ -108,22 +109,50 @@ def data_creation_main(cfg):
         z[0, :, :] = rom.proj_z(base)
         pz_x[0, :, :] = rom.proj_z(base)
 
-        v_nom = rom.sample_uniform_bounded_v(z[0, :, :])
-        t_since_new_v = np.zeros((num_robots,))
-        t_sample_hold = sample_hold_dt.sample()
+        # Generate random weights and methods
+        weights = np.random.uniform(0, 1, len(cfg.reduced_order_model.methods))
+        weights /= weights.sum()
+        methods = cfg.reduced_order_model.methods
+
+        # Calculate a random number between 1/10th and 1/2 of the max episode length
+        random_length = np.random.randint(int(env.max_episode_length / 10), int(env.max_episode_length / 2))
+        # Use the random_length in the function call
+        rom.generate_and_store_multiple_trajectories(z[0, :, :], methods, random_length, weights)
+
+        v_nom = rom.precomputed_v[0]
+
+
+        # TODO: (start) the trajectories are randomly long with random weights, independent for each robot
+
+        # Initialize arrays for tracking trajectories
+        trajectory_lengths = np.zeros((num_robots,), dtype=int)
+        v_nom = np.zeros((num_robots, rom.m))  # Assuming rom.m is the dimension of v_nom
+        trajectory_index = np.zeros((num_robots,), dtype=int)
 
         # Loop over time steps
         for t in range(int(env.max_episode_length)):
-            # Decide on rom action
-            new_v_nom = rom.sample_uniform_bounded_v(z[t, :, :])
-            new_t_sample_hold = sample_hold_dt.sample()
+            # Generate new trajectories for robots where the trajectory index reaches the trajectory length
+            new_trajectories_mask = trajectory_index >= trajectory_lengths
+            num_new_trajectories = np.sum(new_trajectories_mask)
 
-            update_inds = (t_since_new_v >= t_sample_hold)
+            if num_new_trajectories > 0:
+                random_lengths = np.random.randint(int(env.max_episode_length / 10), int(env.max_episode_length / 2),
+                                                   size=num_new_trajectories)
+                random_lengths = np.minimum(random_lengths, int(env.max_episode_length) - t)
+                rom.generate_and_store_multiple_trajectories(z[t, :, :], methods, random_lengths.max(), weights)
+                trajectory_lengths[new_trajectories_mask] = random_lengths
+                trajectory_index[new_trajectories_mask] = 0  # Reset the trajectory index for the new trajectories
 
-            v_nom[update_inds, :] = new_v_nom[update_inds, :]
-            t_since_new_v[update_inds] = 0
-            t_sample_hold[update_inds] = new_t_sample_hold[update_inds]
-            t_since_new_v += 1
+            # Update the precomputed v for the robots
+            for i in range(num_robots):
+                if trajectory_index[i] < trajectory_lengths[i] - 1:
+                    v_nom[i, :] = rom.precomputed_v[trajectory_index[i], i, :]
+                    trajectory_index[i] += 1
+
+            # TODO: (end) for some reason, the trajectories just dont make sense and the robots just fall down
+            # TODO: and don't even try to follow the trajectory at all.
+            # TODO: the range here from (start) to (end) is the range where I think the bug is. Thanks!
+
 
             vt = rom.clip_v_z(z[t, :, :], v_nom)
 
@@ -171,6 +200,13 @@ def data_creation_main(cfg):
             z[t + 1, done[t, :], :] = rom.proj_z(base)[done[t, :], :]  # Terminated envs reset to zero tracking error
             pz_x[t + 1, :, :] = rom.proj_z(base)
 
+        # Plot the trajectories after the loop
+        fig, ax = plt.subplots()
+        rom.plot_spacial(ax, z[:, 0, :])
+        plt.show()
+        fig, ax = plt.subplots()
+        rom.plot_spacial(ax, z[:, 1, :])
+        plt.show()
         # Log Data
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
             if cfg.save_debugging_data:
@@ -213,3 +249,5 @@ def data_creation_main(cfg):
 
 if __name__ == "__main__":
     data_creation_main()
+
+

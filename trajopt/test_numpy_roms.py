@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
                                   ExtendedUnicycle, ExtendedLateralUnicycle)
 
-dt = 0.1
-N = 10
-E = 10
+dt = 0.02
+N = 50
+E = 20
 acc_max = 2
 alpha_max = 4
 vel_max = 1
@@ -15,7 +15,6 @@ pos_max = np.inf
 
 num_robots = 2
 
-
 def test_numpy_rom(pm):
     z0 = np.zeros((num_robots, pm.n,))
     zt = np.zeros((N * E + 1, num_robots, pm.n))
@@ -23,8 +22,8 @@ def test_numpy_rom(pm):
     zt[0, :] = z0
 
     for e in range(E):
-        # Generate trajectory for the epoch
-        pm.generate_and_store_trajectory(zt[e * N, :, :], pm.method, N)
+        # Generate and store multiple trajectories
+        pm.generate_and_store_multiple_trajectories(zt[e * N, :, :], pm.methods, N, pm.weights)
         print(pm.precomputed_v)
 
         for k in range(N):
@@ -43,13 +42,11 @@ def test_numpy_rom(pm):
     plt.axis("square")
     plt.show()
 
-
-def test_numpy_single_int(method):
+def test_numpy_single_int(methods, weights):
     z_max = np.array([pos_max, pos_max])
     v_max = np.array([vel_max, vel_max])
-    pm = SingleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="numpy", method=method)
+    pm = SingleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="numpy", methods=methods, weights=weights)
     test_numpy_rom(pm)
-
 
 def test_numpy_double_int(method):
     z_max = np.array([pos_max, pos_max, vel_max, vel_max])
@@ -91,9 +88,12 @@ def test_numpy_extended_lateral_unicycle(method):
 
 
 if __name__ == "__main__":
-    # test_numpy_single_int('ramp')
+    methods = ['uniform', 'ramp', 'sin', 'extreme']
+    weights = [0.3, 0.4, 0.2, .1]
+
+    test_numpy_single_int(methods, weights)
     # test_numpy_double_int('sin')
     # test_numpy_unicycle('sin')
-    test_numpy_lateral_unicycle('uniform')
+    # test_numpy_lateral_unicycle('uniform')
     # test_numpy_extended_unicycle()
     # test_numpy_extended_lateral_unicycle()
