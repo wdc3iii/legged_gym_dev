@@ -7,6 +7,7 @@ experiment_name: "deep_tube_learning"
 dataset:
   _target_: deep_tube_learning.datasets.ScalarTubeDataset.from_wandb
   wandb_experiment: "simple_1rdub312"
+  N: 10
 
 loss:
   _target_: deep_tube_learning.losses.ScalarTubeLoss

@@ -26,6 +26,7 @@ def construct_dataset(data_folder):
         pz_x_e = epoch_data['pz_x']
 
         # Place the 'robots' axis first, 'time' axis second
+        # TODO: change this so that z is dataset x time x state, where dataset = robots x epochs
         z_e = np.swapaxes(z_e, 0, 1)
         v_e = np.swapaxes(v_e, 0, 1)
         pz_x_e = np.swapaxes(pz_x_e, 0, 1)
@@ -48,7 +49,7 @@ def construct_dataset(data_folder):
     pz_x_p1 = pz_x[:, 1:, :].copy()
 
     # Save dataset
-    # TODO: change this so that z is dataset x time x state, where dataset = robots x epochs
+
     dataset = {
         'z': z,
         'pz_x': pz_x,
@@ -64,14 +65,16 @@ def construct_dataset(data_folder):
     return dataset
 
 
-def get_slice(data, i, dN):
+def get_slice(data, i, dN, m):
     dc = data.copy()
     slc = np.flip(np.arange(dc.shape[-2] - (i * dN) - 1, -1, step=-dN))
-    return np.concatenate((np.zeros((dc.shape[0], dc.shape[-2] - len(slc), dc.shape[2])), dc[:, slc, :]), axis=-2)
+    start = data[:, 0, :].reshape((data.shape[0], 1, data.shape[2]))
+    start[:, :, :-m] = 0
+    return np.concatenate((np.repeat(start, dc.shape[-2] - len(slc), axis=-2), dc[:, slc, :]), axis=-2)
 
 
-def sliding_window(data, N, dN):
-    return np.concatenate([get_slice(data, i, dN) for i in range(N)], axis=-1)
+def sliding_window(data, N, dN, m):
+    return np.concatenate([get_slice(data, i, dN, m) for i in range(N)], axis=-1)
 
 
 def get_dataset(wandb_experiment):
@@ -90,10 +93,6 @@ def get_dataset(wandb_experiment):
 
     return dataset
 
-
-def cat_dataset(dataset, target):
-
-    return dataset, target
 
 class TubeDataset(Dataset):
 
@@ -143,7 +142,7 @@ class ScalarTubeDataset(TubeDataset):
         w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=-1)
         data = np.concatenate((w[:, :, None], z, dataset['v']), axis=-1)
 
-        data = sliding_window(data, N, dN)
+        data = sliding_window(data, N, dN, dataset['v'].shape[-1])
         shp = data.shape
         data = data.reshape((shp[0] * shp[1], shp[2]))
         done = dataset['done'].reshape((shp[0] * shp[1],))
@@ -176,19 +175,19 @@ class VectorTubeDataset(TubeDataset):
         w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
         data = np.concatenate((w, z, dataset['v']), axis=-1)
 
-        data = sliding_window(data, N, dN)
+        data = sliding_window(data, N, dN, dataset['v'].shape[-1])
         shp = data.shape
         data = data.reshape((shp[0] * shp[1], shp[2]))
         done = dataset['done'].reshape((shp[0] * shp[1],))
-        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1], w_p1.shape[2]))
 
         data = data[np.logical_not(done), :]
-        w_p1 = w_p1[np.logical_not(done)]
+        w_p1 = w_p1[np.logical_not(done), :]
 
         data = torch.from_numpy(data).float()
         target = torch.from_numpy(w_p1).float()
         input_dim = data.shape[1]
-        output_dim = 1
+        output_dim = target.shape[1]
         return cls(data, target, input_dim, output_dim)
 
     def __init__(self, data, target, input_dim, output_dim):
@@ -209,7 +208,7 @@ class AlphaScalarTubeDataset(TubeDataset):
         w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=-1)
         data = np.concatenate((w[:, :, None], z, dataset['v']), axis=-1)
 
-        data = sliding_window(data, N, dN)
+        data = sliding_window(data, N, dN, dataset['v'].shape[-1])
         shp = data.shape
         data = data.reshape((shp[0] * shp[1], shp[2]))
         done = dataset['done'].reshape((shp[0] * shp[1],))
@@ -248,14 +247,14 @@ class AlphaVectorTubeDataset(TubeDataset):
         w_p1 = np.abs(dataset['pz_x_p1'] - dataset['z_p1'])
         data = np.concatenate((w, z, dataset['v']), axis=-1)
 
-        data = sliding_window(data, N, dN)
+        data = sliding_window(data, N, dN, dataset['v'].shape[-1])
         shp = data.shape
         data = data.reshape((shp[0] * shp[1], shp[2]))
         done = dataset['done'].reshape((shp[0] * shp[1],))
-        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1], w_p1.shape[2]))
 
         data = data[np.logical_not(done), :]
-        w_p1 = w_p1[np.logical_not(done)]
+        w_p1 = w_p1[np.logical_not(done), :]
 
         alpha = np.random.uniform(size=(data.shape[0], 1))
         data = np.hstack((data, alpha))
@@ -263,7 +262,7 @@ class AlphaVectorTubeDataset(TubeDataset):
         data = torch.from_numpy(data).float()
         target = torch.from_numpy(w_p1).float()
         input_dim = data.shape[1]
-        output_dim = 1
+        output_dim = target.shape[1]
         return cls(data, target, input_dim, output_dim)
 
     def __init__(self, data, target, input_dim, output_dim):
@@ -287,19 +286,19 @@ class ErrorDynamicsDataset(TubeDataset):
         w_p1 = dataset['pz_x_p1'] - dataset['z_p1']
         data = np.concatenate((w, z, dataset['v']), axis=-1)
 
-        data = sliding_window(data, N, dN)
+        data = sliding_window(data, N, dN, dataset['v'].shape[-1])
         shp = data.shape
         data = data.reshape((shp[0] * shp[1], shp[2]))
         done = dataset['done'].reshape((shp[0] * shp[1],))
-        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1],))
+        w_p1 = w_p1.reshape((w_p1.shape[0] * w_p1.shape[1], w_p1.shape[2]))
 
         data = data[np.logical_not(done), :]
-        w_p1 = w_p1[np.logical_not(done)]
+        w_p1 = w_p1[np.logical_not(done), :]
 
         data = torch.from_numpy(data).float()
         target = torch.from_numpy(w_p1).float()
         input_dim = data.shape[1]
-        output_dim = 1
+        output_dim = target.shape[1]
         return cls(data, target, input_dim, output_dim)
 
     def __init__(self, data, target, input_dim, output_dim):

@@ -5,23 +5,27 @@ import matplotlib.pyplot as plt
 from hydra.utils import instantiate
 from deep_tube_learning.utils import wandb_model_load
 from deep_tube_learning.simple_data_collection import main
+from deep_tube_learning.datasets import sliding_window
 from trajopt.rom_dynamics import SingleInt2D
 
 
 def eval_model():
     # Experiment whose model to evaluate
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0qtznszg"
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3s2beobb"
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
     model_cfg, state_dict = wandb_model_load(api, model_name)
-    model = instantiate(model_cfg.model)(6, 2)
+    N = model_cfg.dataset.N if 'N' in model_cfg.dataset.keys() else 1
+    dN = model_cfg.dataset.dN if 'dN' in model_cfg.dataset.keys() else 1
+    model = instantiate(model_cfg.model)(N * 6, 2)
     model.load_state_dict(state_dict)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
 
     n_robots = 1
+
     epoch_data = main(n_robots, 1)
 
     with torch.no_grad():
@@ -32,13 +36,17 @@ def eval_model():
             v = epoch_data['v'][:, ii, :]
             e = pz_x - z
 
-            single_data = torch.from_numpy(np.hstack((e, z, v))).float().to(device)
-            fe_single = model(single_data).cpu().numpy()
+            single_data = np.hstack((e, z, v))
+            window_data = np.squeeze(sliding_window(single_data[None, :, :], N, dN))
+            fe_single = model(torch.from_numpy(window_data).float().to(device)).cpu().numpy()
             fe_single = np.vstack((e[0, :], fe_single[:-1, :]))
 
             fe = e.copy()
             for t in range(e.shape[0] - 1):
-                data = torch.from_numpy(np.hstack((fe[t, :], z[t, :], v[t, :]))).float().to(device)
+                data = np.zeros((window_data.shape[1]))
+                for n in range(N):
+                    data[n*single_data.shape[1]:(n+1)*single_data.shape[1]] = np.hstack((fe[t - n * dN, :], z[t - n * dN, :], v[t - n * dN, :]))
+                data = torch.from_numpy(data).float().to(device)
                 fe[t + 1, :] = model(data).cpu().numpy()
 
             plt.figure()
