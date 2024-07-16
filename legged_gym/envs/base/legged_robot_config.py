@@ -46,6 +46,7 @@ class LeggedRobotCfg(BaseConfig):
         vertical_scale = 0.005 # [m]
         border_size = 25 # [m]
         curriculum = True
+        curriculum_threshold = 1.0
         static_friction = 1.0
         dynamic_friction = 1.0
         restitution = 0.
@@ -58,23 +59,28 @@ class LeggedRobotCfg(BaseConfig):
         max_init_terrain_level = 5 # starting curriculum state
         terrain_length = 8.
         terrain_width = 8.
-        num_rows= 10 # number of terrain rows (levels)
-        num_cols = 20 # number of terrain cols (types)
+        num_rows = 10  # number of terrain rows (levels)
+        num_cols = 20  # number of terrain cols (types)
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
         terrain_proportions = [0.1, 0.1, 0.35, 0.25, 0.2]
         # trimesh only:
-        slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
+        slope_treshold = 0.75  # slopes above this threshold will be corrected to vertical surfaces
 
     class commands:
         curriculum = False
+        curriculum_threshold = 1.0
         max_curriculum = 1.
-        num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
-        resampling_time = 10. # time before command are changed[s]
-        heading_command = True # if true: compute ang vel command from heading error
+        num_commands = 4  # going to be the horizon of positions on the path in future (DOES NOT INCLUDE HEADING, so this is added)
+        # before changes default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+        resampling_time = 1.  # time before command are changed[s] (should always be 1 since we are passing future positions
+        heading_command = False  # if true: compute ang vel command from heading error
+        path_types = ['uniform', 'ramp', 'sin', 'extreme']  # linear combination of these methods with weights
+        model_type = 'SingleInt2D'
         class ranges:
-            lin_vel_x = [-1.0, 1.0] # min max [m/s]
-            lin_vel_y = [-1.0, 1.0]   # min max [m/s]
-            ang_vel_yaw = [-1, 1]    # min max [rad/s]
+            weights = [1., 0., 0., 0.]  # starting with uniform path to curriculum learning change slowly to uniform mix
+            lin_vel = [0., 1.]  # speed range of paths to expand with curriculum learning
+            ang_path_turns = [-.3925, .3925]  # angular range of path turns (22.5 degrees both ways, to double every it.)
+            path_duration = [300, 600]  # number of iterations between path changes (broaden bounds in curriculum learning)
             heading = [-3.14, 3.14]
 
     class init_state:
@@ -129,6 +135,8 @@ class LeggedRobotCfg(BaseConfig):
 
     class rewards:
         class scales:
+            horizon_tracking = 1.0
+            path_following = 1.0  # how close the robot is to the next position
             termination = -0.0
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
@@ -141,7 +149,7 @@ class LeggedRobotCfg(BaseConfig):
             base_height = -0. 
             feet_air_time =  1.0
             collision = -1.
-            feet_stumble = -0.0 
+            feet_stumble = -0.0
             action_rate = -0.01
             stand_still = -0.
 
@@ -155,6 +163,8 @@ class LeggedRobotCfg(BaseConfig):
 
     class normalization:
         class obs_scales:
+            lin_pos = 1.0
+            ang_pos = 1.0
             lin_vel = 2.0
             ang_vel = 0.25
             dof_pos = 1.0

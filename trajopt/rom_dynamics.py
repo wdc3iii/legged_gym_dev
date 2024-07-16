@@ -253,6 +253,7 @@ class SingleInt2D(RomDynamics):
             self.precomputed_v = self.sample_sin_bounded_v(z, length)
         elif method == 'extreme':
             self.precomputed_v = self.sample_extreme_bounded_v(z, length)
+        return self.precomputed_v
 
     def proj_z(self, x):
         return x[..., :2]
@@ -325,7 +326,6 @@ class DoubleInt2D(RomDynamics):
         v_min_z = np.maximum(self.v_min, (self.z_min[2:] - z[:, 2:]) / self.dt)
         return v_min_z, v_max_z
 
-
     def sample_uniform_bounded_v(self, z, length):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
         return np.tile(self.rng.uniform(v_min_z, v_max_z), (length, 1, 1))
@@ -335,13 +335,13 @@ class DoubleInt2D(RomDynamics):
         return np.maximum(np.minimum(v, v_max_z), v_min_z)
 
     def generate_and_store_trajectory(self, z, method, length):
-        if self.method == 'uniform':
-            self.precomputed_v = self.sample_uniform_bounded_v(z, length)
-        elif self.method == 'ramp':
+        if method == 'uniform':
+            precomputed_v = self.sample_uniform_bounded_v(z, length)
+        elif method == 'ramp':
             self.precomputed_v = self.sample_ramp_bounded_v(z, length)
-        elif self.method == 'sin':
+        elif method == 'sin':
             self.precomputed_v = self.sample_sin_bounded_v(z, length)
-        elif self.method == 'extreme':
+        elif method == 'extreme':
             self.precomputed_v = self.sample_extreme_bounded_v(z, length)
 
     def sample_extreme_bounded_v(self, z, length):
