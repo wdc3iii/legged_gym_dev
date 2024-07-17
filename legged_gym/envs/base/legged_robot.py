@@ -47,7 +47,8 @@ from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_config import LeggedRobotCfg
-
+from trajopt.rom_dynamics import (RomDynamics, SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
+                                  ExtendedLateralUnicycle)
 
 class LeggedRobot(BaseTask):
     def __init__(self, cfg: LeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
@@ -83,12 +84,12 @@ class LeggedRobot(BaseTask):
         model_class = globals()[rom_cfg.model_type]
         self.rom = model_class(
             dt=self.sim_params.dt,
-            z_min=self.cfg.commands.ranges.lin_vel[0],
-            z_max=self.cfg.commands.ranges.lin_vel[1],
-            v_min=self.cfg.commands.ranges.ang_path_turns[0],
-            v_max=self.cfg.commands.ranges.ang_path_turns[1],
+            z_min=np.array([self.cfg.commands.ranges.pos[0]]),  # need to verify that this is right and add in turning rate attributes
+            z_max=np.array([self.cfg.commands.ranges.pos[1]]),
+            v_min=np.array([self.cfg.commands.ranges.lin_vel[0]]),
+            v_max=np.array([self.cfg.commands.ranges.lin_vel[1]]),
             n_robots=1,  # doing only one because otherwise id have to rewrite the class definition, so for now we just loop and do one at a time
-            backend='numpy',  # Adjust based on your setup
+            backend='numpy',
             methods=rom_cfg.path_types,
             weights=rom_cfg.ranges.weights,
             seed=42  # Or another seed value
@@ -182,33 +183,29 @@ class LeggedRobot(BaseTask):
             self.generate_new_trajectory(envs_to_regenerate)
 
         # Update horizon for all environments
-        valid_indices = self.masks.nonzero(as_tuple=False)
         for env_id in range(self.num_envs):
             start_idx = self.horizon_index[env_id]
             end_idx = start_idx + horizon_length
-
-            if end_idx > valid_indices[env_id].shape[0]:
-                self.horizon[env_id, :(valid_indices[env_id].shape[0] - start_idx)] = self.trajectories[env_id,
-                                                                                                        start_idx:]
-            else:
-                self.horizon[env_id] = self.trajectories[env_id, start_idx:end_idx]
-
-            self.horizon_index[env_id] = (self.horizon_index[env_id] + 1) % valid_indices[env_id].shape[0]
+            self.horizon[env_id] = self.trajectories[env_id, start_idx:end_idx]
+            self.horizon_index[env_id] = self.horizon_index[env_id] + 1
 
     def generate_new_trajectory(self, env_ids):
         for env_id in env_ids:
             initial_state = self.xy_positions[env_ids]
             trajectory_length = np.random.randint(int(self.max_trajectory_length / 10),
                                                   int(self.max_trajectory_length / 2), size=1)
-            trajectory_length = np.minimum(trajectory_length, int(self.max_trajectory_length) - self.common_step_counter)
+            trajectory_length = np.minimum(trajectory_length, int(self.max_trajectory_length) - self.common_step_counter)[0]
 
-            trajectory = self.rom.generate_and_store_trajectory(
+            trajectory = self.rom.generate_and_store_multiple_trajectories(
                 z=initial_state,
-                method=self.cfg.commands.path_types,
-                length=trajectory_length
+                methods=self.cfg.commands.path_types,
+                length=trajectory_length,
+                weights=self.cfg.commands.ranges.weights
             )
 
-            self.trajectories[env_id, :len(trajectory)] = torch.tensor(trajectory, dtype=torch.float, device=self.device)
+            trajectory_tensor = torch.tensor(trajectory, dtype=torch.float, device=self.device)
+            flattened_trajectory_tensor = trajectory_tensor.view(-1, trajectory_tensor.size(-1))
+            self.trajectories[env_id, :flattened_trajectory_tensor.size(0)] = flattened_trajectory_tensor
             self.masks[env_id, :len(trajectory)] = True
             self.masks[env_id, len(trajectory):] = False
             self.horizon_index[env_id] = 0
@@ -284,7 +281,7 @@ class LeggedRobot(BaseTask):
         self.horizon_index[env_ids] = torch.zeros(len(env_ids), dtype=torch.int, device=self.device)
         self.horizon[env_ids] = torch.zeros((len(env_ids), self.horizon.shape[1], self.horizon.shape[2]),
                                             dtype=torch.float, device=self.device)
-        self.horizon_distances = torch.zeros(self.cfg.env.num_envs, self.cfg.env.episode_length_s / self.cfg.sim.dt,
+        self.horizon_distances = torch.zeros(self.cfg.env.num_envs, int(np.ceil(self.cfg.env.episode_length_s / self.cfg.sim.dt)),
                                              dtype=torch.float, device=self.device, requires_grad=False)
 
     def compute_reward(self):
@@ -309,11 +306,14 @@ class LeggedRobot(BaseTask):
     def compute_observations(self):
         """ Computes observations
         """
+        num_commands = self.cfg.commands.num_commands  # which is 4
+        scale_factors = [self.commands_scale[0]] + [elem for item in self.commands_scale[1:num_commands + 1] for elem in
+                                                    (item, item)]
+        commands = self.commands[:, :num_commands * 2 + 1] * torch.tensor(scale_factors).cuda()
         self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
                                   self.projected_gravity,
-                                  self.commands[:, :self.cfg.commands.num_commands] * self.commands_scale,
-                                  # changed for generality
+                                  commands,
                                   (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                   self.dof_vel * self.obs_scales.dof_vel,
                                   self.actions
@@ -449,11 +449,12 @@ class LeggedRobot(BaseTask):
 
         # compute difference for relative positioning and assign for command
         relative_horizon = self.horizon[env_ids] - current_positions[:, None, :]
-        self.commands[env_ids, 1:self.cfg.commands.num_commands + 1] = relative_horizon
+        self.commands[env_ids, 1:(2 * self.cfg.commands.num_commands) + 1] = relative_horizon.view(relative_horizon.shape[0],
+                                                                                                   relative_horizon.shape[1] * 2)
 
         # compute heading
-        heading, _ = self.rom.des_pose_vel(current_positions, relative_horizon[:, 0])
-        self.commands[env_ids, 0] = heading[:, 2]
+        heading, _ = self.rom.des_pose_vel(current_positions.cpu(), relative_horizon[:, 0].cpu())
+        self.commands[env_ids, 0] = torch.from_numpy(heading[:, 2]).cuda()
 
         # set small commands to zero
         tolerance = .2
@@ -675,7 +676,7 @@ class LeggedRobot(BaseTask):
         noise_vec[6:9] = noise_scales.gravity * noise_level
 
         # Commands noise
-        num_commands = self.cfg.commands.num_commands
+        num_commands = (self.cfg.commands.num_commands * 2) + 1
         noise_vec[9:9 + num_commands] = 0
 
         # DOF position noise
@@ -690,7 +691,7 @@ class LeggedRobot(BaseTask):
 
         # Previous actions noise
         actions_start = dof_vel_end
-        actions_end = actions_start + self.actions.shape[1]
+        actions_end = actions_start + 12 # there's no index here just originally 36:48
         noise_vec[actions_start:actions_end] = 0.
 
         # Height measurements noise
@@ -742,7 +743,7 @@ class LeggedRobot(BaseTask):
                                         requires_grad=False)
         self.last_dof_vel = torch.zeros_like(self.dof_vel)
         self.last_root_vel = torch.zeros_like(self.root_states[:, 7:13])
-        self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands + 1, dtype=torch.float,
+        self.commands = torch.zeros(self.num_envs, int(2 * self.cfg.commands.num_commands) + 1, dtype=torch.float,
                                     device=self.device, requires_grad=False)  # before: x vel, y vel, yaw vel, heading
         # now: horizon length
         self.commands_scale = torch.tensor(
@@ -761,15 +762,15 @@ class LeggedRobot(BaseTask):
 
         # trajectory stuff
         max_sim_length = self.cfg.env.episode_length_s / self.cfg.sim.dt  # max time steps for trajectory to play out
-        self.max_trajectory_length = max_sim_length + self.cfg.commands.num_commands  # accounting for end of simulation issue
-        self.trajectories = torch.zeros(self.num_envs, self.max_trajectory_length, 3, dtype=torch.float, device=self.device,
+        self.max_trajectory_length = int(np.ceil(max_sim_length + self.cfg.commands.num_commands))  # accounting for end of simulation issue
+        self.trajectories = torch.zeros(self.num_envs, self.max_trajectory_length, 2, dtype=torch.float, device=self.device,
                                         requires_grad=False)
         self.masks = torch.zeros(self.num_envs, self.max_trajectory_length, dtype=torch.bool, device=self.device,
                                  requires_grad=False)
         self.horizon_index = torch.zeros(self.num_envs, dtype=torch.int, device=self.device)
         self.horizon = torch.zeros(self.num_envs, self.cfg.commands.num_commands, 2, dtype=torch.float,
                                    device=self.device, requires_grad=False)
-        self.horizon_distances = torch.zeros(self.cfg.env.num_envs, self.cfg.env.episode_length_s / self.cfg.sim.dt,
+        self.horizon_distances = torch.zeros(self.cfg.env.num_envs, int(np.ceil(self.cfg.env.episode_length_s / self.cfg.sim.dt)),
                                              dtype=torch.float, device=self.device, requires_grad=False)
 
         # joint positions offsets and PD gains
@@ -1179,10 +1180,10 @@ class LeggedRobot(BaseTask):
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :],
                                      dim=-1) - self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
 
-    def _reward_horizon_tracking(self):
+    def _reward_path_following(self):
         """ Rewards good horizon tracking by computing a reward based on the distance to the next horizon point. """
         # Calculate the average distance to the next horizon point
-        duration = self.cfg.env.episode_length_s / self.cfg.sim.dt
+        duration = int(np.ceil(self.cfg.env.episode_length_s / self.cfg.sim.dt))
         average_distances = torch.mean(self.horizon_distances[:, :duration], dim=1)
 
         # Normalize the reward: closer distances yield higher rewards

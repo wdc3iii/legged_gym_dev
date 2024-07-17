@@ -228,6 +228,7 @@ class RomDynamics(ABC):
             trajectories[i] = self.precomputed_v
 
         self.precomputed_v = np.tensordot(weights, trajectories, axes=([0], [0]))
+        return self.precomputed_v
 
 
 class SingleInt2D(RomDynamics):
@@ -253,7 +254,6 @@ class SingleInt2D(RomDynamics):
             self.precomputed_v = self.sample_sin_bounded_v(z, length)
         elif method == 'extreme':
             self.precomputed_v = self.sample_extreme_bounded_v(z, length)
-        return self.precomputed_v
 
     def proj_z(self, x):
         return x[..., :2]

@@ -29,6 +29,7 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from .base_config import BaseConfig
+import numpy as np
 
 class LeggedRobotCfg(BaseConfig):
     class env:
@@ -79,6 +80,7 @@ class LeggedRobotCfg(BaseConfig):
         class ranges:
             weights = [1., 0., 0., 0.]  # starting with uniform path to curriculum learning change slowly to uniform mix
             lin_vel = [0., 1.]  # speed range of paths to expand with curriculum learning
+            pos = [-np.inf, np.inf]  # position max (unchanging
             ang_path_turns = [-.3925, .3925]  # angular range of path turns (22.5 degrees both ways, to double every it.)
             path_duration = [300, 600]  # number of iterations between path changes (broaden bounds in curriculum learning)
             heading = [-3.14, 3.14]
@@ -135,7 +137,6 @@ class LeggedRobotCfg(BaseConfig):
 
     class rewards:
         class scales:
-            horizon_tracking = 1.0
             path_following = 1.0  # how close the robot is to the next position
             termination = -0.0
             tracking_lin_vel = 1.0
