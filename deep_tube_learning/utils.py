@@ -6,28 +6,30 @@ from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
 
+
 class AbstractSampleHoldDT(ABC):
 
     @abstractmethod
-    def sample(self):
+    def sample(self, num_samples: int):
         raise NotImplementedError
 
 
 class UniformSampleHoldDT:
 
-    def __init__(self, t_low, t_high, n_robots=1):
+    def __init__(self, t_low, t_high, seed=42):
         self.t_low = t_low
         self.t_high = t_high
-        self.n_robots = n_robots
+        self.rng = np.random.RandomState(seed)
 
-    def sample(self):
-        return np.random.randint(self.t_low, self.t_high, size=(self.n_robots,))
+    def sample(self, num_samples: int):
+        return self.rng.uniform(self.t_low, self.t_high, size=(num_samples,))
 
 
 def quat2yaw(quat):
     rot = Rotation.from_quat(quat)
     eul = rot.as_euler('xyz', degrees=False)
     return eul[:, -1]
+
 
 def yaw2rot(yaw):
     cy = np.cos(yaw)

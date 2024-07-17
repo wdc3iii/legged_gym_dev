@@ -87,7 +87,6 @@ def main(cfg):
 
     ckpt_manager = CheckPointManager(metric_name="loss")
 
-    # TODO: Why is this broken?
     step = 0
     for epoch in range(cfg.num_epochs):
         model.train()
