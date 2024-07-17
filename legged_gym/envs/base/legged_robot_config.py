@@ -83,7 +83,7 @@ class LeggedRobotCfg(BaseConfig):
             pos = [-np.inf, np.inf]  # position max (unchanging
             ang_path_turns = [-.3925, .3925]  # angular range of path turns (22.5 degrees both ways, to double every it.)
             path_duration = [300, 600]  # number of iterations between path changes (broaden bounds in curriculum learning)
-            heading = [-3.14, 3.14]
+            heading = [-3.14, 3.14] # does not do anyhthing anymore
 
     class init_state:
         pos = [0.0, 0.0, 1.] # x,y,z [m]
