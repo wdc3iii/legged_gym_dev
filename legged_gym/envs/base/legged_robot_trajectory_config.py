@@ -29,12 +29,13 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from .base_config import BaseConfig
+from trajopt.rom_dynamics import SingleInt2D, TrajectoryGenerator
+from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler
 
-
-class LeggedRobotCfg(BaseConfig):
+class LeggedRobotTrajectoryCfg(BaseConfig):
     class env:
         num_envs = 4096
-        num_observations = 235
+        num_observations = 240  # Changes with RoM
         num_privileged_obs = None  # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
@@ -67,18 +68,39 @@ class LeggedRobotCfg(BaseConfig):
         # trimesh only:
         slope_treshold = 0.75  # slopes above this threshold will be corrected to vertical surfaces
 
-    class commands:
-        curriculum = False
-        max_curriculum = 1.
-        num_commands = 4  # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
-        resampling_time = 10.  # time before command are changed[s]
-        heading_command = True  # if true: compute ang vel command from heading error
+    class rom:
+        cls = 'SingleInt2D'
+        vel_max = 1
+        pos_max = 1e9
+        z_min = [-pos_max, -pos_max]
+        z_max = [pos_max, pos_max]
+        v_min = [-vel_max, -vel_max]
+        v_max = [vel_max, vel_max]
+        obs_scales = [1, 1]
 
-        class ranges:
-            lin_vel_x = [-1.0, 1.0]  # min max [m/s]
-            lin_vel_y = [-1.0, 1.0]  # min max [m/s]
-            ang_vel_yaw = [-1, 1]  # min max [rad/s]
-            heading = [-3.14, 3.14]
+    class trajectory_generator:
+        cls = 'TrajectoryGenerator'
+        t_samp_cls = 'UniformSampleHoldDT'
+        weight_samp_cls = 'UniformWeightSampler'
+        N = 4
+        t_low = 0.01
+        t_high = 2
+        freq_low = 0.01
+        freq_high = 2
+        seed = 42
+
+    # class commands:
+    #     curriculum = False
+    #     max_curriculum = 1.
+    #     num_commands = 4  # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+    #     resampling_time = 10.  # time before command are changed[s]
+    #     heading_command = True  # if true: compute ang vel command from heading error
+    #
+    #     class ranges:
+    #         lin_vel_x = [-1.0, 1.0]  # min max [m/s]
+    #         lin_vel_y = [-1.0, 1.0]  # min max [m/s]
+    #         ang_vel_yaw = [-1, 1]  # min max [rad/s]
+    #         heading = [-3.14, 3.14]
 
     class init_state:
         pos = [0.0, 0.0, 1.]  # x,y,z [m]
@@ -133,8 +155,8 @@ class LeggedRobotCfg(BaseConfig):
     class rewards:
         class scales:
             termination = -0.0
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
+            tracking_rom = 1.0
+            # tracking_ang_vel = 0.5
             lin_vel_z = -2.0
             ang_vel_xy = -0.05
             orientation = -0.
@@ -205,7 +227,7 @@ class LeggedRobotCfg(BaseConfig):
             contact_collection = 2  # 0: never, 1: last sub-step, 2: all sub-steps (default=2)
 
 
-class LeggedRobotCfgPPO(BaseConfig):
+class LeggedRobotTrajectoryCfgPPO(BaseConfig):
     seed = 1
     runner_class_name = 'OnPolicyRunner'
 

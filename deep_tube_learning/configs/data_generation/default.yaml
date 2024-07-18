@@ -62,6 +62,8 @@ trajectory_generator:
     t_high: 2
   freq_low: 0.01
   freq_high: 10
+  weight_sampler:
+    _target_: deep_tube_learning.utils.UniformWeightSampler
   seed: ${seed}
 
 Kp:

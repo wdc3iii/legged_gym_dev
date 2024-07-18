@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
 from deep_tube_learning.utils import yaw2rot
 import matplotlib.cm as cm
+import torch
 
 
 class RomDynamics(ABC):
@@ -42,6 +43,7 @@ class RomDynamics(ABC):
             self.stack = lambda lst: ca.horzcat(*lst)
             self.vstack = lambda lst: ca.vertcat(*lst)
             self.arctan = lambda y, x: ca.arctan2(y, x)
+
         elif backend == 'numpy':
             self.zero_mat = lambda r, c: np.zeros((r, c))
             self.zero_vec = lambda n: np.zeros((n,))
@@ -51,6 +53,23 @@ class RomDynamics(ABC):
             self.stack = lambda lst: np.hstack(lst)
             self.vstack = lambda lst: np.vstack(lst)
             self.arctan2 = lambda y, x: np.arctan2(y, x)
+            self.maximum = np.maximum
+            self.minimum = np.minimum
+            self.repeat = lambda arr, n, ax: np.repeat(arr, n, axis=ax)
+            self.squeeze = torch.squeeze
+        elif backend == 'torch':
+            self.zero_mat = lambda r, c: torch.zeros((r, c))
+            self.zero_vec = lambda n: torch.zeros((n,))
+            self.const_mat = lambda m: torch.tensor(m)
+            self.sin = lambda x: torch.sin(x)
+            self.cos = lambda x: torch.cos(x)
+            self.stack = lambda lst: torch.hstack(lst)
+            self.vstack = lambda lst: torch.vstack(lst)
+            self.arctan2 = lambda y, x: torch.arctan2(y, x)
+            self.maximum = torch.max
+            self.minimum = torch.min
+            self.repeat = lambda arr, n, ax: torch.repeat_interleave(arr, n, dim=ax)
+            self.squeeze = torch.squeeze
 
     @abstractmethod
     def f(self, z, v):
@@ -82,10 +101,10 @@ class RomDynamics(ABC):
         raise NotImplementedError
 
     def clip_v(self, v):
-        return np.maximum(np.minimum(v, self.v_max), self.v_min)
+        return self.maximum(self.minimum(v, self.v_max), self.v_min)
 
     def compute_state_dependent_input_bounds(self, z):
-        return np.repeat(self.v_min[None, :], z.shape[0], axis=0), np.repeat(self.v_max[None, :], z.shape[0], axis=0)
+        return self.repeat(self.v_min[None, :], z.shape[0], 0), np.repeat(self.v_max[None, :], z.shape[0], 0)
 
     @abstractmethod
     def clip_v_z(self, z, v):
@@ -166,7 +185,6 @@ class SingleInt2D(RomDynamics):
     def f(self, x, u):
         return (self.A @ x.T).T + (self.B @ u.T).T
 
-
     def proj_z(self, x):
         return x[..., :2]
 
@@ -211,13 +229,13 @@ class DoubleInt2D(RomDynamics):
         :param z: current state
         :return: state-dependent input bounds (lower, upper)
         """
-        v_max_z = np.minimum(self.v_max, (self.z_max[2:] - z[:, 2:]) / self.dt)
-        v_min_z = np.maximum(self.v_min, (self.z_min[2:] - z[:, 2:]) / self.dt)
+        v_max_z = self.minimum(self.v_max, (self.z_max[2:] - z[:, 2:]) / self.dt)
+        v_min_z = self.maximum(self.v_min, (self.z_min[2:] - z[:, 2:]) / self.dt)
         return v_min_z, v_max_z
 
     def clip_v_z(self, z, v):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
-        return np.maximum(np.minimum(v, v_max_z), v_min_z)
+        return self.maximum(self.minimum(v, v_max_z), v_min_z)
 
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)
@@ -325,13 +343,13 @@ class ExtendedUnicycle(Unicycle):
         :param z: current state
         :return: state-dependent input bounds (lower, upper)
         """
-        v_max_z = np.minimum(self.v_max, (self.z_max[3:] - z[:, 3:]) / self.dt)
-        v_min_z = np.maximum(self.v_min, (self.z_min[3:] - z[:, 3:]) / self.dt)
+        v_max_z = self.minimum(self.v_max, (self.z_max[3:] - z[:, 3:]) / self.dt)
+        v_min_z = self.maximum(self.v_min, (self.z_min[3:] - z[:, 3:]) / self.dt)
         return v_min_z, v_max_z
 
     def clip_v_z(self, z, v):
         v_min_z, v_max_z = self.compute_state_dependent_input_bounds(z)
-        return np.maximum(np.minimum(v, v_max_z), v_min_z)
+        return self.maximum(self.minimum(v, v_max_z), v_min_z)
 
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)
@@ -364,7 +382,7 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
         v = x[:, 7:9]
         rot = Rotation.from_quat(quat)
         eul = rot.as_euler('xyz', degrees=False)
-        v_local = np.squeeze(yaw2rot(eul[..., -1]) @ v[:, :, None])
+        v_local = self.squeeze(yaw2rot(eul[..., -1]) @ v[:, :, None])
         return self.stack((x[..., :2], eul[..., -1][:, None], v_local, x[:, -1][:, None]))
 
     def plot_ts(self, axs, xt, ut):
@@ -375,11 +393,13 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 
 class TrajectoryGenerator:
 
-    def __init__(self, rom, t_sampler, freq_low=0.01, freq_high=10, seed=42):
+    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42):
         self.rom = rom
         self.rng = np.random.RandomState(seed)
+        self.N = N
         self.weights = np.zeros((self.rom.n_robots, 4))
         self.t_final = np.zeros((self.rom.n_robots,))
+        self.t = np.zeros((self.rom.n_robots,))
         self.sample_hold_input = np.zeros((self.rom.n_robots, self.rom.m))
         self.extreme_input = np.zeros((self.rom.n_robots, self.rom.m))
         self.ramp_t_start = np.zeros((self.rom.n_robots,))
@@ -392,51 +412,51 @@ class TrajectoryGenerator:
         self.t_sampler = t_sampler
         self.freq_low = freq_low
         self.freq_high = freq_high
+        self.weight_sampler = weight_sampler
+        self.trajectory = np.zeros((self.rom.n_robots, self.N, self.rom.n))
 
-    def reset(self):
+    def reset_inputs(self):
         t_mask = np.ones_like(self.t_final, dtype=bool)
         z = np.zeros((self.rom.n_robots, self.rom.n))
         self.t_final = np.zeros((self.rom.n_robots,))
         self.resample(t_mask, z)
 
-    def resample(self, t_mask, z):
-        if np.any(t_mask):
-            v_min, v_max = self.rom.compute_state_dependent_input_bounds(z[t_mask, :])
-            self._resample_const_input(t_mask, v_min, v_max)
-            self._resample_ramp_input(t_mask, z, v_min, v_max)
-            self._resample_extreme_input(t_mask, v_min, v_max)
-            self._resample_sinusoid_input(t_mask, v_min, v_max)
-            self._resample_t_final(t_mask)
-            self._resample_weight(t_mask)
+    def resample(self, idx, z):
+        if len(idx) > 0:
+            v_min, v_max = self.rom.compute_state_dependent_input_bounds(z[idx, :])
+            self._resample_const_input(idx, v_min, v_max)
+            self._resample_ramp_input(idx, z, v_min, v_max)
+            self._resample_extreme_input(idx, v_min, v_max)
+            self._resample_sinusoid_input(idx, v_min, v_max)
+            self._resample_t_final(idx)
+            self._resample_weight(idx)
 
-    def _resample_t_final(self, t_mask):
-        self.t_final[t_mask] += self.t_sampler.sample(np.sum(t_mask))
+    def _resample_t_final(self, idx):
+        self.t_final[idx] += self.t_sampler.sample(len(idx))
 
-    def _resample_weight(self, t_mask):
-        new_weights = self.rng.uniform(size=(np.sum(t_mask), 4))
-        new_weights = new_weights / np.sum(new_weights, axis=-1, keepdims=True)
-        self.weights[t_mask, :] = new_weights
+    def _resample_weight(self, idx):
+        self.weights[idx, :] = self.weight_sampler.sample(len(idx))
         # self.weights[t_mask, :] = np.array([0, 0, 0, 1])
 
-    def _resample_const_input(self, t_mask, v_min, v_max):
-        self.sample_hold_input[t_mask, :] = self.rng.uniform(v_min, v_max)
+    def _resample_const_input(self, idx, v_min, v_max):
+        self.sample_hold_input[idx, :] = self.rng.uniform(v_min, v_max)
 
-    def _resample_ramp_input(self, t_mask, z, v_min, v_max):
-        # self.ramp_v_start[t_mask, :] = self.rng.uniform(v_min, v_max)
-        self.ramp_v_start[t_mask, :] = self.rom.clip_v_z(z[t_mask, :], self.ramp_v_end[t_mask, :])
-        self.ramp_v_end[t_mask, :] = self.rng.uniform(v_min, v_max)
-        self.ramp_t_start[t_mask] = self.t_final[t_mask]
+    def _resample_ramp_input(self, idx, z, v_min, v_max):
+        # self.ramp_v_start[idx, :] = self.rng.uniform(v_min, v_max)
+        self.ramp_v_start[idx, :] = self.rom.clip_v_z(z[idx, :], self.ramp_v_end[idx, :])
+        self.ramp_v_end[idx, :] = self.rng.uniform(v_min, v_max)
+        self.ramp_t_start[idx] = self.t_final[idx]
 
     def _resample_extreme_input(self, t_mask,v_min, v_max):
         arr = np.concatenate((v_min[:, :, None], np.zeros_like(v_min)[:, :, None], v_max[:, :, None]), axis=-1)
         mask = np.arange(3)[None, None, :] == np.random.choice(np.arange(3), size=(*v_min.shape, 1))
         self.extreme_input[t_mask, :] = arr[mask].reshape(v_min.shape)
 
-    def _resample_sinusoid_input(self, t_mask, v_min, v_max):
-        self.sin_mag[t_mask, :] = self.rng.uniform(0, (v_max - v_min) / 2)
-        self.sin_mean[t_mask, :] = self.rng.uniform(v_min + self.sin_mag[t_mask, :], v_max - self.sin_mag[t_mask, :])
-        self.sin_freq[t_mask, :] = self.rng.uniform(self.freq_low, self.freq_high, size=v_max.shape)
-        self.sin_off[t_mask, :] = self.rng.uniform(-np.pi, np.pi, size=v_max.shape)
+    def _resample_sinusoid_input(self, idx, v_min, v_max):
+        self.sin_mag[idx, :] = self.rng.uniform(0, (v_max - v_min) / 2)
+        self.sin_mean[idx, :] = self.rng.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :])
+        self.sin_freq[idx, :] = self.rng.uniform(self.freq_low, self.freq_high, size=v_max.shape)
+        self.sin_off[idx, :] = self.rng.uniform(-np.pi, np.pi, size=v_max.shape)
 
     def _const_input(self):
         return self.sample_hold_input
@@ -449,12 +469,39 @@ class TrajectoryGenerator:
         return self.extreme_input
 
     def _sinusoid_input_t(self, t):
-        return self.sin_mag * np.sin(self.sin_freq * t + self.sin_off) + self.sin_mean
+        return self.sin_mag * np.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
 
     def get_input_t(self, t, z):
-        t_mask = t > self.t_final
-        self.resample(t_mask, z)
+        idx = (t > self.t_final).nonzero()[0]
+        self.resample(idx, z)
         return self.weights[:, 0][:, None] * self.rom.clip_v_z(z, self._const_input()) + \
             self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
             self.weights[:, 2][:, None] * self.rom.clip_v_z(z, self._extreme_input()) + \
             self.weights[:, 3][:, None] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
+
+    def step(self):
+        # Get input to apply for trajectory
+        v = self.get_input_t(self.t, self.trajectory[:, -1, :])
+        z_next = self.rom.f(self.trajectory[:, -1, :], v)
+        self.trajectory[:, :-1, :] = self.trajectory[:, 1:, :]
+        self.trajectory[:, -1, :] = z_next
+        self.t += self.rom.dt
+
+    def step_idx(self, idx):
+        # Get input to apply for trajectory
+        v = self.get_input_t(self.t, self.trajectory[:, -1, :])
+        z_next = self.rom.f(self.trajectory[idx, -1, :], v[idx, :])
+        self.trajectory[idx, :-1, :] = self.trajectory[idx, 1:, :]
+        self.trajectory[idx, -1, :] = z_next
+
+    def reset(self, z):
+        self.reset_idx(np.ones((self.rom.n_robots,), dtype=bool), z)
+
+    def reset_idx(self, idx, z):
+        self.trajectory[idx, :, :] = np.zeros((len(idx), self.N, self.rom.n))
+        self.trajectory[idx, -1, :] = z[idx, :]
+        self.resample(idx, z)
+        self.t[idx] = 0
+
+        for t in range(self.N - 1):
+            self.step_idx(idx)

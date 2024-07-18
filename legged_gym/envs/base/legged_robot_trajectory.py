@@ -46,11 +46,13 @@ from legged_gym.envs.base.base_task import BaseTask
 from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
 from legged_gym.utils.helpers import class_to_dict
-from .legged_robot_config import LeggedRobotCfg
+from .legged_robot_trajectory_config import LeggedRobotTrajectoryCfg
+from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
+                                  ExtendedLateralUnicycle, TrajectoryGenerator)
+from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler
 
-
-class LeggedRobot(BaseTask):
-    def __init__(self, cfg: LeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
+class LeggedRobotTrajectory(BaseTask):
+    def __init__(self, cfg: LeggedRobotTrajectoryCfg, sim_params, physics_engine, sim_device, headless):
         """ Parses the provided config file,
             calls create_sim() (which creates, simulation, terrain and environments),
             initilizes pytorch buffers used during training
@@ -73,13 +75,42 @@ class LeggedRobot(BaseTask):
 
         if not self.headless:
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
+        self._init_rom()
+        self._init_trajectory_generator()
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True
 
+    def _init_rom(self):
+        rom_cfg = self.cfg.rom
+        model_class = globals()[rom_cfg.cls]
+        self.rom = model_class(
+            dt=self.sim_params.dt,
+            z_min=np.array(rom_cfg.z_min),
+            z_max=np.array(rom_cfg.z_max),
+            v_min=np.array(rom_cfg.v_min),
+            v_max=np.array(rom_cfg.v_max),
+            n_robots=self.cfg.env.num_envs,
+            backend='numpy'
+        )
+
+    def _init_trajectory_generator(self):
+        traj_cfg = self.cfg.trajectory_generator
+        traj_cls = globals()[traj_cfg.cls]
+        t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high)
+        weight_samp = globals()[traj_cfg.weight_samp_cls]()
+        self.traj_gen = traj_cls(
+            self.rom,
+            t_samp,
+            weight_samp,
+            N=traj_cfg.N,
+            freq_low=traj_cfg.freq_low,
+            freq_high=traj_cfg.freq_high,
+            seed=traj_cfg.seed
+        )
+
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
-
         Args:
             actions (torch.Tensor): Tensor of shape (num_envs, num_actions_per_env)
         """
@@ -160,14 +191,15 @@ class LeggedRobot(BaseTask):
         if self.cfg.terrain.curriculum:
             self._update_terrain_curriculum(env_ids)
         # avoid updating command curriculum at each step since the maximum command is common to all envs
-        if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
-            self.update_command_curriculum(env_ids)
+        # if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
+        #     self.update_command_curriculum(env_ids)
 
         # reset robot states
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)
 
-        self._resample_commands(env_ids)
+        # self._resample_commands(env_ids)
+        self.reset_traj(env_ids)
 
         # reset buffers
         self.last_actions[env_ids] = 0.
@@ -184,11 +216,14 @@ class LeggedRobot(BaseTask):
         # log additional curriculum info
         if self.cfg.terrain.curriculum:
             self.extras["episode"]["terrain_level"] = torch.mean(self.terrain_levels.float())
-        if self.cfg.commands.curriculum:
-            self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
+        # if self.cfg.commands.curriculum:
+        #     self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
         # send timeout info to the algorithm
         if self.cfg.env.send_timeouts:
             self.extras["time_outs"] = self.time_out_buf
+
+    def reset_traj(self, env_ids):
+        self.traj_gen.reset_idx(env_ids.cpu(), self.rom.proj_z(self.root_states).cpu())
 
     def compute_reward(self):
         """ Compute rewards
@@ -215,7 +250,7 @@ class LeggedRobot(BaseTask):
         self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
                                   self.projected_gravity,
-                                  self.commands[:, :3] * self.commands_scale,
+                                  (self.trajectory * self.trajectory_scale).reshape(self.num_envs, -1),
                                   (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                   self.dof_vel * self.obs_scales.dof_vel,
                                   self.actions
@@ -329,42 +364,44 @@ class LeggedRobot(BaseTask):
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
         #
-        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0).nonzero(
-            as_tuple=False).flatten()
-        self._resample_commands(env_ids)
-        if self.cfg.commands.heading_command:
-            forward = quat_apply(self.base_quat, self.forward_vec)
-            heading = torch.atan2(forward[:, 1], forward[:, 0])
-            self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1., 1.)
+        # env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0).nonzero(
+        #     as_tuple=False).flatten()
+        # self._resample_commands(env_ids)
+        self.traj_gen.step()
+        self.trajectory = torch.from_numpy(self.traj_gen.trajectory).to(self.device).float()
+        # if self.cfg.commands.heading_command:
+        #     forward = quat_apply(self.base_quat, self.forward_vec)
+        #     heading = torch.atan2(forward[:, 1], forward[:, 0])
+        #     self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1., 1.)
 
         if self.cfg.terrain.measure_heights:
             self.measured_heights = self._get_heights()
         if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
             self._push_robots()
 
-    def _resample_commands(self, env_ids):
-        """ Randommly select commands of some environments
-
-        Args:
-            env_ids (List[int]): Environments ids for which new commands are needed
-        """
-        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
-                                                     self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
-                                                     device=self.device).squeeze(1)
-        self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
-                                                     self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
-                                                     device=self.device).squeeze(1)
-        if self.cfg.commands.heading_command:
-            self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
-                                                         self.command_ranges["heading"][1], (len(env_ids), 1),
-                                                         device=self.device).squeeze(1)
-        else:
-            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
-                                                         self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
-                                                         device=self.device).squeeze(1)
-
-        # set small commands to zero
-        self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+    # def _resample_commands(self, env_ids):
+    #     """ Randommly select commands of some environments
+    #
+    #     Args:
+    #         env_ids (List[int]): Environments ids for which new commands are needed
+    #     """
+    #     self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
+    #                                                  self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
+    #                                                  device=self.device).squeeze(1)
+    #     self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
+    #                                                  self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
+    #                                                  device=self.device).squeeze(1)
+    #     if self.cfg.commands.heading_command:
+    #         self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
+    #                                                      self.command_ranges["heading"][1], (len(env_ids), 1),
+    #                                                      device=self.device).squeeze(1)
+    #     else:
+    #         self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
+    #                                                      self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
+    #                                                      device=self.device).squeeze(1)
+    #
+    #     # set small commands to zero
+    #     self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
@@ -497,12 +534,13 @@ class LeggedRobot(BaseTask):
         noise_vec[:3] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
         noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
         noise_vec[6:9] = noise_scales.gravity * noise_level
-        noise_vec[9:12] = 0.  # commands
-        noise_vec[12:24] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
-        noise_vec[24:36] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[36:48] = 0.  # previous actions
+        traj_size = self.traj_gen.N * self.rom.n
+        noise_vec[9:9 + traj_size] = 0.  # commands
+        noise_vec[9 + traj_size:21 + traj_size] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
+        noise_vec[21 + traj_size:33 + traj_size] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[33 + traj_size:45 + traj_size] = 0.  # previous actions
         if self.cfg.terrain.measure_heights:
-            noise_vec[48:235] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
+            noise_vec[45 + traj_size:232 + traj_size] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
         return noise_vec
 
     # ----------------------------------------
@@ -544,10 +582,14 @@ class LeggedRobot(BaseTask):
                                         requires_grad=False)
         self.last_dof_vel = torch.zeros_like(self.dof_vel)
         self.last_root_vel = torch.zeros_like(self.root_states[:, 7:13])
-        self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands, dtype=torch.float,
-                                    device=self.device, requires_grad=False)  # x vel, y vel, yaw vel, heading
-        self.commands_scale = torch.tensor([self.obs_scales.lin_vel, self.obs_scales.lin_vel, self.obs_scales.ang_vel],
-                                           device=self.device, requires_grad=False, )  # TODO change this
+        # self.commands = torch.zeros(self.num_envs, self.cfg.commands.num_commands, dtype=torch.float,
+        #                             device=self.device, requires_grad=False)  # x vel, y vel, yaw vel, heading
+        self.trajectory = torch.zeros(self.num_envs, self.traj_gen.N, self.rom.n, dtype=torch.float, device=self.device, requires_grad=False)
+        self.trajectory_scale = torch.repeat_interleave(
+            torch.tensor(self.cfg.rom.obs_scales, device=self.device, requires_grad=False)[None, :],
+            self.cfg.trajectory_generator.N,
+            dim=0
+        )
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float,
                                          device=self.device, requires_grad=False)
         self.last_contacts = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device,
@@ -780,7 +822,7 @@ class LeggedRobot(BaseTask):
         self.dt = self.cfg.control.decimation * self.sim_params.dt
         self.obs_scales = self.cfg.normalization.obs_scales
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
-        self.command_ranges = class_to_dict(self.cfg.commands.ranges)
+        # self.command_ranges = class_to_dict(self.cfg.commands.ranges)
         if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
             self.cfg.terrain.curriculum = False
         self.max_episode_length_s = self.cfg.env.episode_length_s
@@ -927,15 +969,21 @@ class LeggedRobot(BaseTask):
         return torch.sum(
             (torch.abs(self.torques) - self.torque_limits * self.cfg.rewards.soft_torque_limit).clip(min=0.), dim=1)
 
-    def _reward_tracking_lin_vel(self):
-        # Tracking of linear velocity commands (xy axes)
-        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
-        return torch.exp(-lin_vel_error / self.cfg.rewards.tracking_sigma)
+    # def _reward_tracking_lin_vel(self):
+    #     # Tracking of linear velocity commands (xy axes)
+    #     lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+    #     return torch.exp(-lin_vel_error / self.cfg.rewards.tracking_sigma)
 
-    def _reward_tracking_ang_vel(self):
-        # Tracking of angular velocity commands (yaw)
-        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
-        return torch.exp(-ang_vel_error / self.cfg.rewards.tracking_sigma)
+    # def _reward_tracking_ang_vel(self):
+    #     # Tracking of angular velocity commands (yaw)
+    #     ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+    #     return torch.exp(-ang_vel_error / self.cfg.rewards.tracking_sigma)
+
+    def _reward_tracking_rom(self):
+        desired_state = self.trajectory[:, 0, :]
+        pz_x = self.rom.proj_z(self.root_states)
+        tracking_error = torch.sum(torch.square(pz_x - desired_state), dim=1)
+        return torch.exp(-tracking_error / self.cfg.rewards.tracking_sigma)
 
     def _reward_feet_air_time(self):
         # Reward long steps
@@ -947,7 +995,7 @@ class LeggedRobot(BaseTask):
         self.feet_air_time += self.dt
         rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact,
                                 dim=1)  # reward only on first contact with the ground
-        rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1  # no reward for zero command
+        # rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1  # no reward for zero command # TODO: correct this
         self.feet_air_time *= ~contact_filt
         return rew_airTime
 

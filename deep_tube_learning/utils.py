@@ -25,6 +25,17 @@ class UniformSampleHoldDT:
         return self.rng.uniform(self.t_low, self.t_high, size=(num_samples,))
 
 
+class UniformWeightSampler:
+
+    def __init__(self, dim=4, seed=42):
+        self.rng = np.random.RandomState(seed)
+        self.dim = dim
+
+    def sample(self, num_samples: int):
+        new_weights = self.rng.uniform(size=(num_samples, self.dim))
+        return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
+
+
 def quat2yaw(quat):
     rot = Rotation.from_quat(quat)
     eul = rot.as_euler('xyz', degrees=False)
