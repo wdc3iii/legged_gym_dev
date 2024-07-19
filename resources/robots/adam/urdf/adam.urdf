@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <robot name="adam">
-  <link name="base_link"/>
+
   <link name="torso">
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -20,11 +20,6 @@
       </geometry>
     </visual>
   </link>
-  <joint name="base_to_torso_joint" type="fixed">
-    <parent link="base_link"/>
-    <child link="torso"/>
-    <origin rpy="0 0 0" xyz="0 0 0"/>
-  </joint>
   <link name="left_hip_yaw">
     <inertial>
       <origin rpy="0 0 0" xyz="-0.04376 0.03756 -0.056"/>
@@ -121,6 +116,18 @@
       <mass value="0.001"/>
       <inertia ixx="1e-06" ixy="0" ixz="0" iyy="1e-06" iyz="0" izz="1e-06"/>
     </inertial>
+    <collision name="left_foot_collision">
+      <origin rpy="0 .75 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.02" length="0.1"/>
+      </geometry>
+    </collision>
+    <visual>
+      <origin rpy="0 .75 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.02" length="0.1"/>
+      </geometry>
+    </visual>
   </link>
   <joint name="left_foot_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 0.0 -0.25"/>
@@ -223,6 +230,18 @@
       <mass value="0.001"/>
       <inertia ixx="1e-06" ixy="0" ixz="0" iyy="1e-06" iyz="0" izz="1e-06"/>
     </inertial>
+    <collision name="right_foot_collision">
+      <origin rpy="0 .75 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.02" length="0.1"/>
+      </geometry>
+    </collision>
+    <visual>
+      <origin rpy="0 .75 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.02" length="0.1"/>
+      </geometry>
+    </visual>
   </link>
   <joint name="right_foot_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 -0.0 -0.25"/>
@@ -242,7 +261,7 @@
       </geometry>
     </visual>
   </link>
-  <joint name="left_shoulder_yaw_joint" type="revolute">
+  <joint name="left_shoulder_yaw_joint" type="fixed">
     <axis xyz="0 0 1"/>
     <limit effort="1000.0" lower="-1.5707963267948966" upper="1.5707963267948966" velocity="1000"/>
     <dynamics damping="0.01"/>
@@ -263,7 +282,7 @@
       </geometry>
     </visual>
   </link>
-  <joint name="left_shoulder_pitch_joint" type="revolute">
+  <joint name="left_shoulder_pitch_joint" type="fixed">
     <axis xyz="0 1 0"/>
     <limit effort="1000.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="1000"/>
     <dynamics damping="0.01"/>
@@ -284,7 +303,7 @@
       </geometry>
     </visual>
   </link>
-  <joint name="left_forearm_pitch_joint" type="revolute">
+  <joint name="left_forearm_pitch_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 0.058 -0.17"/>
     <parent link="left_shoulder_pitch"/>
     <child link="left_forearm_pitch"/>
@@ -316,7 +335,7 @@
       </geometry>
     </visual>
   </link>
-  <joint name="right_shoulder_yaw_joint" type="revolute">
+  <joint name="right_shoulder_yaw_joint" type="fixed">
     <axis xyz="0 0 1"/>
     <limit effort="1000.0" lower="-1.5707963267948966" upper="1.5707963267948966" velocity="1000"/>
     <dynamics damping="0.01"/>
@@ -337,7 +356,7 @@
       </geometry>
     </visual>
   </link>
-  <joint name="right_shoulder_pitch_joint" type="revolute">
+  <joint name="right_shoulder_pitch_joint" type="fixed">
     <axis xyz="0 1 0"/>
     <limit effort="1000.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="1000"/>
     <dynamics damping="0.01"/>
@@ -358,7 +377,7 @@
       </geometry>
     </visual>
   </link>
-  <joint name="right_forearm_pitch_joint" type="revolute">
+  <joint name="right_forearm_pitch_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 -0.058 -0.17"/>
     <parent link="right_shoulder_pitch"/>
     <child link="right_forearm_pitch"/>

@@ -3,33 +3,28 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 class AdamRoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
         num_envs = 4098
-        num_observations = 175
-        num_actions = 14
+        num_observations = 157
+        num_actions = 8
 
     class terrain( LeggedRobotCfg.terrain):
         measured_points_x = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5] # 1mx1m rectangle (without center line)
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
+        mesh_type = 'plane'
+        dynamic_friction = 5.0
+        static_friction = 1.0
 
     class init_state(LeggedRobotCfg.init_state):
-        pos = [0.0, 0.0, .5]  # x,y,z [m]
+        pos = [0.0, 0.0, .7]  # x,y,z [m]
         default_joint_angles = {  # = target angles [rad] when action = 0.0
-            'left_hip_yaw_joint': 0.0,
-            'left_hip_roll_joint': 0.0,
-            'left_hip_pitch_joint': 0.0,
-            'left_knee_pitch_joint': 0.0,
+            'left_hip_yaw_joint': 13. / 180 * 3.14,
+            'left_hip_roll_joint': 10. / 180 * 3.14,
+            'left_hip_pitch_joint': -16.5 / 180 * 3.14,
+            'left_knee_pitch_joint': 47.5 / 180 * 3.14,
 
-            'right_hip_yaw_joint': 0.0,
-            'right_hip_roll_joint': 0.0,
-            'right_hip_pitch_joint': 0.0,
-            'right_knee_pitch_joint': 0.0,
-
-            'left_shoulder_yaw_joint': 0.0,
-            'left_shoulder_pitch_joint': 0.0,
-            'left_forearm_pitch_joint': 0.0,
-
-            'right_shoulder_yaw_joint': 0.0,
-            'right_shoulder_pitch_joint': 0.0,
-            'right_forearm_pitch_joint': 0.0
+            'right_hip_yaw_joint': -13. / 180 * 3.14,
+            'right_hip_roll_joint': -10. / 180 * 3.14,
+            'right_hip_pitch_joint': -16.5 / 180 * 3.14,
+            'right_knee_pitch_joint': 47.5 / 180 * 3.14
         }
 
     class control(LeggedRobotCfg.control):
@@ -38,21 +33,13 @@ class AdamRoughCfg( LeggedRobotCfg ):
             'left_hip_yaw_joint': 100.0, 'left_hip_roll_joint': 100.0,
             'left_hip_pitch_joint': 200.0, 'left_knee_pitch_joint': 200.0,
             'right_hip_yaw_joint': 100.0, 'right_hip_roll_joint': 100.0,
-            'right_hip_pitch_joint': 200.0, 'right_knee_pitch_joint': 200.0,
-            'left_shoulder_yaw_joint': 50.0, 'left_shoulder_pitch_joint': 60.0,
-            'left_forearm_pitch_joint': 40.0,
-            'right_shoulder_yaw_joint': 50.0, 'right_shoulder_pitch_joint': 60.0,
-            'right_forearm_pitch_joint': 40.0
+            'right_hip_pitch_joint': 200.0, 'right_knee_pitch_joint': 200.0
         }  # [N*m/rad]
         damping = {
             'left_hip_yaw_joint': 3.0, 'left_hip_roll_joint': 3.0,
             'left_hip_pitch_joint': 6.0, 'left_knee_pitch_joint': 6.0,
             'right_hip_yaw_joint': 3.0, 'right_hip_roll_joint': 3.0,
-            'right_hip_pitch_joint': 6.0, 'right_knee_pitch_joint': 6.0,
-            'left_shoulder_yaw_joint': 2.0, 'left_shoulder_pitch_joint': 3.0,
-            'left_forearm_pitch_joint': 2.0,
-            'right_shoulder_yaw_joint': 2.0, 'right_shoulder_pitch_joint': 3.0,
-            'right_forearm_pitch_joint': 2.0
+            'right_hip_pitch_joint': 6.0, 'right_knee_pitch_joint': 6.0
         }  # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.5
@@ -63,8 +50,8 @@ class AdamRoughCfg( LeggedRobotCfg ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/adam/urdf/adam.urdf'
         name = "adam"
         foot_name = 'foot'
-        penalize_contacts_on = ["hip", "shin", 'hand']
-        terminate_after_contacts_on = ['torso', 'shoulder', 'forearm']
+        penalize_contacts_on = ['hand', 'shin']
+        terminate_after_contacts_on = ['torso', 'hip', 'shoulder']
         flip_visual_attachments = False
         self_collisions = 1 # 1 to disable, 0 to enable...bitwise filter
   
@@ -82,7 +69,7 @@ class AdamRoughCfg( LeggedRobotCfg ):
             lin_vel_z = -0.5
             feet_air_time = 5.
             dof_pos_limits = -1.
-            no_fly = 0.25
+            no_fly = 1          # changed from .25
             dof_vel = -0.0
             ang_vel_xy = -0.0
             feet_contact_forces = -0.
@@ -100,4 +87,4 @@ class AdamRoughCfgPPO( LeggedRobotCfgPPO ):
         run_name = ''
         experiment_name = 'adam'
         load_run = -1
-        max_iterations = 300
+        max_iterations = 1500

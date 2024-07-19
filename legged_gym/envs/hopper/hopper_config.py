@@ -3,15 +3,16 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 class HopperRoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
         num_envs = 4096
-        num_observations = 169
+        num_observations = 145
         num_actions = 4
 
     class terrain( LeggedRobotCfg.terrain):
         measured_points_x = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5] # 1mx1m rectangle (without center line)
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
+        mesh_type = 'plane'
 
     class init_state(LeggedRobotCfg.init_state):
-        pos = [0.0, 0.0, 1.0]  # x,y,z [m]
+        pos = [0.0, 0.0, .3]  # x,y,z [m]
         default_joint_angles = {  # = target angles [rad] when action = 0.0
             'foot_slide': 0.0,
             'wheel1_rotation': 0.0,
@@ -40,6 +41,8 @@ class HopperRoughCfg( LeggedRobotCfg ):
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
 
+        control_type = "V"
+
     class asset( LeggedRobotCfg.asset ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper.urdf'
         name = "hopper"
@@ -66,6 +69,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
             dof_vel = -0.0
             ang_vel_xy = -0.0
             feet_contact_forces = -0.
+            upright_orientation = -7500.
 
 class HopperRoughCfgPPO( LeggedRobotCfgPPO ):
     class policy(LeggedRobotCfgPPO.policy):

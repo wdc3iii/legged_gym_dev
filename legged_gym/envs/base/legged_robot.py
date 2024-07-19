@@ -648,6 +648,9 @@ class LeggedRobot(BaseTask):
         # save body names from the asset
         body_names = self.gym.get_asset_rigid_body_names(robot_asset)
         self.dof_names = self.gym.get_asset_dof_names(robot_asset)
+        # self.dof_names = ['left_hip_yaw_joint', 'left_hip_roll_joint', 'left_hip_pitch_joint',
+        #                   'left_knee_pitch_joint', 'right_hip_yaw_joint', 'right_hip_roll_joint',
+        #                   'right_hip_pitch_joint', 'right_knee_pitch_joint']
         self.num_bodies = len(body_names)
         self.num_dofs = len(self.dof_names)
         feet_names = [s for s in body_names if self.cfg.asset.foot_name in s]
@@ -888,7 +891,7 @@ class LeggedRobot(BaseTask):
         first_contact = (self.feet_air_time > 0.) * contact_filt
         self.feet_air_time += self.dt
         rew_airTime = torch.sum((self.feet_air_time - 0.5) * first_contact, dim=1) # reward only on first contact with the ground
-        rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1 #no reward for zero command
+        rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1  # no reward for zero command
         self.feet_air_time *= ~contact_filt
         return rew_airTime
     
@@ -904,3 +907,11 @@ class LeggedRobot(BaseTask):
     def _reward_feet_contact_forces(self):
         # penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) -  self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
+
+    def _reward_upright_orientation(self):
+        """Penalty for deviation from upright orientation, returning a negative exponential value."""
+        upright_quat = torch.tensor([0.0, 0.0, 0.0, 1.0], device=self.device)
+        cos_theta = torch.abs(torch.sum(self.base_quat * upright_quat, dim=1))
+        angle_rad = torch.acos(cos_theta) * 2  # Convert from half-angle to full angle in radians
+        penalty = torch.exp(angle_rad)  # Exponential penalty
+        return -penalty
