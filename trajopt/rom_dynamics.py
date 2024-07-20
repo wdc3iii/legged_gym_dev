@@ -23,7 +23,7 @@ class RomDynamics(ABC):
         :param z_max: upper state bound
         :param v_min: lower input bound
         :param v_max: upper input bound
-        :param backend: 'casadi' for when using dynamics for a casadi optimization program,
+        :param backend: 'casadi' for when using dynamics for reftraj casadi optimization program,
                'numpy' for use with numpy arrays
         """
         self.dt = dt
@@ -109,7 +109,7 @@ class RomDynamics(ABC):
     @abstractmethod
     def clip_v_z(self, z, v):
         """
-        Clips the input, v, to a valid input which respects input bounds, and when the dyamics are applied,
+        Clips the input, v, to reftraj valid input which respects input bounds, and when the dyamics are applied,
         will not result in velocities which violate the state bounds (when applicable)
         :param z: state
         :param v: input
@@ -120,7 +120,7 @@ class RomDynamics(ABC):
     @staticmethod
     def plot_spacial(ax, xt, c='-b'):
         """
-        Plots the x, y spatial trajectory on the given axes with a color gradient to indicate time series.
+        Plots the x, y spatial trajectory on the given axes with reftraj color gradient to indicate time series.
         :param ax: axes on which to plot
         :param xt: state trajectory
         :param c: color/line type
@@ -222,7 +222,7 @@ class DoubleInt2D(RomDynamics):
     def compute_state_dependent_input_bounds(self, z):
         """
         Because there are state bounds on the velocity, in some states we cannot use the full input range.
-        For instance, if the x velocity is at its maximum, applying a positive x acceleration
+        For instance, if the x velocity is at its maximum, applying reftraj positive x acceleration
         will move the state outside the state bounds.
         This function computes new input bounds which ensure that inputs within these bounds will not result in state
         violation (for the velocity state bounds)
@@ -308,7 +308,7 @@ class LateralUnicycle(Unicycle):
 
 class ExtendedUnicycle(Unicycle):
     n = 5   # [x, y, theta, v, omega]
-    m = 2   # [a, alpha]
+    m = 2   # [reftraj, alpha]
 
     def f(self, x, u):
         gu = self.zero_mat(self.n_robots, self.n)
@@ -336,7 +336,7 @@ class ExtendedUnicycle(Unicycle):
     def compute_state_dependent_input_bounds(self, z):
         """
         Because there are state bounds on the velocity, in some states we cannot use the full input range.
-        For instance, if the x velocity is at its maximum, applying a positive x acceleration
+        For instance, if the x velocity is at its maximum, applying reftraj positive x acceleration
         will move the state outside the state bounds.
         This function computes new input bounds which ensure that inputs within these bounds will not result in state
         violation (for the velocity state bounds)
@@ -354,12 +354,12 @@ class ExtendedUnicycle(Unicycle):
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)
         axs[0].legend(['x', 'y', 'theta', 'v', 'omega'])
-        axs[1].legend(['a', 'alpha'])
+        axs[1].legend(['reftraj', 'alpha'])
 
 
 class ExtendedLateralUnicycle(ExtendedUnicycle):
     n = 6   # [x, y, theta, v, v_perp, omega]
-    m = 3   # [a, a_perp, alpha]
+    m = 3   # [reftraj, a_perp, alpha]
 
     def f(self, x, u):
         gu = self.zero_mat(self.n_robots, self.n)
@@ -388,7 +388,7 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)
         axs[0].legend(['x', 'y', 'theta', 'v', 'v_perp', 'omega'])
-        axs[1].legend(['a', 'a_perp', 'alpha'])
+        axs[1].legend(['reftraj', 'a_perp', 'alpha'])
 
 
 class TrajectoryGenerator:

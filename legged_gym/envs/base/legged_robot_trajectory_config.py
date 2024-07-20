@@ -36,7 +36,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
     class env:
         num_envs = 4096
         num_observations = 240  # Changes with RoM
-        num_privileged_obs = None  # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
+        num_privileged_obs = None  # if not None reftraj priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True  # send time out information to the algorithm
@@ -56,7 +56,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7,
                              0.8]  # 1mx1.6m rectangle (without center line)
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
-        selected = False  # select a unique terrain type and pass all arguments
+        selected = False  # select reftraj unique terrain type and pass all arguments
         terrain_kwargs = None  # Dict of arguments for selected terrain
         max_init_terrain_level = 5  # starting curriculum state
         terrain_length = 8.
@@ -169,9 +169,12 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
             feet_stumble = -0.0
             action_rate = -0.01
             stand_still = -0.
+            reference_traj_vel = 5
+            reference_traj_pos = 5
 
         only_positive_rewards = True  # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)
+        tracking_sigma = 0.25  # traj tracking reward = exp(-error^2/sigma)
+        ref_track_sigma = 0.25  # traj tracking reward = exp(-error^2/sigma)
         soft_dof_pos_limit = 1.  # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.

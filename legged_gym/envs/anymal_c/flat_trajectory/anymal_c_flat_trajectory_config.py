@@ -32,7 +32,7 @@ from legged_gym.envs import AnymalCRoughTrajectoryCfg, AnymalCRoughTrajectoryCfg
 
 class AnymalCFlatTrajectoryCfg( AnymalCRoughTrajectoryCfg ):
     class env( AnymalCRoughTrajectoryCfg.env ):
-        num_observations = 53  # Changes with RoM
+        num_observations = 149  # Changes with RoM
     class terrain( AnymalCRoughTrajectoryCfg.terrain ):
         mesh_type = 'plane'
         measure_heights = False

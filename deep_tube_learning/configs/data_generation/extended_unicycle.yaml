@@ -14,7 +14,7 @@ Kp:
   v: [5, 5, 2]
 
 reduced_order_model:
-  _target_: trajopt.rom_dynamics.ExtendedUnicycle
+  _target_: reftraj.rom_dynamics.ExtendedUnicycle
   z_min:
     _target_: numpy.array
     object:

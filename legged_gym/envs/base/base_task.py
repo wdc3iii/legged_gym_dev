@@ -88,7 +88,7 @@ class BaseTask():
         self.enable_viewer_sync = True
         self.viewer = None
 
-        # if running with a viewer, set up keyboard shortcuts and camera
+        # if running with reftraj viewer, set up keyboard shortcuts and camera
         if self.headless == False:
             # subscribe to keyboard shortcuts
             self.viewer = self.gym.create_viewer(

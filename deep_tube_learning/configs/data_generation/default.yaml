@@ -26,7 +26,7 @@ pos_max: 1e9
 pos_min: -1e9
 
 reduced_order_model:
-  _target_: trajopt.rom_dynamics.SingleInt2D
+  _target_: reftraj.rom_dynamics.SingleInt2D
   dt: 0.02
   z_min:
     _target_: numpy.array
@@ -54,7 +54,7 @@ reduced_order_model:
   backend: "numpy"
 
 trajectory_generator:
-  _target_: trajopt.rom_dynamics.TrajectoryGenerator
+  _target_: reftraj.rom_dynamics.TrajectoryGenerator
   _partial_: True
   t_sampler:
     _target_: deep_tube_learning.utils.UniformSampleHoldDT

@@ -5,7 +5,7 @@ import l4casadi as l4c
 import matplotlib.pyplot as plt
 
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
-                                  ExtendedUnicycle, ExtendedLateralUnicycle)
+                             ExtendedUnicycle, ExtendedLateralUnicycle)
 
 # model = "SingleInt2D"
 # model = "DoubleInt2D"

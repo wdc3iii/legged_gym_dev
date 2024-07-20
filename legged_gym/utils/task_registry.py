@@ -63,10 +63,10 @@ class TaskRegistry():
         return env_cfg, train_cfg
     
     def make_env(self, name, args=None, env_cfg=None) -> Tuple[VecEnv, LeggedRobotCfg]:
-        """ Creates an environment either from a registered namme or from the provided config file.
+        """ Creates an environment either from reftraj registered namme or from the provided config file.
 
         Args:
-            name (string): Name of a registered env.
+            name (string): Name of reftraj registered env.
             args (Args, optional): Isaac Gym comand line arguments. If None get_args() will be called. Defaults to None.
             env_cfg (Dict, optional): Environment config file used to override the registered config. Defaults to None.
 
@@ -80,7 +80,7 @@ class TaskRegistry():
         # if no args passed get command line arguments
         if args is None:
             args = get_args()
-        # check if there is a registered env with that name
+        # check if there is reftraj registered env with that name
         if name in self.task_classes:
             task_class = self.get_task_class(name)
         else:
@@ -102,11 +102,11 @@ class TaskRegistry():
         return env, env_cfg
 
     def make_alg_runner(self, env, name=None, args=None, train_cfg=None, log_root="default") -> Tuple[OnPolicyRunner, LeggedRobotCfgPPO]:
-        """ Creates the training algorithm  either from a registered namme or from the provided config file.
+        """ Creates the training algorithm  either from reftraj registered namme or from the provided config file.
 
         Args:
             env (isaacgym.VecTaskPython): The environment to train (TODO: remove from within the algorithm)
-            name (string, optional): Name of a registered env. If None, the config file will be used instead. Defaults to None.
+            name (string, optional): Name of reftraj registered env. If None, the config file will be used instead. Defaults to None.
             args (Args, optional): Isaac Gym comand line arguments. If None get_args() will be called. Defaults to None.
             train_cfg (Dict, optional): Training config file. If None 'name' will be used to get the config file. Defaults to None.
             log_root (str, optional): Logging directory for Tensorboard. Set to 'None' to avoid logging (at test time for example). 
@@ -145,7 +145,7 @@ class TaskRegistry():
         
         train_cfg_dict = class_to_dict(train_cfg)
         runner = OnPolicyRunner(env, train_cfg_dict, log_dir, device=args.rl_device)
-        #save resume path before creating a new log_dir
+        #save resume path before creating reftraj new log_dir
         resume = train_cfg.runner.resume
         if resume:
             # load previously trained model

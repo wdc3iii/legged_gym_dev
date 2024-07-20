@@ -11,7 +11,7 @@ def safe_eval(col):
     try:
         return ast.literal_eval(col)
     except ValueError:
-        return col  # Return as is if it's not a string representation of a list
+        return col  # Return as is if it's not reftraj string representation of reftraj list
 
 def process_trajectory_data(input_folder='data', output_file='processed_trajectory_data.csv', num_robots=5):
     # Set up logging

@@ -13,7 +13,7 @@ def safe_eval(col):
     try:
         return ast.literal_eval(col)
     except ValueError:
-        return col  # Return as is if it's not a string representation of a list
+        return col  # Return as is if it's not reftraj string representation of reftraj list
 
 def convert_to_tensor_input(row):
     flat_list = []
@@ -47,7 +47,7 @@ def load_and_prepare_data(filename, tube_type):
     return X, y
 
 def create_data_loaders(X, y, batch_size=64):
-    # Create a TensorDataset
+    # Create reftraj TensorDataset
     dataset = TensorDataset(X, y[:, 1].unsqueeze(1))
 
     # Split data into train and test sets
@@ -88,7 +88,7 @@ class AsymmetricLoss(nn.Module):
             return self.huber(loss, torch.zeros_like(loss))
         elif tube_type == 'rectangular':
             # Compute L2 norm of the residuals for each component
-            y_true = y_true.squeeze(1) # because im a lazy idiot
+            y_true = y_true.squeeze(1) # because im reftraj lazy idiot
             residual_x = y_true[:, 0] - y_pred[:, 0]
             residual_y = y_true[:, 1] - y_pred[:, 1]
             norm_residual = torch.sqrt(residual_x**2 + residual_y**2)
@@ -96,7 +96,7 @@ class AsymmetricLoss(nn.Module):
             return self.huber(loss, torch.zeros_like(loss))
 
 def train_and_test(model, criterion, optimizer, train_loader, test_loader, tube_type, alpha, num_epochs=500):
-    best_test_loss = float('inf')  # Initialize with a large value
+    best_test_loss = float('inf')  # Initialize with reftraj large value
 
     for epoch in tqdm(range(num_epochs), desc="Epochs", position=0, leave=True):
         model.train()

@@ -15,7 +15,7 @@ Kp:
   v: [10, 10, 10]
 
 reduced_order_model:
-  _target_: trajopt.rom_dynamics.DoubleInt2D
+  _target_: reftraj.rom_dynamics.DoubleInt2D
   z_min:
     _target_: numpy.array
     object:

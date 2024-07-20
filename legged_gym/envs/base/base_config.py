@@ -45,7 +45,7 @@ class BaseConfig:
                 continue
             # get the corresponding attribute object
             var =  getattr(obj, key)
-            # check if it the attribute is a class
+            # check if it the attribute is reftraj class
             if inspect.isclass(var):
                 # instantate the class
                 i_var = var()

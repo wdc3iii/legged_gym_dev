@@ -48,8 +48,9 @@ from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_fl
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_trajectory_config import LeggedRobotTrajectoryCfg
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
-                                  ExtendedLateralUnicycle, TrajectoryGenerator)
+                             ExtendedLateralUnicycle, TrajectoryGenerator)
 from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler
+from reftraj.ref_generator import ReferenceTrajectoryGenerator
 
 class LeggedRobotTrajectory(BaseTask):
     def __init__(self, cfg: LeggedRobotTrajectoryCfg, sim_params, physics_engine, sim_device, headless):
@@ -77,6 +78,7 @@ class LeggedRobotTrajectory(BaseTask):
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
         self._init_rom()
         self._init_trajectory_generator()
+        self._init_reference_generator()
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True
@@ -108,6 +110,14 @@ class LeggedRobotTrajectory(BaseTask):
             freq_high=traj_cfg.freq_high,
             seed=traj_cfg.seed
         )
+
+    def _init_reference_generator(self):
+        self.ref_generator = ReferenceTrajectoryGenerator(self.num_envs, self.cfg.trajectory_generator.N,
+                                                          self.dt, self.num_actions, device=self.device)
+        self.ref_generator.reset()
+
+    def reset_ref(self):
+        self.ref_generator.reset()
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -158,7 +168,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.reset_idx(env_ids)
-        self.compute_observations()  # in some cases a simulation step might be required to refresh some obs (for example body positions)
+        self.compute_observations()  # in some cases reftraj simulation step might be required to refresh some obs (for example body positions)
 
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
@@ -227,7 +237,7 @@ class LeggedRobotTrajectory(BaseTask):
 
     def compute_reward(self):
         """ Compute rewards
-            Calls each reward function which had a non-zero scale (processed in self._prepare_reward_function())
+            Calls each reward function which had reftraj non-zero scale (processed in self._prepare_reward_function())
             adds each terms to the episode sums and to the total reward
         """
         self.rew_buf[:] = 0.
@@ -245,22 +255,31 @@ class LeggedRobotTrajectory(BaseTask):
             self.episode_sums["termination"] += rew
 
     def compute_observations(self):
-        """ Computes observations
-        """
-        self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,
-                                  self.base_ang_vel * self.obs_scales.ang_vel,
-                                  self.projected_gravity,
-                                  (self.trajectory * self.trajectory_scale).reshape(self.num_envs, -1),
-                                  (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-                                  self.dof_vel * self.obs_scales.dof_vel,
-                                  self.actions
-                                  ), dim=-1)
-        # add perceptive inputs if not blind
+        """Computes observations."""
+        # Flatten the trajectory and reference_trajectory for concatenation
+        flattened_trajectory = (self.trajectory * self.trajectory_scale).reshape(self.num_envs, -1)
+        flattened_reference_trajectory = self.reference_trajectory.reshape(self.num_envs, -1)
+
+        # Concatenate all components to form the observation buffer
+        self.obs_buf = torch.cat((
+            self.base_lin_vel * self.obs_scales.lin_vel,
+            self.base_ang_vel * self.obs_scales.ang_vel,
+            self.projected_gravity,
+            flattened_trajectory,
+            flattened_reference_trajectory,
+            (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+            self.dof_vel * self.obs_scales.dof_vel,
+            self.actions
+        ), dim=-1)
+
+        # Add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
-            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
-                                 1.) * self.obs_scales.height_measurements
+            heights = torch.clip(
+                self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.0
+            ) * self.obs_scales.height_measurements
             self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
-        # add noise if needed
+
+        # Add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
 
@@ -369,6 +388,8 @@ class LeggedRobotTrajectory(BaseTask):
         # self._resample_commands(env_ids)
         self.traj_gen.step()
         self.trajectory = torch.from_numpy(self.traj_gen.trajectory).to(self.device).float()
+        self.ref_generator.step()
+        self.reference_trajectory = self.ref_generator.trajectory
         # if self.cfg.commands.heading_command:
         #     forward = quat_apply(self.base_quat, self.forward_vec)
         #     heading = torch.atan2(forward[:, 1], forward[:, 0])
@@ -405,7 +426,7 @@ class LeggedRobotTrajectory(BaseTask):
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
-            Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
+            Actions can be interpreted as position or velocity targets given to reftraj PD controller, or directly as scaled torques.
             [NOTE]: torques must have the same dimension as the number of DOFs, even if some DOFs are not actuated.
 
         Args:
@@ -471,7 +492,7 @@ class LeggedRobotTrajectory(BaseTask):
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
     def _push_robots(self):
-        """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
+        """ Random pushes the robots. Emulates an impulse by setting reftraj randomized base velocity.
         """
         max_vel = self.cfg.domain_rand.max_push_vel_xy
         self.root_states[:, 7:9] = torch_rand_float(-max_vel, max_vel, (self.num_envs, 2),
@@ -495,7 +516,7 @@ class LeggedRobotTrajectory(BaseTask):
         move_down = (distance < torch.norm(self.commands[env_ids, :2],
                                            dim=1) * self.max_episode_length_s * 0.5) * ~move_up
         self.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
-        # Robots that solve the last level are sent to a random one
+        # Robots that solve the last level are sent to reftraj random one
         self.terrain_levels[env_ids] = torch.where(self.terrain_levels[env_ids] >= self.max_terrain_level,
                                                    torch.randint_like(self.terrain_levels[env_ids],
                                                                       self.max_terrain_level),
@@ -504,7 +525,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
     def update_command_curriculum(self, env_ids):
-        """ Implements a curriculum of increasing commands
+        """ Implements reftraj curriculum of increasing commands
 
         Args:
             env_ids (List[int]): ids of environments being reset
@@ -518,29 +539,41 @@ class LeggedRobotTrajectory(BaseTask):
                                                           self.cfg.commands.max_curriculum)
 
     def _get_noise_scale_vec(self, cfg):
-        """ Sets a vector used to scale the noise added to the observations.
+        """ Sets reftraj vector used to scale the noise added to the observations.
             [NOTE]: Must be adapted when changing the observations structure
 
         Args:
             cfg (Dict): Environment config file
 
         Returns:
-            [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
+            [torch.Tensor]: Vector of scales used to multiply reftraj uniform distribution in [-1, 1]
         """
         noise_vec = torch.zeros_like(self.obs_buf[0])
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.noise_scales
         noise_level = self.cfg.noise.noise_level
+
         noise_vec[:3] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
         noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
         noise_vec[6:9] = noise_scales.gravity * noise_level
+
         traj_size = self.traj_gen.N * self.rom.n
-        noise_vec[9:9 + traj_size] = 0.  # commands
-        noise_vec[9 + traj_size:21 + traj_size] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
-        noise_vec[21 + traj_size:33 + traj_size] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[33 + traj_size:45 + traj_size] = 0.  # previous actions
+        ref_traj_size = self.traj_gen.N * 2 * self.rom.n  # for position and velocity
+
+        # Assuming the fixed sizes for commands, dof_pos, dof_vel, previous actions, and height measurements
+        noise_vec[9:9 + traj_size] = 0.  # trajectory commands
+        noise_vec[9 + traj_size:9 + traj_size + ref_traj_size] = 0.  # reference trajectory
+
+        noise_vec[9 + traj_size + ref_traj_size:21 + traj_size + ref_traj_size] = (
+                noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos)
+        noise_vec[21 + traj_size + ref_traj_size:33 + traj_size + ref_traj_size] = (
+                noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel)
+        noise_vec[33 + traj_size + ref_traj_size:45 + traj_size + ref_traj_size] = 0.  # previous actions
+
         if self.cfg.terrain.measure_heights:
-            noise_vec[45 + traj_size:232 + traj_size] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
+            noise_vec[45 + traj_size + ref_traj_size:232 + traj_size + ref_traj_size] = (
+                    noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements)
+
         return noise_vec
 
     # ----------------------------------------
@@ -590,6 +623,13 @@ class LeggedRobotTrajectory(BaseTask):
             self.cfg.trajectory_generator.N,
             dim=0
         )
+        self.reference_trajectory = torch.zeros(self.num_envs, self.traj_gen.N, 2, self.rom.n, dtype=torch.float, device=self.device,
+                                      requires_grad=False)
+        # self.reference_trajectory_scale = torch.repeat_interleave(
+        #     torch.tensor(self.cfg.rom.obs_scales, device=self.device, requires_grad=False)[None, :],
+        #     self.cfg.trajectory_generator.N,
+        #     dim=0
+        # )
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float,
                                          device=self.device, requires_grad=False)
         self.last_contacts = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device,
@@ -621,7 +661,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.default_dof_pos = self.default_dof_pos.unsqueeze(0)
 
     def _prepare_reward_function(self):
-        """ Prepares a list of reward functions, whcih will be called to compute the total reward.
+        """ Prepares reftraj list of reward functions, whcih will be called to compute the total reward.
             Looks for self._reward_<REWARD_NAME>, where <REWARD_NAME> are names of all non zero reward scales in the cfg.
         """
         # remove zero scales + multiply non-zero ones by dt
@@ -647,7 +687,7 @@ class LeggedRobotTrajectory(BaseTask):
             for name in self.reward_scales.keys()}
 
     def _create_ground_plane(self):
-        """ Adds a ground plane to the simulation, sets friction and restitution based on the cfg.
+        """ Adds reftraj ground plane to the simulation, sets friction and restitution based on the cfg.
         """
         plane_params = gymapi.PlaneParams()
         plane_params.normal = gymapi.Vec3(0.0, 0.0, 1.0)
@@ -657,7 +697,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.gym.add_ground(self.sim, plane_params)
 
     def _create_heightfield(self):
-        """ Adds a heightfield terrain to the simulation, sets parameters based on the cfg.
+        """ Adds reftraj heightfield terrain to the simulation, sets parameters based on the cfg.
         """
         hf_params = gymapi.HeightFieldParams()
         hf_params.column_scale = self.terrain.cfg.horizontal_scale
@@ -677,7 +717,7 @@ class LeggedRobotTrajectory(BaseTask):
                                                                             self.terrain.tot_cols).to(self.device)
 
     def _create_trimesh(self):
-        """ Adds a triangle mesh terrain to the simulation, sets parameters based on the cfg.
+        """ Adds reftraj triangle mesh terrain to the simulation, sets parameters based on the cfg.
         # """
         tm_params = gymapi.TriangleMeshParams()
         tm_params.nb_vertices = self.terrain.vertices.shape[0]
@@ -791,7 +831,7 @@ class LeggedRobotTrajectory(BaseTask):
 
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
-            Otherwise create a grid.
+            Otherwise create reftraj grid.
         """
         if self.cfg.terrain.mesh_type in ["heightfield", "trimesh"]:
             self.custom_origins = True
@@ -809,7 +849,7 @@ class LeggedRobotTrajectory(BaseTask):
         else:
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
-            # create a grid of robots
+            # create reftraj grid of robots
             num_cols = np.floor(np.sqrt(self.num_envs))
             num_rows = np.ceil(self.num_envs / num_cols)
             xx, yy = torch.meshgrid(torch.arange(num_rows), torch.arange(num_cols))
@@ -831,7 +871,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.cfg.domain_rand.push_interval = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
 
     def _draw_debug_vis(self):
-        """ Draws visualizations for dubugging (slows down simulation a lot).
+        """ Draws visualizations for dubugging (slows down simulation reftraj lot).
             Default behaviour: draws height measurement points
         """
         # draw height lines
@@ -984,6 +1024,18 @@ class LeggedRobotTrajectory(BaseTask):
         pz_x = self.rom.proj_z(self.root_states)
         tracking_error = torch.sum(torch.square(pz_x - desired_state), dim=1)
         return torch.exp(-tracking_error / self.cfg.rewards.tracking_sigma)
+
+    def _reward_reference_traj_pos(self):
+        desired_state = self.reference_trajectory[:, 0, 0, :]
+        joint_positions = self.dof_pos
+        tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
+        return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
+
+    def _reward_reference_traj_vel(self):
+        desired_state = self.reference_trajectory[:, 0, 1, :]
+        joint_positions = self.dof_vel
+        tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
+        return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
 
     def _reward_feet_air_time(self):
         # Reward long steps

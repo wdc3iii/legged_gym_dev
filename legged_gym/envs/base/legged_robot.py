@@ -127,7 +127,7 @@ class LeggedRobot(BaseTask):
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.reset_idx(env_ids)
-        self.compute_observations()  # in some cases a simulation step might be required to refresh some obs (for example body positions)
+        self.compute_observations()  # in some cases reftraj simulation step might be required to refresh some obs (for example body positions)
 
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
@@ -192,7 +192,7 @@ class LeggedRobot(BaseTask):
 
     def compute_reward(self):
         """ Compute rewards
-            Calls each reward function which had a non-zero scale (processed in self._prepare_reward_function())
+            Calls each reward function which had reftraj non-zero scale (processed in self._prepare_reward_function())
             adds each terms to the episode sums and to the total reward
         """
         self.rew_buf[:] = 0.
@@ -368,7 +368,7 @@ class LeggedRobot(BaseTask):
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
-            Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
+            Actions can be interpreted as position or velocity targets given to reftraj PD controller, or directly as scaled torques.
             [NOTE]: torques must have the same dimension as the number of DOFs, even if some DOFs are not actuated.
 
         Args:
@@ -434,7 +434,7 @@ class LeggedRobot(BaseTask):
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
     def _push_robots(self):
-        """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
+        """ Random pushes the robots. Emulates an impulse by setting reftraj randomized base velocity.
         """
         max_vel = self.cfg.domain_rand.max_push_vel_xy
         self.root_states[:, 7:9] = torch_rand_float(-max_vel, max_vel, (self.num_envs, 2),
@@ -458,7 +458,7 @@ class LeggedRobot(BaseTask):
         move_down = (distance < torch.norm(self.commands[env_ids, :2],
                                            dim=1) * self.max_episode_length_s * 0.5) * ~move_up
         self.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
-        # Robots that solve the last level are sent to a random one
+        # Robots that solve the last level are sent to reftraj random one
         self.terrain_levels[env_ids] = torch.where(self.terrain_levels[env_ids] >= self.max_terrain_level,
                                                    torch.randint_like(self.terrain_levels[env_ids],
                                                                       self.max_terrain_level),
@@ -467,7 +467,7 @@ class LeggedRobot(BaseTask):
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
     def update_command_curriculum(self, env_ids):
-        """ Implements a curriculum of increasing commands
+        """ Implements reftraj curriculum of increasing commands
 
         Args:
             env_ids (List[int]): ids of environments being reset
@@ -481,14 +481,14 @@ class LeggedRobot(BaseTask):
                                                           self.cfg.commands.max_curriculum)
 
     def _get_noise_scale_vec(self, cfg):
-        """ Sets a vector used to scale the noise added to the observations.
+        """ Sets reftraj vector used to scale the noise added to the observations.
             [NOTE]: Must be adapted when changing the observations structure
 
         Args:
             cfg (Dict): Environment config file
 
         Returns:
-            [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
+            [torch.Tensor]: Vector of scales used to multiply reftraj uniform distribution in [-1, 1]
         """
         noise_vec = torch.zeros_like(self.obs_buf[0])
         self.add_noise = self.cfg.noise.add_noise
@@ -579,7 +579,7 @@ class LeggedRobot(BaseTask):
         self.default_dof_pos = self.default_dof_pos.unsqueeze(0)
 
     def _prepare_reward_function(self):
-        """ Prepares a list of reward functions, whcih will be called to compute the total reward.
+        """ Prepares reftraj list of reward functions, whcih will be called to compute the total reward.
             Looks for self._reward_<REWARD_NAME>, where <REWARD_NAME> are names of all non zero reward scales in the cfg.
         """
         # remove zero scales + multiply non-zero ones by dt
@@ -605,7 +605,7 @@ class LeggedRobot(BaseTask):
             for name in self.reward_scales.keys()}
 
     def _create_ground_plane(self):
-        """ Adds a ground plane to the simulation, sets friction and restitution based on the cfg.
+        """ Adds reftraj ground plane to the simulation, sets friction and restitution based on the cfg.
         """
         plane_params = gymapi.PlaneParams()
         plane_params.normal = gymapi.Vec3(0.0, 0.0, 1.0)
@@ -615,7 +615,7 @@ class LeggedRobot(BaseTask):
         self.gym.add_ground(self.sim, plane_params)
 
     def _create_heightfield(self):
-        """ Adds a heightfield terrain to the simulation, sets parameters based on the cfg.
+        """ Adds reftraj heightfield terrain to the simulation, sets parameters based on the cfg.
         """
         hf_params = gymapi.HeightFieldParams()
         hf_params.column_scale = self.terrain.cfg.horizontal_scale
@@ -635,7 +635,7 @@ class LeggedRobot(BaseTask):
                                                                             self.terrain.tot_cols).to(self.device)
 
     def _create_trimesh(self):
-        """ Adds a triangle mesh terrain to the simulation, sets parameters based on the cfg.
+        """ Adds reftraj triangle mesh terrain to the simulation, sets parameters based on the cfg.
         # """
         tm_params = gymapi.TriangleMeshParams()
         tm_params.nb_vertices = self.terrain.vertices.shape[0]
@@ -749,7 +749,7 @@ class LeggedRobot(BaseTask):
 
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
-            Otherwise create a grid.
+            Otherwise create reftraj grid.
         """
         if self.cfg.terrain.mesh_type in ["heightfield", "trimesh"]:
             self.custom_origins = True
@@ -767,7 +767,7 @@ class LeggedRobot(BaseTask):
         else:
             self.custom_origins = False
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
-            # create a grid of robots
+            # create reftraj grid of robots
             num_cols = np.floor(np.sqrt(self.num_envs))
             num_rows = np.ceil(self.num_envs / num_cols)
             xx, yy = torch.meshgrid(torch.arange(num_rows), torch.arange(num_cols))
@@ -789,7 +789,7 @@ class LeggedRobot(BaseTask):
         self.cfg.domain_rand.push_interval = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
 
     def _draw_debug_vis(self):
-        """ Draws visualizations for dubugging (slows down simulation a lot).
+        """ Draws visualizations for dubugging (slows down simulation reftraj lot).
             Default behaviour: draws height measurement points
         """
         # draw height lines

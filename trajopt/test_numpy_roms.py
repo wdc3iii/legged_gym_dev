@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
-                                  ExtendedUnicycle, ExtendedLateralUnicycle)
+                             ExtendedUnicycle, ExtendedLateralUnicycle)
 
 dt = 0.02
 N = 50
