@@ -32,7 +32,7 @@ from legged_gym.envs import AnymalCRoughTrajectoryCfg, AnymalCRoughTrajectoryCfg
 
 class AnymalCFlatTrajectoryCfg( AnymalCRoughTrajectoryCfg ):
     class env( AnymalCRoughTrajectoryCfg.env ):
-        num_observations = 53  # Changes with RoM
+        num_observations = 65  # Changes with RoM
     class terrain( AnymalCRoughTrajectoryCfg.terrain ):
         mesh_type = 'plane'
         measure_heights = False
@@ -45,14 +45,8 @@ class AnymalCFlatTrajectoryCfg( AnymalCRoughTrajectoryCfg ):
         class scales ( AnymalCRoughTrajectoryCfg.rewards.scales ):
             orientation = -5.0
             torques = -0.000025
-            feet_air_time = 2.
+            feet_air_time = 0.5
             # feet_contact_forces = -0.01
-    
-    # class commands( AnymalCRoughTrajectoryCfg.commands ):
-    #     heading_command = False
-    #     resampling_time = 4.
-    #     class ranges( AnymalCRoughTrajectoryCfg.commands.ranges ):
-    #         ang_vel_yaw = [-1.5, 1.5]
 
     class domain_rand( AnymalCRoughTrajectoryCfg.domain_rand ):
         friction_range = [0., 1.5] # on ground planes the friction combination mode is averaging, i.e total friction = (foot_friction + 1.)/2.
@@ -68,6 +62,6 @@ class AnymalCFlatTrajectoryCfgPPO( AnymalCRoughTrajectoryCfgPPO ):
 
     class runner ( AnymalCRoughTrajectoryCfgPPO.runner):
         run_name = ''
-        experiment_name = 'flat_anymal_c'
+        experiment_name = 'flat_anymal_c_trajectory'
         load_run = -1
         max_iterations = 300

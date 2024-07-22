@@ -118,7 +118,7 @@ class RomDynamics(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def plot_spacial(ax, xt, c='-b'):
+    def plot_spacial(ax, xt, c=None):
         """
         Plots the x, y spatial trajectory on the given axes with a color gradient to indicate time series.
         :param ax: axes on which to plot
@@ -129,14 +129,17 @@ class RomDynamics(ABC):
         colors = cm.viridis(np.linspace(0, 1, N))  # Use the 'viridis' colormap
 
         # Plot segments with color gradient
-        for i in range(N - 1):
-            ax.plot(xt[i:i + 2, 0], xt[i:i + 2, 1], color=colors[i])
-        scatter = ax.scatter(xt[:, 0], xt[:, 1], c=np.linspace(0, 1, N), cmap='viridis', s=10,
-                             edgecolor='none')  # Plot points for better visibility
+        if c is None:
+            for i in range(N - 1):
+                ax.plot(xt[i:i + 2, 0], xt[i:i + 2, 1], color=colors[i])
+            scatter = ax.scatter(xt[:, 0], xt[:, 1], c=np.linspace(0, 1, N), cmap='viridis', s=10,
+                                 edgecolor='none')  # Plot points for better visibility
 
-        # Add color bar
-        cbar = plt.colorbar(scatter, ax=ax)
-        cbar.set_label('Time')
+            # Add color bar
+            cbar = plt.colorbar(scatter, ax=ax)
+            cbar.set_label('Time')
+        else:
+            ax.plot(xt[:, 0], xt[:, 1], c)
 
     @staticmethod
     def plot_tube(ax, xt, wt, c='g'):
@@ -404,7 +407,7 @@ class TrajectoryGenerator:
         self.extreme_input = np.zeros((self.rom.n_robots, self.rom.m))
         self.ramp_t_start = np.zeros((self.rom.n_robots,))
         self.ramp_v_start = np.zeros((self.rom.n_robots, self.rom.m))
-        self.ramp_v_end = np.zeros((self.rom.n_robots, self.rom.m))
+        self.ramp_v_end = self.rng.uniform(self.rom.v_min, self.rom.v_max, size=(self.rom.n_robots, self.rom.m))
         self.sin_mag = np.zeros((self.rom.n_robots, self.rom.m))
         self.sin_freq = np.zeros((self.rom.n_robots, self.rom.m))
         self.sin_off = np.zeros((self.rom.n_robots, self.rom.m))
@@ -414,6 +417,7 @@ class TrajectoryGenerator:
         self.freq_high = freq_high
         self.weight_sampler = weight_sampler
         self.trajectory = np.zeros((self.rom.n_robots, self.N, self.rom.n))
+        self.v = np.zeros((self.rom.n_robots, self.rom.m))
 
     def reset_inputs(self):
         t_mask = np.ones_like(self.t_final, dtype=bool)
@@ -481,16 +485,16 @@ class TrajectoryGenerator:
 
     def step(self):
         # Get input to apply for trajectory
-        v = self.get_input_t(self.t, self.trajectory[:, -1, :])
-        z_next = self.rom.f(self.trajectory[:, -1, :], v)
+        self.v = self.get_input_t(self.t, self.trajectory[:, -1, :])
+        z_next = self.rom.f(self.trajectory[:, -1, :], self.v)
         self.trajectory[:, :-1, :] = self.trajectory[:, 1:, :]
         self.trajectory[:, -1, :] = z_next
         self.t += self.rom.dt
 
     def step_idx(self, idx):
         # Get input to apply for trajectory
-        v = self.get_input_t(self.t, self.trajectory[:, -1, :])
-        z_next = self.rom.f(self.trajectory[idx, -1, :], v[idx, :])
+        self.v = self.get_input_t(self.t, self.trajectory[:, -1, :])
+        z_next = self.rom.f(self.trajectory[idx, -1, :], self.v[idx, :])
         self.trajectory[idx, :-1, :] = self.trajectory[idx, 1:, :]
         self.trajectory[idx, -1, :] = z_next
 

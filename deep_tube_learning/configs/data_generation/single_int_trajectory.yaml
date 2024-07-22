@@ -1,0 +1,35 @@
+defaults:
+  - default_trajectory
+  - _self_
+
+dataset_name: "single_integrator_trajectory"
+
+num_robots: 2
+epochs: 2
+save_debugging_data: True
+upload_to_wandb: False
+
+track_yaw: False
+
+reduced_order_model:
+  _target_: trajopt.rom_dynamics.SingleInt2D
+  z_min:
+    _target_: numpy.array
+    object:
+      - ${pos_min}
+      - ${pos_min}
+  z_max:
+    _target_: numpy.array
+    object:
+      - ${pos_max}
+      - ${pos_max}
+  v_min:
+    _target_: numpy.array
+    object:
+      - ${vel_min}
+      - ${vel_min}
+  v_max:
+    _target_: numpy.array
+    object:
+      - ${vel_max}
+      - ${vel_max}

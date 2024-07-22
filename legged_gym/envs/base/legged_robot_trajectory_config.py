@@ -40,7 +40,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
         send_timeouts = True  # send time out information to the algorithm
-        episode_length_s = 20  # episode length in seconds
+        episode_length_s = 5  # episode length in seconds
 
     class terrain:
         mesh_type = 'trimesh'  # "heightfield" # none, plane, heightfield or trimesh
@@ -76,31 +76,20 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         z_max = [pos_max, pos_max]
         v_min = [-vel_max, -vel_max]
         v_max = [vel_max, vel_max]
+        # v_min = [0, vel_max]
+        # v_max = [0, vel_max]
         obs_scales = [1, 1]
 
     class trajectory_generator:
         cls = 'TrajectoryGenerator'
         t_samp_cls = 'UniformSampleHoldDT'
-        weight_samp_cls = 'UniformWeightSampler'
-        N = 4
-        t_low = 0.01
+        weight_samp_cls = 'WeightSamplerSampleAndHold'
+        N = 10
+        t_low = 1
         t_high = 2
         freq_low = 0.01
         freq_high = 2
         seed = 42
-
-    # class commands:
-    #     curriculum = False
-    #     max_curriculum = 1.
-    #     num_commands = 4  # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
-    #     resampling_time = 10.  # time before command are changed[s]
-    #     heading_command = True  # if true: compute ang vel command from heading error
-    #
-    #     class ranges:
-    #         lin_vel_x = [-1.0, 1.0]  # min max [m/s]
-    #         lin_vel_y = [-1.0, 1.0]  # min max [m/s]
-    #         ang_vel_yaw = [-1, 1]  # min max [rad/s]
-    #         heading = [-3.14, 3.14]
 
     class init_state:
         pos = [0.0, 0.0, 1.]  # x,y,z [m]
@@ -154,12 +143,11 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
 
     class rewards:
         class scales:
-            termination = -0.0
+            termination = -0.5
             tracking_rom = 1.0
-            # tracking_ang_vel = 0.5
             lin_vel_z = -2.0
             ang_vel_xy = -0.05
-            orientation = -0.
+            orientation = -0.1
             torques = -0.00001
             dof_vel = -0.
             dof_acc = -2.5e-7
@@ -170,8 +158,10 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
             action_rate = -0.01
             stand_still = -0.
 
-        only_positive_rewards = True  # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)
+        only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
+        tracking_sigma = 0.25
+
+        # tracking reward = exp(-error^2/sigma)
         soft_dof_pos_limit = 1.  # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.

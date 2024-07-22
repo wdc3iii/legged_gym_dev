@@ -49,7 +49,8 @@ from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_trajectory_config import LeggedRobotTrajectoryCfg
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
                                   ExtendedLateralUnicycle, TrajectoryGenerator)
-from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler
+from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, WeightSamplerSampleAndHold
+
 
 class LeggedRobotTrajectory(BaseTask):
     def __init__(self, cfg: LeggedRobotTrajectoryCfg, sim_params, physics_engine, sim_device, headless):
@@ -85,7 +86,7 @@ class LeggedRobotTrajectory(BaseTask):
         rom_cfg = self.cfg.rom
         model_class = globals()[rom_cfg.cls]
         self.rom = model_class(
-            dt=self.sim_params.dt,
+            dt=self.dt,
             z_min=np.array(rom_cfg.z_min),
             z_max=np.array(rom_cfg.z_max),
             v_min=np.array(rom_cfg.v_min),
@@ -173,6 +174,8 @@ class LeggedRobotTrajectory(BaseTask):
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.,
                                    dim=1)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length  # no terminal reward for time-outs
+        # if torch.any(self.reset_buf):
+        #     print('resetting')
         self.reset_buf |= self.time_out_buf
 
     def reset_idx(self, env_ids):
@@ -247,10 +250,14 @@ class LeggedRobotTrajectory(BaseTask):
     def compute_observations(self):
         """ Computes observations
         """
+        # Adjust trajectory positions relative to current position
+        mod_traj = torch.clone(self.trajectory)
+        mod_traj -= self.rom.proj_z(self.root_states)[:, None, :2]
+        # print(self.trajectory[100, 0, :].cpu().numpy(), self.rom.proj_z(self.root_states)[100, :2].cpu().numpy(), mod_traj[100, 0, :].cpu().numpy())
         self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
                                   self.projected_gravity,
-                                  (self.trajectory * self.trajectory_scale).reshape(self.num_envs, -1),
+                                  (mod_traj * self.trajectory_scale).reshape(self.num_envs, -1),
                                   (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                   self.dof_vel * self.obs_scales.dof_vel,
                                   self.actions
@@ -379,30 +386,6 @@ class LeggedRobotTrajectory(BaseTask):
         if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
             self._push_robots()
 
-    # def _resample_commands(self, env_ids):
-    #     """ Randommly select commands of some environments
-    #
-    #     Args:
-    #         env_ids (List[int]): Environments ids for which new commands are needed
-    #     """
-    #     self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
-    #                                                  self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
-    #                                                  device=self.device).squeeze(1)
-    #     self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
-    #                                                  self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
-    #                                                  device=self.device).squeeze(1)
-    #     if self.cfg.commands.heading_command:
-    #         self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
-    #                                                      self.command_ranges["heading"][1], (len(env_ids), 1),
-    #                                                      device=self.device).squeeze(1)
-    #     else:
-    #         self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
-    #                                                      self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
-    #                                                      device=self.device).squeeze(1)
-    #
-    #     # set small commands to zero
-    #     self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
-
     def _compute_torques(self, actions):
         """ Compute torques from actions.
             Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
@@ -503,19 +486,19 @@ class LeggedRobotTrajectory(BaseTask):
                                                               0))  # (the minumum level is zero)
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
-    def update_command_curriculum(self, env_ids):
-        """ Implements a curriculum of increasing commands
-
-        Args:
-            env_ids (List[int]): ids of environments being reset
-        """
-        # If the tracking reward is above 80% of the maximum, increase the range of commands
-        if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.8 * \
-                self.reward_scales["tracking_lin_vel"]:
-            self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5,
-                                                          -self.cfg.commands.max_curriculum, 0.)
-            self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0.,
-                                                          self.cfg.commands.max_curriculum)
+    # def update_command_curriculum(self, env_ids):
+    #     """ Implements a curriculum of increasing commands
+    #
+    #     Args:
+    #         env_ids (List[int]): ids of environments being reset
+    #     """
+    #     # If the tracking reward is above 80% of the maximum, increase the range of commands
+    #     if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.8 * \
+    #             self.reward_scales["tracking_lin_vel"]:
+    #         self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5,
+    #                                                       -self.cfg.commands.max_curriculum, 0.)
+    #         self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0.,
+    #                                                       self.cfg.commands.max_curriculum)
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -983,6 +966,9 @@ class LeggedRobotTrajectory(BaseTask):
         desired_state = self.trajectory[:, 0, :]
         pz_x = self.rom.proj_z(self.root_states)
         tracking_error = torch.sum(torch.square(pz_x - desired_state), dim=1)
+        # print(torch.min(tracking_error).cpu().numpy(), torch.mean(tracking_error).cpu().numpy(), torch.max(tracking_error).cpu().numpy())
+        # print(pz_x[0, :] - desired_state[0, :], desired_state[0, :])
+        # print(desired_state[0, :], desired_state[1, :])
         return torch.exp(-tracking_error / self.cfg.rewards.tracking_sigma)
 
     def _reward_feet_air_time(self):
