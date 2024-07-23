@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
@@ -47,6 +47,7 @@ from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_config import LeggedRobotCfg
+from reftraj.ref_generator import ReferenceTrajectoryGenerator
 
 
 class LeggedRobot(BaseTask):
@@ -73,9 +74,18 @@ class LeggedRobot(BaseTask):
 
         if not self.headless:
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
+        self._init_reference_generator()
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True
+
+    def _init_reference_generator(self):
+        self.ref_generator = ReferenceTrajectoryGenerator(self.num_envs, self.dt, self.num_dof,
+                                                          self.cfg.asset.ref_traj_csv_directory, device=self.device)
+        self.ref_generator.reset()
+
+    def reset_ref(self):
+        self.ref_generator.reset()
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -212,10 +222,13 @@ class LeggedRobot(BaseTask):
     def compute_observations(self):
         """ Computes observations
         """
+        flattened_reference_trajectory = self.reference_trajectory.reshape(self.num_envs, -1)
+
         self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
                                   self.projected_gravity,
                                   self.commands[:, :3] * self.commands_scale,
+                                  flattened_reference_trajectory,
                                   (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                   self.dof_vel * self.obs_scales.dof_vel,
                                   self.actions
@@ -341,6 +354,9 @@ class LeggedRobot(BaseTask):
             self.measured_heights = self._get_heights()
         if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
             self._push_robots()
+
+        self.ref_generator.step(self.commands[:, 0])  # currently, reference trajectories are only in x-axis
+        self.reference_trajectory = self.ref_generator.trajectory
 
     def _resample_commands(self, env_ids):
         """ Randommly select commands of some environments
@@ -552,6 +568,9 @@ class LeggedRobot(BaseTask):
                                          device=self.device, requires_grad=False)
         self.last_contacts = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device,
                                          requires_grad=False)
+        self.reference_trajectory = self.reference_trajectory = torch.zeros(self.num_envs, 2, self.num_dof,
+                                                                            dtype=torch.float, device=self.device,
+                                                                            requires_grad=False)
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
@@ -965,3 +984,15 @@ class LeggedRobot(BaseTask):
         # penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :],
                                      dim=-1) - self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
+
+    def _reward_reference_traj_pos(self):
+        desired_state = self.reference_trajectory[:, 0, :]
+        joint_positions = self.dof_pos
+        tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
+        return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
+
+    def _reward_reference_traj_vel(self):
+        desired_state = self.reference_trajectory[:, 1, :]
+        joint_positions = self.dof_vel
+        tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
+        return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)

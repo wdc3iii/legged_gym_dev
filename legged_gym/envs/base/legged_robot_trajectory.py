@@ -112,8 +112,8 @@ class LeggedRobotTrajectory(BaseTask):
         )
 
     def _init_reference_generator(self):
-        self.ref_generator = ReferenceTrajectoryGenerator(self.num_envs, self.cfg.trajectory_generator.N,
-                                                          self.dt, self.num_actions, device=self.device)
+        self.ref_generator = ReferenceTrajectoryGenerator(self.num_envs, self.dt, self.cfg.trajectory_generator.N,
+                                                          self.num_actions, device=self.device)
         self.ref_generator.reset()
 
     def reset_ref(self):
@@ -382,47 +382,16 @@ class LeggedRobotTrajectory(BaseTask):
         """ Callback called before computing terminations, rewards, and observations
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
-        #
-        # env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt) == 0).nonzero(
-        #     as_tuple=False).flatten()
-        # self._resample_commands(env_ids)
+        speeds = self.traj_gen.des_pose_vel()
         self.traj_gen.step()
         self.trajectory = torch.from_numpy(self.traj_gen.trajectory).to(self.device).float()
-        self.ref_generator.step()
+        self.ref_generator.step(speeds)
         self.reference_trajectory = self.ref_generator.trajectory
-        # if self.cfg.commands.heading_command:
-        #     forward = quat_apply(self.base_quat, self.forward_vec)
-        #     heading = torch.atan2(forward[:, 1], forward[:, 0])
-        #     self.commands[:, 2] = torch.clip(0.5 * wrap_to_pi(self.commands[:, 3] - heading), -1., 1.)
 
         if self.cfg.terrain.measure_heights:
             self.measured_heights = self._get_heights()
         if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
             self._push_robots()
-
-    # def _resample_commands(self, env_ids):
-    #     """ Randommly select commands of some environments
-    #
-    #     Args:
-    #         env_ids (List[int]): Environments ids for which new commands are needed
-    #     """
-    #     self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
-    #                                                  self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
-    #                                                  device=self.device).squeeze(1)
-    #     self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
-    #                                                  self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
-    #                                                  device=self.device).squeeze(1)
-    #     if self.cfg.commands.heading_command:
-    #         self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
-    #                                                      self.command_ranges["heading"][1], (len(env_ids), 1),
-    #                                                      device=self.device).squeeze(1)
-    #     else:
-    #         self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
-    #                                                      self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
-    #                                                      device=self.device).squeeze(1)
-    #
-    #     # set small commands to zero
-    #     self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
@@ -1026,13 +995,13 @@ class LeggedRobotTrajectory(BaseTask):
         return torch.exp(-tracking_error / self.cfg.rewards.tracking_sigma)
 
     def _reward_reference_traj_pos(self):
-        desired_state = self.reference_trajectory[:, 0, 0, :]
+        desired_state = self.reference_trajectory[:, 0, :]
         joint_positions = self.dof_pos
         tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
         return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
 
     def _reward_reference_traj_vel(self):
-        desired_state = self.reference_trajectory[:, 0, 1, :]
+        desired_state = self.reference_trajectory[:, 1, :]
         joint_positions = self.dof_vel
         tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
         return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)

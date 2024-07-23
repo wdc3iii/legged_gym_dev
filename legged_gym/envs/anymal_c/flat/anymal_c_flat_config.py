@@ -32,7 +32,8 @@ from legged_gym.envs import AnymalCRoughCfg, AnymalCRoughCfgPPO
 
 class AnymalCFlatCfg( AnymalCRoughCfg ):
     class env( AnymalCRoughCfg.env ):
-        num_observations = 149
+        num_observations = 48
+        num_dofs = 14
   
     class terrain( AnymalCRoughCfg.terrain ):
         mesh_type = 'plane'

@@ -112,7 +112,7 @@ class LeggedRobotCfg(BaseConfig):
         self_collisions = 0  # 1 to disable, 0 to enable...bitwise filter
         replace_cylinder_with_capsule = True  # replace collision cylinders with capsules, leads to faster/more stable simulation
         flip_visual_attachments = True  # Some .obj meshes must be flipped from y-up to z-up
-
+        ref_traj_csv_directory = 'adam_reference_trajectories/processed'
         density = 0.001
         angular_damping = 0.
         linear_damping = 0.
@@ -147,6 +147,8 @@ class LeggedRobotCfg(BaseConfig):
             feet_stumble = -0.0
             action_rate = -0.01
             stand_still = -0.
+            reference_traj_vel = 5
+            reference_traj_pos = 5
 
         only_positive_rewards = True  # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)
@@ -155,6 +157,7 @@ class LeggedRobotCfg(BaseConfig):
         soft_torque_limit = 1.
         base_height_target = 1.
         max_contact_force = 100.  # forces above this value are penalized
+        ref_track_sigma = 0.0
 
     class normalization:
         class obs_scales:

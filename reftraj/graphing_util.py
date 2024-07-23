@@ -2,9 +2,12 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def clip_and_save_data(csv_file, output_dir, start_time=1.0, end_time=3):
+def clip_and_save_data(csv_file, output_dir, start_time=1.0, end_time=1.35):
     # Load the CSV file
     data = pd.read_csv(csv_file)
+
+    # Filter out rows with 'shoulder' and 'forearm' in the 'Joint' column
+    data = data[~data['Joint'].str.contains('shoulder|forearm|foot|base', case=False)]
 
     # Clip the data to the specified time range
     clipped_data = data[(data['Time'] >= start_time) & (data['Time'] <= end_time)].copy()

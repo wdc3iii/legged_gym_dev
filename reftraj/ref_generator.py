@@ -8,7 +8,7 @@ class ReferenceTrajectoryGenerator:
     Class to generate reference trajectories for multiple robots.
     """
 
-    def __init__(self, n_robots, dt, dof, csv_directory, device='cpu'):
+    def __init__(self, n_robots, dt, dof, csv_directory, device='cuda'):
         """
         Initialize the generator.
 

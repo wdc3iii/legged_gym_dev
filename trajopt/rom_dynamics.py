@@ -505,3 +505,6 @@ class TrajectoryGenerator:
 
         for t in range(self.N - 1):
             self.step_idx(idx)
+
+    def des_pose_vel(self, z, v):
+        return self.rom.des_pose_vel(z, v)
