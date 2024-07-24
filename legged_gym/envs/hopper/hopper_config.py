@@ -3,13 +3,14 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 class HopperRoughCfg( LeggedRobotCfg ):
     class env( LeggedRobotCfg.env):
         num_envs = 4096
-        num_observations = 145
+        num_observations = 23
         num_actions = 4  # Changes based on control type
 
     class terrain( LeggedRobotCfg.terrain):
         measured_points_x = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]  # 1mx1m rectangle (without center line)
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
         mesh_type = 'plane'
+        measure_heights = False
 
     class init_state(LeggedRobotCfg.init_state):
         pos = [0.0, 0.0, .3]  # x,y,z [m]
@@ -66,7 +67,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
         spring_stiffness = 10000
         spring_damping = 100
 
-        # TODO: actuator frame correct?
+        # TODO: actuator frame correct on hardware?
         rot_actuator = [
             [-0.8165, 0.2511, 0.2511],
             [-0, -0.7643, 0.7643],
@@ -79,6 +80,30 @@ class HopperRoughCfg( LeggedRobotCfg ):
         }
         torque_speed_bound_ratio = 6
         disable_gravity = False
+
+    class normalization:
+        class obs_scales:
+            lin_vel = 0.5
+            ang_vel = 0.25
+            foot_pos = 10.0
+            dof_vel = 0.01
+            z_pos = 1.0
+            height_measurements = 5.0
+        clip_observations = 100.
+        clip_actions = 100.
+
+    class noise:
+        add_noise = True
+        noise_level = 1.0  # scales other values
+        class noise_scales:
+            foot_pos = 0.01
+            dof_vel = 1.5
+            lin_vel = 0.1
+            ang_vel = 0.2
+            gravity = 0.05
+            z_pos = 0.02
+            quat = 0.05
+            height_measurements = 0.1
 
     class commands:
         curriculum = True

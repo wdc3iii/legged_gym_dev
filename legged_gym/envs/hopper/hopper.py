@@ -185,6 +185,26 @@ class Hopper(LeggedRobot):
         self.torques[:, self.wheel_joint_indices] = torch.clip(self.torques[:, self.wheel_joint_indices], state_input_lower, state_input_upper)
         return torch.clip(self.torques, -self.torque_limits, self.torque_limits)
 
+    def compute_observations(self):
+        """ Computes observations: (z, quat, foot_pos, v, omega, foot_vel, wheel_vel, cmd, action)
+        """
+        self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
+                                  self.base_quat,
+                                  self.dof_pos[:, self.foot_joint_index] * self.obs_scales.foot_pos,
+                                  self.base_lin_vel * self.obs_scales.lin_vel,
+                                  self.base_ang_vel * self.obs_scales.ang_vel,
+                                  self.dof_vel * self.obs_scales.dof_vel,
+                                  self.commands[:, :3] * self.commands_scale,
+                                  self.actions
+                                  ),dim=-1)
+        # add perceptive inputs if not blind
+        if self.cfg.terrain.measure_heights:
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
+            self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
+        # add noise if needed
+        if self.add_noise:
+            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
     def reset(self):
         """ Reset all robots"""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -213,10 +233,28 @@ class Hopper(LeggedRobot):
 
         self.torques = torch.zeros((self.num_envs, self.num_actions), dtype=torch.float32).to(self.device)
 
-    # def _reward_upright_orientation(self):
-    #     """Penalty for deviation from upright orientation, returning a negative exponential value."""
-    #     upright_quat = torch.tensor([0.0, 0.0, 0.0, 1.0], device=self.device)
-    #     cos_theta = torch.abs(torch.sum(self.base_quat * upright_quat, dim=1))
-    #     angle_rad = torch.acos(cos_theta) * 2  # Convert from half-angle to full angle in radians
-    #     penalty = torch.exp(angle_rad)  # Exponential penalty
-    #     return torch.exp(-upright_error / self.cfg.rewards.upright_orientation_sigma)
+    def _get_noise_scale_vec(self, cfg):
+        """ Sets a vector used to scale the noise added to the observations.
+            [NOTE]: Must be adapted when changing the observations structure
+
+        Args:
+            cfg (Dict): Environment config file
+
+        Returns:
+            [torch.Tensor]: Vector of scales used to multiply a uniform distribution in [-1, 1]
+        """
+        noise_vec = torch.zeros_like(self.obs_buf[0])
+        self.add_noise = self.cfg.noise.add_noise
+        noise_scales = self.cfg.noise.noise_scales
+        noise_level = self.cfg.noise.noise_level
+        noise_vec[0] = noise_scales.z_pos * noise_level * self.obs_scales.z_pos
+        noise_vec[1:5] = noise_scales.quat * noise_level
+        noise_vec[5] = noise_scales.foot_pos * noise_level * self.obs_scales.foot_pos
+        noise_vec[6:9] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
+        noise_vec[9:12] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
+        noise_vec[12:16] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[16:19] = 0.  # previous actions
+        noise_vec[19:23] = 0.  # previous actions
+        if self.cfg.terrain.measure_heights:
+            noise_vec[18:205] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
+        return noise_vec
