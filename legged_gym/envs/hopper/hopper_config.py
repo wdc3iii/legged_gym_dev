@@ -56,7 +56,6 @@ class HopperRoughCfg( LeggedRobotCfg ):
 
     class asset( LeggedRobotCfg.asset ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper.urdf'
-        # file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper_axis_aligned.urdf'
         name = "hopper"
         foot_name = 'foot'
         terminate_after_contacts_on = ['wheel', 'torso']
