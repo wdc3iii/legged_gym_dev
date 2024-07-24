@@ -45,6 +45,15 @@ def play(args):
         export_policy_as_jit(ppo_runner.alg.actor_critic, path)
         print('Exported policy as jit script to: ', path)
 
+        onnx_path = f"{path}/{type(env_cfg).__name__}.onnx"
+        torch.onnx.export(
+            ppo_runner.alg.actor_critic.actor,
+            obs[0],
+            onnx_path,
+            export_params=True
+        )
+        print('Exported policy as onnx file to: ', onnx_path)
+
     logger = Logger(env.dt)
     robot_index = 0  # which robot is used for logging
     joint_index = 1  # which joint is used for logging

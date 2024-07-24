@@ -117,6 +117,15 @@ class HopperRoughCfg( LeggedRobotCfg ):
             ang_vel_yaw = [-1, 1]    # min max [rad/s]
             heading = [-3.14, 3.14]
 
+    class domain_rand:
+        randomize_friction = False
+        friction_range = [0.5, 1.25]
+        randomize_base_mass = False
+        added_mass_range = [-1., 1.]
+        push_robots = True
+        push_interval_s = 15
+        max_push_vel_xy = 1.
+
     class rewards:
         class scales:
             tracking_lin_vel = 1.0
