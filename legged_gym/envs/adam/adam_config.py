@@ -3,8 +3,8 @@ from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobot
 
 class AdamRoughCfg(LeggedRobotCfg):
     class env(LeggedRobotCfg.env):
-        num_envs = 4098
-        num_observations = 157
+        num_envs = 2049 // 2
+        num_observations = 336
         num_actions = 8
 
     class terrain(LeggedRobotCfg.terrain):
@@ -77,6 +77,17 @@ class AdamRoughCfg(LeggedRobotCfg):
             ang_vel_xy = -0.0
             feet_contact_forces = -0.
 
+    class noise:
+        add_noise = False
+        noise_level = 1.0  # scales other values
+
+        class noise_scales:
+            dof_pos = 0.01
+            dof_vel = 1.5
+            lin_vel = 0.1
+            ang_vel = 0.2
+            gravity = 0.05
+            height_measurements = 0.1
 
 class AdamRoughCfgPPO(LeggedRobotCfgPPO):
     class policy(LeggedRobotCfgPPO.policy):

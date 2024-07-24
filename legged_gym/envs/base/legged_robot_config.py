@@ -29,7 +29,7 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from .base_config import BaseConfig
-
+from legged_gym import LEGGED_GYM_ROOT_DIR
 
 class LeggedRobotCfg(BaseConfig):
     class env:
@@ -73,6 +73,7 @@ class LeggedRobotCfg(BaseConfig):
         num_commands = 4  # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10.  # time before command are changed[s]
         heading_command = True  # if true: compute ang vel command from heading error
+        short_term_history_length = 10
 
         class ranges:
             lin_vel_x = [-1.0, 1.0]  # min max [m/s]
@@ -112,7 +113,7 @@ class LeggedRobotCfg(BaseConfig):
         self_collisions = 0  # 1 to disable, 0 to enable...bitwise filter
         replace_cylinder_with_capsule = True  # replace collision cylinders with capsules, leads to faster/more stable simulation
         flip_visual_attachments = True  # Some .obj meshes must be flipped from y-up to z-up
-        ref_traj_csv_directory = 'adam_reference_trajectories/processed'
+        ref_traj_csv_directory = f'{LEGGED_GYM_ROOT_DIR}/reftraj/adam_reference_trajectories/processed'
         density = 0.001
         angular_damping = 0.
         linear_damping = 0.
@@ -147,8 +148,8 @@ class LeggedRobotCfg(BaseConfig):
             feet_stumble = -0.0
             action_rate = -0.01
             stand_still = -0.
-            reference_traj_vel = 5
-            reference_traj_pos = 5
+            reference_traj_vel = 50
+            reference_traj_pos = 50
 
         only_positive_rewards = True  # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)

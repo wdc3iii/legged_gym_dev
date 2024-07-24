@@ -130,6 +130,11 @@ class LeggedRobot(BaseTask):
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
 
+        self.history_buffer_pos = torch.roll(self.history_buffer_pos, shifts=-1, dims=1)
+        self.history_buffer_vel = torch.roll(self.history_buffer_vel, shifts=-1, dims=1)
+        self.history_buffer_pos[:, -1, :] = self.dof_pos
+        self.history_buffer_vel[:, -1, :] = self.dof_vel
+
         self._post_physics_step_callback()
 
         # compute observations, rewards, resets, ...
@@ -220,27 +225,38 @@ class LeggedRobot(BaseTask):
             self.episode_sums["termination"] += rew
 
     def compute_observations(self):
-        """ Computes observations
-        """
         flattened_reference_trajectory = self.reference_trajectory.reshape(self.num_envs, -1)
 
-        self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,
-                                  self.base_ang_vel * self.obs_scales.ang_vel,
-                                  self.projected_gravity,
-                                  self.commands[:, :3] * self.commands_scale,
-                                  flattened_reference_trajectory,
-                                  (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
-                                  self.dof_vel * self.obs_scales.dof_vel,
-                                  self.actions
-                                  ), dim=-1)
-        # add perceptive inputs if not blind
+        current_observations = torch.cat((
+            self.base_lin_vel * self.obs_scales.lin_vel,
+            self.base_ang_vel * self.obs_scales.ang_vel,
+            self.projected_gravity,
+            self.commands[:, :3] * self.commands_scale,
+            flattened_reference_trajectory,
+            (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
+            self.dof_vel * self.obs_scales.dof_vel,
+            self.actions
+        ), dim=-1)
+
         if self.cfg.terrain.measure_heights:
             heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
                                  1.) * self.obs_scales.height_measurements
-            self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
-        # add noise if needed
+            current_observations = torch.cat((current_observations, heights), dim=-1)
+
+        # Include history in observations after the commands
+        flattened_history_pos = self.history_buffer_pos.view(self.num_envs, -1)
+        flattened_history_vel = self.history_buffer_vel.view(self.num_envs, -1)
+        self.obs_buf = torch.cat((current_observations[:, :9],
+                                  self.commands[:, :3] * self.commands_scale,
+                                  flattened_history_pos,
+                                  flattened_history_vel,
+                                  current_observations[:, 9:]), dim=-1)
+
+        # Add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
+        return self.obs_buf
 
     def create_sim(self):
         """ Creates simulation, terrain and evironments
@@ -497,28 +513,30 @@ class LeggedRobot(BaseTask):
                                                           self.cfg.commands.max_curriculum)
 
     def _get_noise_scale_vec(self, cfg):
-        """ Sets reftraj vector used to scale the noise added to the observations.
-            [NOTE]: Must be adapted when changing the observations structure
-
-        Args:
-            cfg (Dict): Environment config file
-
-        Returns:
-            [torch.Tensor]: Vector of scales used to multiply reftraj uniform distribution in [-1, 1]
-        """
-        noise_vec = torch.zeros_like(self.obs_buf[0])
+        observation_size = self.obs_buf.shape[1] + self.cfg.commands.short_term_history_length * (self.dof_pos.shape[1] + self.dof_vel.shape[1])
+        noise_vec = torch.zeros(observation_size, device=self.device)
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.noise_scales
         noise_level = self.cfg.noise.noise_level
+
+        # Set noise scale for the current observations
         noise_vec[:3] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
         noise_vec[3:6] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
         noise_vec[6:9] = noise_scales.gravity * noise_level
         noise_vec[9:12] = 0.  # commands
-        noise_vec[12:24] = noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos
-        noise_vec[24:36] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[36:48] = 0.  # previous actions
+        ref_traj_size = self.cfg.env.num_actions * 2  # pos and vel for each dof
+        noise_vec[12 + ref_traj_size:24 + ref_traj_size] = (
+                    noise_scales.dof_pos * noise_level * self.obs_scales.dof_pos)
+        noise_vec[24 + ref_traj_size:36 + ref_traj_size] = (
+                    noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel)
+        noise_vec[36 + ref_traj_size:48 + ref_traj_size] = 0.  # previous actions
+
         if self.cfg.terrain.measure_heights:
-            noise_vec[48:235] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
+            noise_vec[48 + ref_traj_size:235 + ref_traj_size] = (
+                        noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements)
+
+        noise_vec[12:12 + self.cfg.commands.short_term_history_length] = 0
+
         return noise_vec
 
     # ----------------------------------------
@@ -571,6 +589,11 @@ class LeggedRobot(BaseTask):
         self.reference_trajectory = self.reference_trajectory = torch.zeros(self.num_envs, 2, self.num_dof,
                                                                             dtype=torch.float, device=self.device,
                                                                             requires_grad=False)
+        self.history_buffer_pos = torch.zeros((self.num_envs, self.cfg.commands.short_term_history_length, self.dof_pos.shape[1]),
+                                              device=self.device)
+        self.history_buffer_vel = torch.zeros((self.num_envs, self.cfg.commands.short_term_history_length, self.dof_vel.shape[1]),
+                                              device=self.device)
+
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
@@ -987,12 +1010,12 @@ class LeggedRobot(BaseTask):
 
     def _reward_reference_traj_pos(self):
         desired_state = self.reference_trajectory[:, 0, :]
-        joint_positions = self.dof_pos
+        joint_positions = self.dof_pos[:, :self.num_actions]
         tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
         return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
 
     def _reward_reference_traj_vel(self):
         desired_state = self.reference_trajectory[:, 1, :]
-        joint_positions = self.dof_vel
+        joint_positions = self.dof_vel[:, :self.num_actions]
         tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
         return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
