@@ -169,6 +169,7 @@ class Hopper(LeggedRobot):
             log_err = so3_log_map(quaternion_to_matrix(err))
             local_tau = -self.p_gains[self.wheel_joint_indices] * log_err - self.d_gains[self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
 
+            # local_tau[:, :] = torch.tensor([-0.8165, 0, -0.5773], device=self.device)
             tau = self.actuator_transform.transform_points(local_tau)
             self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
         elif "V" in control_type:

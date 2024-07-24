@@ -6,8 +6,10 @@
       <inertia ixx="0.04131" ixy="0" ixz="0" iyy="0.04093" iyz="0" izz="0.02210"/>
     </inertial>
     <visual>
+      <origin rpy="1.571 0 0" xyz="0 0 0"/>
       <geometry>
         <cylinder length="0.10000" radius="0.05000"/>
+        <!-- <mesh filename="../meshes/torso_reduced.stl" scale="0.001 0.001 0.001"/> -->
       </geometry>
     </visual>
     <collision>
@@ -26,6 +28,7 @@
     <visual>
       <geometry>
         <cylinder length="0.02000" radius="0.05000"/>
+        <!-- <mesh filename="../meshes/wheel_reduced.stl" scale="0.001 0.001 0.001" /> -->
       </geometry>
     </visual>
     <collision>
@@ -44,6 +47,7 @@
     <visual>
       <geometry>
         <cylinder length="0.02000" radius="0.05000"/>
+        <!-- <mesh filename="../meshes/wheel_reduced.stl" scale="0.001 0.001 0.001"/> -->
       </geometry>
     </visual>
     <collision>
@@ -62,6 +66,7 @@
     <visual>
       <geometry>
         <cylinder length="0.02000" radius="0.05000"/>
+        <!-- <mesh filename="../meshes/wheel_reduced.stl" scale="0.001 0.001 0.001"/> -->
       </geometry>
     </visual>
     <collision>
@@ -85,6 +90,7 @@
     <visual>
       <geometry>
         <sphere radius="0.02000"/>
+        <!-- <mesh filename="../meshes/foot.stl" scale="0.001 0.001 0.001"/> -->
       </geometry>
     </visual>
   </link>
@@ -101,7 +107,8 @@
   <joint name="wheel1_rotation" type="revolute">
     <parent link="torso"/>
     <child link="wheel1"/>
-    <origin xyz="0.0776 0 0.0547" rpy = "0 0.5 0"/>
+    <origin xyz="0.0776 0 0.0547" rpy = "0 0.9553 0"/>
+    <!-- <origin xyz="0.0776 0 0.0547" rpy = "0.0545 -0.0042 0.0775"/> -->
     <axis xyz="0 0 1"/>
     <!-- effort is in Nm, vel in rad/s, postiion should be infinity, check if null is allowed this!!! -->
     <limit effort="1.6" velocity="600"/>
@@ -110,7 +117,8 @@
   <joint name="wheel2_rotation" type="revolute">
     <parent link="torso"/>
     <child link="wheel2"/>
-    <origin xyz="-0.0388 0.0672 0.0548" rpy = "-0.5 -0.5 0"/>
+    <origin xyz="-0.0388 0.0672 0.0548" rpy = "-0.87 -0.4 0"/>
+    <!-- <origin xyz="-0.0388 0.0672 0.0548" rpy = "0.0523 0.0692 -0.0351"/> -->
     <axis xyz="0 0 1"/>
     <limit effort="1.6" velocity="600"/>
   </joint>
@@ -118,7 +126,8 @@
   <joint name="wheel3_rotation" type="revolute">
     <parent link="torso"/>
     <child link="wheel3"/>
-    <origin xyz="-0.0388 -0.0672 0.0548" rpy = "0.5 -0.5 0"/>
+    <origin xyz="-0.0388 -0.0672 0.0548" rpy = "0.87 -0.4 0"/>
+    <!-- <origin xyz="-0.0388 -0.0672 0.0548" rpy = "0.0575 -0.0649 -0.0425"/> -->
     <axis xyz="0 0 1"/>
     <limit effort="1.6" velocity="600"/>
   </joint>

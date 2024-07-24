@@ -55,8 +55,8 @@ class HopperRoughCfg( LeggedRobotCfg ):
         zero_action = [1.0, 0, 0, 0]
 
     class asset( LeggedRobotCfg.asset ):
-        # file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper.urdf'
-        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper_axis_aligned.urdf'
+        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper.urdf'
+        # file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper_axis_aligned.urdf'
         name = "hopper"
         foot_name = 'foot'
         terminate_after_contacts_on = ['wheel', 'torso']
@@ -67,16 +67,11 @@ class HopperRoughCfg( LeggedRobotCfg ):
         spring_stiffness = 10000
         spring_damping = 100
 
-        # quat_actuator = [0.8806, 0.3646, -0.2795, 0.1160]
-        # rot_actuator = [
-        #     [0.9429, 0, 0.3986],
-        #     [-0.4507, 0.6622, 0.6374],
-        #     [-0.4507, -0.6622, 0.6374]
-        # ]
+        # TODO: actuator frame correct?
         rot_actuator = [
-            [-1, 0, 0],
-            [0, 1, 0],
-            [0, 0, -1]
+            [-0.8165, 0.2511, 0.2511],
+            [-0, -0.7643, 0.7643],
+            [-0.5773, -0.5939, -0.5939]
         ]
         wheel_speed_bounds = {
             'wheel1_rotation': 600,
