@@ -106,7 +106,7 @@ class LeggedRobotCfg(BaseConfig):
         foot_name = "None"  # name of the feet bodies, used to index body state and contact force tensors
         penalize_contacts_on = []
         terminate_after_contacts_on = []
-        disable_gravity = False
+        disable_gravity = True
         collapse_fixed_joints = True  # merge bodies connected by fixed joints. Specific fixed joints can be kept by adding " <... dont_collapse="true">
         fix_base_link = False  # fixe the base of the robot
         default_dof_drive_mode = 3  # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 3 effort)
@@ -148,8 +148,8 @@ class LeggedRobotCfg(BaseConfig):
             feet_stumble = -0.0
             action_rate = -0.01
             stand_still = -0.
-            reference_traj_vel = 50
-            reference_traj_pos = 50
+            reference_traj_vel = 500
+            reference_traj_pos = 500
 
         only_positive_rewards = True  # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)

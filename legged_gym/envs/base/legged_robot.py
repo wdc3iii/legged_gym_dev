@@ -1012,10 +1012,10 @@ class LeggedRobot(BaseTask):
         desired_state = self.reference_trajectory[:, 0, :]
         joint_positions = self.dof_pos[:, :self.num_actions]
         tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
-        return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
+        return -tracking_error
 
     def _reward_reference_traj_vel(self):
         desired_state = self.reference_trajectory[:, 1, :]
         joint_positions = self.dof_vel[:, :self.num_actions]
         tracking_error = torch.sum(torch.square(joint_positions - desired_state), dim=1)
-        return torch.exp(-tracking_error / self.cfg.rewards.ref_track_sigma)
+        return -tracking_error

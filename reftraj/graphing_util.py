@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def clip_and_save_data(csv_file, output_dir, start_time=1.0, end_time=1.35):
+def clip_and_save_data(csv_file, output_dir, start_time=1.0, end_time=1.95):
     # Load the CSV file
     data = pd.read_csv(csv_file)
 
