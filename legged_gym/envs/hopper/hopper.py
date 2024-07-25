@@ -159,26 +159,27 @@ class Hopper(LeggedRobot):
         else:
             orient_inds = torch.arange(self.num_envs)
 
-        if "orientation" in control_type:
-            quat_des = actions_scaled[orient_inds, :] / torch.linalg.norm(actions_scaled[orient_inds, :], dim=-1, keepdim=True)
-            # quat_des = torch.zeros_like(actions_scaled[orient_inds, :]).to(self.device)
-            # quat_des[:, 0] = 1
+        if orient_inds.shape[0] > 0:
+            if "orientation" in control_type:
+                quat_des = actions_scaled[orient_inds, :] / torch.linalg.norm(actions_scaled[orient_inds, :], dim=-1, keepdim=True)
+                # quat_des = torch.zeros_like(actions_scaled[orient_inds, :]).to(self.device)
+                # quat_des[:, 0] = 1
 
-            quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
-            err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
-            log_err = so3_log_map(quaternion_to_matrix(err))
-            local_tau = -self.p_gains[self.wheel_joint_indices] * log_err - self.d_gains[self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
+                quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
+                err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
+                log_err = so3_log_map(quaternion_to_matrix(err))
+                local_tau = -self.p_gains[self.wheel_joint_indices] * log_err - self.d_gains[self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
 
-            # local_tau[:, :] = torch.tensor([-0.8165, 0, -0.5773], device=self.device)
-            tau = self.actuator_transform.transform_points(local_tau)
-            self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
-        elif "V" in control_type:
-            self.torques[orient_inds, self.wheel_joint_indices] = -self.p_gains[self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
-                                                  - self.d_gains[self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
-        elif "T" in control_type:
-            self.torques[orient_inds, self.wheel_joint_indices] = actions_scaled[orient_inds, self.wheel_joint_indices]
-        else:
-            raise NameError(f"Unknown controller type: {control_type}")
+                # local_tau[:, :] = torch.tensor([-0.8165, 0, -0.5773], device=self.device)
+                tau = self.actuator_transform.transform_points(local_tau)
+                self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
+            elif "V" in control_type:
+                self.torques[orient_inds, self.wheel_joint_indices] = -self.p_gains[self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
+                                                      - self.d_gains[self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
+            elif "T" in control_type:
+                self.torques[orient_inds, self.wheel_joint_indices] = actions_scaled[orient_inds, self.wheel_joint_indices]
+            else:
+                raise NameError(f"Unknown controller type: {control_type}")
 
         state_input_upper = -self.torque_speed_bound_ratio * self.torque_limits[self.wheel_joint_indices] / self.wheel_speed_limits * (wheel_vel - self.wheel_speed_limits)
         state_input_lower = -self.torque_speed_bound_ratio * self.torque_limits[self.wheel_joint_indices] / self.wheel_speed_limits * (wheel_vel + self.wheel_speed_limits)
@@ -193,7 +194,8 @@ class Hopper(LeggedRobot):
                                   self.dof_pos[:, self.foot_joint_index] * self.obs_scales.foot_pos,
                                   self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
-                                  self.dof_vel * self.obs_scales.dof_vel,
+                                  self.dof_vel[:, self.foot_joint_index] * self.obs_scales.foot_vel,
+                                  self.dof_vel[:, self.wheel_joint_indices] * self.obs_scales.dof_vel,
                                   self.commands[:, :3] * self.commands_scale,
                                   self.actions
                                   ),dim=-1)
@@ -258,3 +260,29 @@ class Hopper(LeggedRobot):
         if self.cfg.terrain.measure_heights:
             noise_vec[18:205] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
         return noise_vec
+
+    def _resample_commands(self, env_ids):
+        """ Randommly select commands of some environments
+
+        Args:
+            env_ids (List[int]): Environments ids for which new commands are needed
+        """
+        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0], self.command_ranges["lin_vel_x"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0], self.command_ranges["lin_vel_y"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        if self.cfg.commands.heading_command:
+            self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0], self.command_ranges["heading"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        else:
+            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+
+        # set small commands to zero
+        # self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.05).unsqueeze(1)
+        # TODO: debugging isaacgym -> mujoco
+        # self.commands[env_ids, :] = 0
+
+    def _reward_torque_limits(self):
+        # penalize torques too close to the limit
+        return torch.sum(torch.abs(self.torques[:, self.wheel_joint_indices]), dim=1)
+
+    def _reward_dof_acc(self):
+        # Penalize dof accelerations
+        return torch.sum(torch.square((self.last_dof_vel[:, self.wheel_joint_indices] - self.dof_vel[:, self.wheel_joint_indices]) / self.dt), dim=1)

@@ -25,16 +25,16 @@ class HopperRoughCfg( LeggedRobotCfg ):
         # PD Drive parameters:
         stiffness = {
             'foot_slide': 400,
-            'wheel1_rotation': 90.0,
-            'wheel2_rotation': 90.0,
-            'wheel3_rotation': 90.0
+            'wheel1_rotation': 15.0,
+            'wheel2_rotation': 15.0,
+            'wheel3_rotation': 15.0
         }  # [N*m/rad for revolute, N/m for prismatic]
 
         damping = {
             'foot_slide': 40,
-            'wheel1_rotation': 7.0,
-            'wheel2_rotation': 7.0,
-            'wheel3_rotation': 7.0
+            'wheel1_rotation': 3.0,
+            'wheel2_rotation': 3.0,
+            'wheel3_rotation': 3.0
         }  # [N*m*s/rad for revolute, N*s/m for prismatic]
 
         wheel_spindown = {
@@ -43,7 +43,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
             'wheel3_rotation': 0.1
         }  # [N*m/rad for revolute, N/m for prismatic]
 
-        foot_pos_des = 0.05
+        foot_pos_des = 0.03
 
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 1
@@ -64,8 +64,8 @@ class HopperRoughCfg( LeggedRobotCfg ):
         self_collisions = 1  # 1 to disable, 0 to enable...bitwise filter
 
         # Foot spring properties
-        spring_stiffness = 10000
-        spring_damping = 100
+        spring_stiffness = 11732
+        spring_damping = 50
 
         # TODO: actuator frame correct on hardware?
         rot_actuator = [
@@ -85,7 +85,8 @@ class HopperRoughCfg( LeggedRobotCfg ):
         class obs_scales:
             lin_vel = 0.5
             ang_vel = 0.25
-            foot_pos = 10.0
+            foot_pos = 0.0
+            foot_vel = 0.0
             dof_vel = 0.01
             z_pos = 1.0
             height_measurements = 5.0
@@ -110,7 +111,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
         max_curriculum = 1.
         num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
-        heading_command = True # if true: compute ang vel command from heading error
+        heading_command = False # if true: compute ang vel command from heading error
         class ranges:
             lin_vel_x = [-0.35, 0.35] # min max [m/s]
             lin_vel_y = [-0.35, 0.35]   # min max [m/s]
@@ -132,7 +133,9 @@ class HopperRoughCfg( LeggedRobotCfg ):
             tracking_ang_vel = 0.5
             orientation = -1.
             collision = -1.
-            action_rate = -0.01
+            action_rate = -0.1
+            torques = -0.00001
+            # dof_acc = -2.5e-7
 
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)

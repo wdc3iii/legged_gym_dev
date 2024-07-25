@@ -33,6 +33,9 @@ def play(args):
 
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
+
+    # TODO: debugging isaacgym -> mujoco
+
     obs = env.get_observations()
     # load policy
     train_cfg.runner.resume = True
@@ -64,9 +67,34 @@ def play(args):
     camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
     img_idx = 0
 
-    for i in range(10 * int(env.max_episode_length)):
+    N = int(env.max_episode_length)
+    command = np.zeros((N, len(env.commands[0])))
+    action = np.zeros((N, 4))
+    torque = np.zeros((N, 4))
+
+    pos = np.zeros((N, 3))
+    quat = np.zeros((N, 4))
+    dof = np.zeros((N, 4))
+
+    vel = np.zeros((N, 3))
+    omega = np.zeros((N, 3))
+    ddof = np.zeros((N, 4))
+
+    for i in range(1 * int(env.max_episode_length)):
+        command[i, :] = env.commands[0].cpu().numpy()
+        pos[i, :] = env.root_states[0, :3].cpu().numpy()
+        quat[i, :] = env.root_states[0, 3:7].cpu().numpy()
+        dof[i, :] = env.dof_pos[0, :].cpu().numpy()
+
+        vel[i, :] = env.root_states[0, 7:10].cpu().numpy()
+        omega[i, :] = env.root_states[0, -3:].cpu().numpy()
+        ddof[i, :] = env.dof_vel[0, :].cpu().numpy()
+
         actions = policy(obs.detach())
         obs, _, rews, dones, infos = env.step(actions.detach())
+        action[i, :] = actions[0].detach().cpu().numpy()
+        torque[i, :] = env.torques[0, :].cpu().numpy()
+
         if RECORD_FRAMES:
             if i % 2:
                 filename = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported',
@@ -103,6 +131,19 @@ def play(args):
                     logger.log_rewards(infos["episode"], num_episodes)
         elif i == stop_rew_log:
             logger.print_rewards()
+
+    import scipy
+    scipy.io.savemat('play_data.mat', {
+        "cmd": command,
+        "action": action,
+        "pos": pos,
+        "quat": quat,
+        "dof": dof,
+        "vel": vel,
+        "omega": omega,
+        "ddof": ddof,
+        "torque": torque
+    })
 
 
 if __name__ == '__main__':
