@@ -144,7 +144,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
     class rewards:
         class scales:
             termination = -0.5
-            tracking_rom = 1.0
+            tracking_rom = 6.0
             lin_vel_z = -2.0
             ang_vel_xy = -0.05
             orientation = -0.1

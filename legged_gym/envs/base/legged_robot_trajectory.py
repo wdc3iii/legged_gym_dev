@@ -814,14 +814,16 @@ class LeggedRobotTrajectory(BaseTask):
         self.cfg.domain_rand.push_interval = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
 
     def _draw_debug_vis(self):
-        """ Draws visualizations for dubugging (slows down simulation a lot).
-            Default behaviour: draws height measurement points
+        """ Draws visualizations for debugging (slows down simulation a lot).
+            Default behavior: draws height measurement points and trajectory points.
         """
-        # draw height lines
-        if not self.terrain.cfg.measure_heights:
+        # Draw height lines
+        if not self.cfg.terrain.measure_heights:
             return
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
+
+        # Draw height measurement points
         sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
         for i in range(self.num_envs):
             base_pos = (self.root_states[i, :3]).cpu().numpy()
@@ -834,6 +836,17 @@ class LeggedRobotTrajectory(BaseTask):
                 z = heights[j]
                 sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose)
+
+        # # Draw trajectory points
+        # traj_color = (0, 1, 0)  # Green color for the trajectory points
+        # for i in range(self.num_envs):
+        #     traj_points = self.trajectory[i].cpu().numpy()
+        #     for j in range(traj_points.shape[0]):
+        #         traj_point = traj_points[j]
+        #         traj_pos = gymapi.Vec3(traj_point[0], traj_point[1],
+        #                                base_pos[2])  # Assuming 2D trajectory, adjust z as needed
+        #         traj_sphere_pose = gymapi.Transform(traj_pos, r=None)
+        #         gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], traj_sphere_pose)
 
     def _init_height_points(self):
         """ Returns points at which the height measurments are sampled (in base frame)

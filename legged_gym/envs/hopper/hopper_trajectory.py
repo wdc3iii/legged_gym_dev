@@ -33,14 +33,14 @@ from isaacgym import gymtorch
 
 import torch
 from typing import Dict
-from legged_gym.envs import LeggedRobot
-from legged_gym.envs.hopper.flat.hopper_config import HopperRoughCfg
+from legged_gym.envs import LeggedRobotTrajectory
+from legged_gym.envs.hopper.flat_trajectory.hopper_trajectory_config import HopperRoughTrajectoryCfg
 from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate
 
 
-class Hopper(LeggedRobot):
+class HopperTrajectory(LeggedRobotTrajectory):
 
-    def __init__(self, cfg: HopperRoughCfg, sim_params, physics_engine, sim_device, headless):
+    def __init__(self, cfg: HopperRoughTrajectoryCfg, sim_params, physics_engine, sim_device, headless):
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self.foot_joint_index = torch.tensor([0])
         mask = torch.ones(self.num_dof, dtype=torch.bool)
@@ -71,6 +71,8 @@ class Hopper(LeggedRobot):
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
+
+            # Hopper-specific
             self.gym.refresh_actor_root_state_tensor(self.sim)
             self.gym.refresh_net_contact_force_tensor(self.sim)
 
@@ -112,6 +114,19 @@ class Hopper(LeggedRobot):
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
+
+        # Hopper-specific domain randomization
+        # Randomize damping by adding a random value within the specified range
+        if self.cfg.domain_rand.dof_properties.randomize_damping:
+            rng = self.cfg.domain_rand.dof_properties.added_damping_range
+            random_damping_addition = np.random.uniform(rng[0], rng[1])
+            self.spring_damping += random_damping_addition
+
+        # Randomize stiffness by adding a random value within the specified range
+        if self.cfg.domain_rand.dof_properties.randomize_stiffness:
+            rng = self.cfg.domain_rand.dof_properties.added_stiffness_range
+            random_stiffness_addition = np.random.uniform(rng[0], rng[1])
+            self.spring_stiffness += random_stiffness_addition
 
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
@@ -183,8 +198,13 @@ class Hopper(LeggedRobot):
         return torch.clip(self.torques, -self.torque_limits, self.torque_limits)
 
     def compute_observations(self):
-        """ Computes observations: (z, quat, foot_pos, v, omega, foot_vel, wheel_vel, cmd, action)
+        """ Computes observations
         """
+        # Adjust trajectory positions relative to current position
+        mod_traj = torch.clone(self.trajectory)
+        mod_traj -= self.rom.proj_z(self.root_states)[:, None, :2]
+        # print(self.trajectory[100, 0, :].cpu().numpy(), self.rom.proj_z(self.root_states)[100, :2].cpu().numpy(), mod_traj[100, 0, :].cpu().numpy())
+
         self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,
                                   self.dof_pos[:, self.foot_joint_index] * self.obs_scales.foot_pos,
@@ -192,12 +212,14 @@ class Hopper(LeggedRobot):
                                   self.base_ang_vel * self.obs_scales.ang_vel,
                                   self.dof_vel[:, self.foot_joint_index] * self.obs_scales.foot_vel,
                                   self.dof_vel[:, self.wheel_joint_indices] * self.obs_scales.dof_vel,
-                                  self.commands[:, :3] * self.commands_scale,
+                                  (mod_traj * self.trajectory_scale).reshape(self.num_envs, -1),
                                   self.actions
-                                  ),dim=-1)
+                                  ), dim=-1)
+
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
-            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
+                                 1.) * self.obs_scales.height_measurements
             self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
         # add noise if needed
         if self.add_noise:
@@ -245,16 +267,23 @@ class Hopper(LeggedRobot):
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.noise_scales
         noise_level = self.cfg.noise.noise_level
+
         noise_vec[0] = noise_scales.z_pos * noise_level * self.obs_scales.z_pos
         noise_vec[1:5] = noise_scales.quat * noise_level
         noise_vec[5] = noise_scales.foot_pos * noise_level * self.obs_scales.foot_pos
         noise_vec[6:9] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
         noise_vec[9:12] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
         noise_vec[12:16] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
-        noise_vec[16:19] = 0.  # previous actions
-        noise_vec[19:23] = 0.  # previous actions
+
+        traj_size = self.traj_gen.N * self.rom.n
+        noise_vec[16:16 + traj_size] = 0.  # commands
+
+        noise_vec[16 + traj_size:28 + traj_size] = 0.  # previous actions
+
         if self.cfg.terrain.measure_heights:
-            noise_vec[18:205] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
+            noise_vec[
+            28 + traj_size:215 + traj_size] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
+
         return noise_vec
 
     def _resample_commands(self, env_ids):

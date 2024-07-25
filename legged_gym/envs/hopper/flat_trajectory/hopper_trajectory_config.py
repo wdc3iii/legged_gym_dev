@@ -1,18 +1,18 @@
-from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO
+from legged_gym.envs.base.legged_robot_trajectory_config import LeggedRobotTrajectoryCfg, LeggedRobotTrajectoryCfgPPO
 
-class HopperRoughCfg( LeggedRobotCfg ):
-    class env( LeggedRobotCfg.env):
-        num_envs = 4096
-        num_observations = 23
+class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
+    class env( LeggedRobotTrajectoryCfg.env):
+        num_envs = 4096 * 4
+        num_observations = 40
         num_actions = 4  # Changes based on control type
 
-    class terrain( LeggedRobotCfg.terrain):
+    class terrain( LeggedRobotTrajectoryCfg.terrain):
         measured_points_x = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]  # 1mx1m rectangle (without center line)
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
         mesh_type = 'plane'
         measure_heights = False
 
-    class init_state(LeggedRobotCfg.init_state):
+    class init_state(LeggedRobotTrajectoryCfg.init_state):
         pos = [0.0, 0.0, .3]  # x,y,z [m]
         default_joint_angles = {  # = target angles [rad] when action = 0.0
             'foot_slide': 0.0,
@@ -21,7 +21,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
             'wheel3_rotation': 0.0
         }
 
-    class control(LeggedRobotCfg.control):
+    class control(LeggedRobotTrajectoryCfg.control):
         # PD Drive parameters:
         stiffness = {
             'foot_slide': 400,
@@ -55,9 +55,9 @@ class HopperRoughCfg( LeggedRobotCfg ):
 
         zero_action = [1.0, 0, 0, 0]
 
-    class asset( LeggedRobotCfg.asset ):
+    class asset( LeggedRobotTrajectoryCfg.asset ):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/hopper/urdf/hopper.urdf'
-        name = "hopper"
+        name = "hopper_flat_trajectory"
         foot_name = 'foot'
         terminate_after_contacts_on = ['wheel', 'torso']
         flip_visual_attachments = False
@@ -81,7 +81,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
         torque_speed_bound_ratio = 6
         disable_gravity = False
 
-    class normalization:
+    class normalization(LeggedRobotTrajectoryCfg.normalization):
         class obs_scales:
             lin_vel = 0.5
             ang_vel = 0.25
@@ -93,7 +93,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
         clip_observations = 100.
         clip_actions = 100.
 
-    class noise:
+    class noise(LeggedRobotTrajectoryCfg.noise):
         add_noise = True
         noise_level = 1.0  # scales other values
         class noise_scales:
@@ -106,31 +106,33 @@ class HopperRoughCfg( LeggedRobotCfg ):
             quat = 0.05
             height_measurements = 0.1
 
-    class commands:
-        curriculum = True
-        max_curriculum = 1.
-        num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
-        resampling_time = 10. # time before command are changed[s]
-        heading_command = False # if true: compute ang vel command from heading error
-        class ranges:
-            lin_vel_x = [-0.35, 0.35] # min max [m/s]
-            lin_vel_y = [-0.35, 0.35]   # min max [m/s]
-            ang_vel_yaw = [-1, 1]    # min max [rad/s]
-            heading = [-3.14, 3.14]
-
-    class domain_rand:
-        randomize_friction = False
+    class domain_rand(LeggedRobotTrajectoryCfg.domain_rand):
+        randomize_friction = True
         friction_range = [0.5, 1.25]
-        randomize_base_mass = False
+        randomize_base_mass = True
         added_mass_range = [-1., 1.]
+        randomize_inv_base_mass = True
+        inv_mass_range = [-1., 1.]
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
 
-    class rewards:
-        class scales:
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
+        class rigid_shape_properties:
+            randomize_restitution = True
+            restitution_range = [0.0, 1.0]
+            randomize_compliance = True
+            compliance_range = [0.0, 1.0]
+            randomize_thickness = True
+            thickness_range = [0.0, 0.05]
+
+        class dof_properties:
+            randomize_stiffness = True
+            added_stiffness_range = [-5.0, 5.0]
+            randomize_damping = True
+            added_damping_range = [-.2, .2]
+
+    class rewards(LeggedRobotTrajectoryCfg.rewards):
+        class scales(LeggedRobotTrajectoryCfg.rewards.scales):
             orientation = -1.
             collision = -1.
             action_rate = -0.1
@@ -146,17 +148,17 @@ class HopperRoughCfg( LeggedRobotCfg ):
         max_contact_force = 100.  # forces above this value are penalized
 
 
-class HopperRoughCfgPPO( LeggedRobotCfgPPO ):
-    class policy(LeggedRobotCfgPPO.policy):
+class HopperRoughTrajectoryCfgPPO( LeggedRobotTrajectoryCfgPPO ):
+    class policy(LeggedRobotTrajectoryCfgPPO.policy):
         actor_hidden_dims = [128, 64, 32]
         critic_hidden_dims = [128, 64, 32]
         activation = 'elu'  # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
 
-    class algorithm(LeggedRobotCfgPPO.algorithm):
+    class algorithm(LeggedRobotTrajectoryCfgPPO.algorithm):
         entropy_coef = 0.01
 
-    class runner(LeggedRobotCfgPPO.runner):
+    class runner(LeggedRobotTrajectoryCfgPPO.runner):
         run_name = ''
-        experiment_name = 'hopper'
+        experiment_name = 'hopper_flat_trajectory'
         load_run = -1
-        max_iterations = 300
+        max_iterations = 1500
