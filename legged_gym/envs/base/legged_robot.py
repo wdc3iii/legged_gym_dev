@@ -162,7 +162,6 @@ class LeggedRobot(BaseTask):
         # avoid updating command curriculum at each step since the maximum command is common to all envs
         if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
             self.update_command_curriculum(env_ids)
-
         # reset robot states
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)
@@ -280,6 +279,22 @@ class LeggedRobot(BaseTask):
 
             for s in range(len(props)):
                 props[s].friction = self.friction_coeffs[env_id]
+
+                # Randomize restitution
+                if self.cfg.domain_rand.rigid_shape_properties.randomize_restitution:
+                    rng = self.cfg.domain_rand.rigid_shape_properties.restitution_range
+                    props[s].restitution = np.random.uniform(rng[0], rng[1])
+
+                # Randomize compliance
+                if self.cfg.domain_rand.rigid_shape_properties.randomize_compliance:
+                    rng = self.cfg.domain_rand.rigid_shape_properties.compliance_range
+                    props[s].compliance = np.random.uniform(rng[0], rng[1])
+
+                # Randomize thickness
+                if self.cfg.domain_rand.rigid_shape_properties.randomize_thickness:
+                    rng = self.cfg.domain_rand.rigid_shape_properties.thickness_range
+                    props[s].thickness = np.random.uniform(rng[0], rng[1])
+
         return props
 
     def _process_dof_props(self, props, env_id):
@@ -312,16 +327,16 @@ class LeggedRobot(BaseTask):
         return props
 
     def _process_rigid_body_props(self, props, env_id):
-        # if env_id==0:
-        #     sum = 0
-        #     for i, p in enumerate(props):
-        #         sum += p.mass
-        #         print(f"Mass of body {i}: {p.mass} (before randomization)")
-        #     print(f"Total mass {sum} (before randomization)")
-        # randomize base mass
+        # Randomize base mass
         if self.cfg.domain_rand.randomize_base_mass:
             rng = self.cfg.domain_rand.added_mass_range
             props[0].mass += np.random.uniform(rng[0], rng[1])
+
+        # Randomize inv mass
+        if self.cfg.domain_rand.randomize_inv_base_mass:
+            rng = self.cfg.domain_rand.inv_mass_range
+            props[0].invMass = np.random.uniform(rng[0], rng[1])
+
         return props
 
     def _post_physics_step_callback(self):

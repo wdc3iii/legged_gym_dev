@@ -130,9 +130,26 @@ class LeggedRobotCfg(BaseConfig):
         friction_range = [0.5, 1.25]
         randomize_base_mass = False
         added_mass_range = [-1., 1.]
+        randomize_inv_base_mass = False
+        inv_mass_range = [-1., 1.]
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
+
+        # below is for hopper
+        class rigid_shape_properties:
+            randomize_restitution = False
+            restitution_range = [0.0, 1.0]
+            randomize_compliance = False
+            compliance_range = [0.0, 1.0]
+            randomize_thickness = False
+            thickness_range = [0.0, 0.05]
+
+        class dof_properties:
+            randomize_stiffness = False
+            added_stiffness_range = [-50.0, 50.0]
+            randomize_damping = False
+            added_damping_range = [-2.0, 2.0]
 
     class rewards:
         class scales:

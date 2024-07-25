@@ -113,18 +113,6 @@ class Hopper(LeggedRobot):
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
 
-        # Randomize damping by adding a random value within the specified range
-        if self.cfg.domain_rand.dof_properties.randomize_damping:
-            rng = self.cfg.domain_rand.dof_properties.added_damping_range
-            random_damping_addition = np.random.uniform(rng[0], rng[1])
-            self.spring_damping += random_damping_addition
-
-        # Randomize stiffness by adding a random value within the specified range
-        if self.cfg.domain_rand.dof_properties.randomize_stiffness:
-            rng = self.cfg.domain_rand.dof_properties.added_stiffness_range
-            random_stiffness_addition = np.random.uniform(rng[0], rng[1])
-            self.spring_stiffness += random_stiffness_addition
-
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
 
