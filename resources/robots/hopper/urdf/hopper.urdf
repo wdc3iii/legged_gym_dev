@@ -111,7 +111,7 @@
     <!-- <origin xyz="0.0776 0 0.0547" rpy = "0.0545 -0.0042 0.0775"/> -->
     <axis xyz="0 0 1"/>
     <!-- effort is in Nm, vel in rad/s, postiion should be infinity, check if null is allowed this!!! -->
-    <limit effort="1.6" velocity="600"/>
+    <limit effort="2.1" velocity="600"/>
   </joint>
 
   <joint name="wheel2_rotation" type="revolute">
@@ -120,7 +120,7 @@
     <origin xyz="-0.0388 0.0672 0.0548" rpy = "-0.87 -0.4 0"/>
     <!-- <origin xyz="-0.0388 0.0672 0.0548" rpy = "0.0523 0.0692 -0.0351"/> -->
     <axis xyz="0 0 1"/>
-    <limit effort="1.6" velocity="600"/>
+    <limit effort="2.1" velocity="600"/>
   </joint>
 
   <joint name="wheel3_rotation" type="revolute">
@@ -129,7 +129,7 @@
     <origin xyz="-0.0388 -0.0672 0.0548" rpy = "0.87 -0.4 0"/>
     <!-- <origin xyz="-0.0388 -0.0672 0.0548" rpy = "0.0575 -0.0649 -0.0425"/> -->
     <axis xyz="0 0 1"/>
-    <limit effort="1.6" velocity="600"/>
+    <limit effort="2.1" velocity="600"/>
   </joint>
 
 </robot>
