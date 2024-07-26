@@ -1,13 +1,10 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-
-def clip_and_save_data(csv_file, output_dir, start_time=1.0, end_time=1.95):
+import numpy as np
+def clip_and_save_data(csv_file, output_dir, start_time=3.4, end_time=4.1):
     # Load the CSV file
     data = pd.read_csv(csv_file)
-
-    # Filter out rows with 'shoulder' and 'forearm' in the 'Joint' column
-    data = data[~data['Joint'].str.contains('shoulder|forearm|foot|base', case=False)]
 
     # Clip the data to the specified time range
     clipped_data = data[(data['Time'] >= start_time) & (data['Time'] <= end_time)].copy()
@@ -28,7 +25,7 @@ def plot_joint_data(csv_file):
     data = pd.read_csv(csv_file)
 
     # Extract unique joint names
-    joints = data['Joint'].unique()
+    joints = [col for col in data.columns if col.startswith('P_') or col.startswith('V_')]
 
     # Initialize a figure for plotting
     plt.figure(figsize=(14, 8))
@@ -37,22 +34,26 @@ def plot_joint_data(csv_file):
     # Plot joint positions
     plt.subplot(2, 1, 1)
     for joint in joints:
-        joint_data = data[data['Joint'] == joint]
-        plt.plot(joint_data['Time'], joint_data['Position'], label=joint)
+        if joint.startswith('P_'):
+            plt.plot(data['Time'], data[joint], label=joint)
     plt.xlabel('Time (s)')
     plt.ylabel('Position')
     plt.title('Joint Positions Over Time')
     plt.legend(loc='best')
+    plt.grid(True)
+    plt.xticks(np.arange(0, data['Time'].max(), 0.1))
 
     # Plot joint velocities
     plt.subplot(2, 1, 2)
     for joint in joints:
-        joint_data = data[data['Joint'] == joint]
-        plt.plot(joint_data['Time'], joint_data['Velocity'], label=joint)
+        if joint.startswith('V_'):
+            plt.plot(data['Time'], data[joint], label=joint)
     plt.xlabel('Time (s)')
     plt.ylabel('Velocity')
     plt.title('Joint Velocities Over Time')
     plt.legend(loc='best')
+    plt.grid(True)
+    plt.xticks(np.arange(0, data['Time'].max(), 0.1))
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
@@ -64,11 +65,11 @@ def process_and_plot_all_csvs(unprocessed_dir, processed_dir):
     # Iterate through each CSV file, clip its data, save it, and plot it
     for csv_file in csv_files:
         csv_path = os.path.join(unprocessed_dir, csv_file)
-        clip_and_save_data(csv_path, processed_dir)
+        # clip_and_save_data(csv_path, processed_dir)
         processed_csv_path = os.path.join(processed_dir, csv_file)
         plot_joint_data(processed_csv_path)
 
 # Example usage
-unprocessed_directory = 'adam_reference_trajectories/unprocessed'  # Replace with your unprocessed directory path
-processed_directory = 'adam_reference_trajectories/processed'      # Replace with your processed directory path
+unprocessed_directory = 'adam_reference_trajectories/unprocessed'
+processed_directory = 'adam_reference_trajectories/unprocessed'
 process_and_plot_all_csvs(unprocessed_directory, processed_directory)
