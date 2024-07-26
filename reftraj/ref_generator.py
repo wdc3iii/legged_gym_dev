@@ -51,14 +51,16 @@ class ReferenceTrajectoryGenerator:
             csv_path = os.path.join(self.csv_directory, file_name)
             if os.path.exists(csv_path):
                 data = pd.read_csv(csv_path)
-                times = data['Time'].unique()
+                times = data['Time'].values
                 positions = []
                 velocities = []
-                joints = data['Joint'].unique()
+                joints = [col for col in data.columns if col.startswith('P_') or col.startswith('V_') and not col.startswith('V_X') and not col.startswith('V_Y')]
+
                 for joint in joints:
-                    joint_data = data[data['Joint'] == joint]
-                    positions.append(joint_data['Position'].values)
-                    velocities.append(joint_data['Velocity'].values)
+                    if joint.startswith('P_'):
+                        positions.append(data[joint].values)
+                    elif joint.startswith('V_'):
+                        velocities.append(data[joint].values)
 
                 positions = torch.tensor(positions, device=self.device, dtype=torch.float).T
                 velocities = torch.tensor(velocities, device=self.device, dtype=torch.float).T
@@ -69,6 +71,7 @@ class ReferenceTrajectoryGenerator:
                 print(f"CSV file for speed {speed_bin:.1f} not found. Using zeros.")
                 self.trajectories.append(torch.zeros((0, 2, self.dof), device=self.device))
                 self.trajectory_times.append(torch.zeros((0,), device=self.device))
+
 
     def load_trajectory_from_tensor(self, robot_index, speed_bin_index):
         """
