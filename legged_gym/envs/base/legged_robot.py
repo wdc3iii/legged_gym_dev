@@ -178,6 +178,10 @@ class LeggedRobot(BaseTask):
         if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
             self.update_command_curriculum(env_ids)
 
+        # update the reference trajectory curriculum weighting
+        if self.cfg.rewards.reference_trajectory.curriculum:
+            self.update_reftraj_curriculum(env_ids)
+
         # reset robot states
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)
@@ -511,6 +515,27 @@ class LeggedRobot(BaseTask):
                                                           -self.cfg.commands.max_curriculum, 0.)
             self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0.,
                                                           self.cfg.commands.max_curriculum)
+
+    def update_reftraj_curriculum(self, env_ids):
+        """Update the curriculum for reference trajectory following.
+
+        Args:
+            env_ids (List[int]): ids of environments being reset
+        """
+        # Thresholds for reducing reward scales
+        pos_threshold = self.cfg.rewards.reference_trajectory.pos_threshold * self.reward_scales["reference_traj_pos"]
+        vel_threshold = self.cfg.rewards.reference_trajectory.vel_threshold * self.reward_scales["reference_traj_vel"]
+
+        # Check if the average rewards exceed the thresholds
+        avg_pos_reward = torch.mean(self.episode_sums["reference_traj_pos"][env_ids]) / self.max_episode_length
+        avg_vel_reward = torch.mean(self.episode_sums["reference_traj_vel"][env_ids]) / self.max_episode_length
+
+        # Reduce reward scales progressively (exp decay)
+        if avg_pos_reward > pos_threshold:
+            self.reward_scales["reference_traj_pos"] *= self.cfg.rewards.reference_trajectory.pos_scale
+
+        if avg_vel_reward > vel_threshold:
+            self.reward_scales["reference_traj_vel"] *= self.cfg.rewards.reference_trajectory.vel_threshold
 
     def _get_noise_scale_vec(self, cfg):
         observation_size = self.obs_buf.shape[1] + self.cfg.commands.short_term_history_length * (self.dof_pos.shape[1] + self.dof_vel.shape[1])

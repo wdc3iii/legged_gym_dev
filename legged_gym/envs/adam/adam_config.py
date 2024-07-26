@@ -16,7 +16,8 @@ class AdamRoughCfg(LeggedRobotCfg):
         static_friction = 1.0
 
     class init_state(LeggedRobotCfg.init_state):
-        pos = [0.0, 0.0, .7]  # x,y,z [m]
+        # pos = [0.0, 0.0, .7]  # x,y,z [m]
+        pos = [0.0, 0.0, 2]  # x,y,z [m]
         default_joint_angles = {  # = target angles [rad] when action = 0.0
             'left_hip_yaw_joint': 13. / 180 * 3.14,
             'left_hip_roll_joint': 10. / 180 * 3.14,
@@ -50,6 +51,7 @@ class AdamRoughCfg(LeggedRobotCfg):
 
     class asset(LeggedRobotCfg.asset):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/adam/urdf/adam.urdf'
+        disable_gravity = True
         name = "adam"
         foot_name = 'foot'
         penalize_contacts_on = ['hand', 'shin']

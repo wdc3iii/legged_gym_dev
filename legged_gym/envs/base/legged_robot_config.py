@@ -148,8 +148,8 @@ class LeggedRobotCfg(BaseConfig):
             feet_stumble = -0.0
             action_rate = -0.01
             stand_still = -0.
-            reference_traj_vel = 0
-            reference_traj_pos = 500
+            reference_traj_vel = 0.001
+            reference_traj_pos = 500.
 
         only_positive_rewards = True  # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)
@@ -159,6 +159,13 @@ class LeggedRobotCfg(BaseConfig):
         base_height_target = 1.
         max_contact_force = 100.  # forces above this value are penalized
         ref_track_sigma = 0.0
+
+        class reference_trajectory:
+            curriculum = True
+            pos_threshold = .8
+            vel_threshold = .8
+            pos_scale = .9
+            vel_scale = .9
 
     class normalization:
         class obs_scales:
