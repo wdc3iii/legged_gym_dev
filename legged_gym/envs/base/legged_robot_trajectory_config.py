@@ -66,7 +66,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
         terrain_proportions = [0.1, 0.1, 0.35, 0.25, 0.2]
         # trimesh only:
-        slope_treshold = 0.75  # slopes above this threshold will be corrected to vertical surfaces
+        slope_threshold = 0.75  # slopes above this threshold will be corrected to vertical surfaces
 
     class rom:
         cls = 'SingleInt2D'
@@ -79,6 +79,9 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         # v_min = [0, vel_max]
         # v_max = [0, vel_max]
         obs_scales = [1, 1]
+        curriculum = True
+        curriculum_threshold = 0.2
+        curriculum_transition_rate = 0.1
 
     class trajectory_generator:
         cls = 'TrajectoryGenerator'

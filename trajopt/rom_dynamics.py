@@ -396,7 +396,7 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 
 class TrajectoryGenerator:
 
-    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42):
+    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42, curriculum=False):
         self.rom = rom
         self.rng = np.random.RandomState(seed)
         self.N = N
@@ -418,6 +418,7 @@ class TrajectoryGenerator:
         self.weight_sampler = weight_sampler
         self.trajectory = np.zeros((self.rom.n_robots, self.N, self.rom.n))
         self.v = np.zeros((self.rom.n_robots, self.rom.m))
+        self.curriculum = curriculum
 
     def reset_inputs(self):
         t_mask = np.ones_like(self.t_final, dtype=bool)
@@ -433,7 +434,8 @@ class TrajectoryGenerator:
             self._resample_extreme_input(idx, v_min, v_max)
             self._resample_sinusoid_input(idx, v_min, v_max)
             self._resample_t_final(idx)
-            self._resample_weight(idx)
+            if not self.curriculum:
+                self._resample_weight(idx)
 
     def _resample_t_final(self, idx):
         self.t_final[idx] += self.t_sampler.sample(len(idx))

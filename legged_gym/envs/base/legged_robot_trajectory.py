@@ -107,7 +107,8 @@ class LeggedRobotTrajectory(BaseTask):
             N=traj_cfg.N,
             freq_low=traj_cfg.freq_low,
             freq_high=traj_cfg.freq_high,
-            seed=traj_cfg.seed
+            seed=traj_cfg.seed,
+            curriculum=self.cfg.rom.curriculum,
         )
 
     def step(self, actions):
@@ -194,8 +195,8 @@ class LeggedRobotTrajectory(BaseTask):
         if self.cfg.terrain.curriculum:
             self._update_terrain_curriculum(env_ids)
         # avoid updating command curriculum at each step since the maximum command is common to all envs
-        # if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
-        #     self.update_command_curriculum(env_ids)
+        if self.cfg.rom.curriculum and (self.common_step_counter % self.max_episode_length == 0):
+            self.update_command_curriculum(env_ids)
 
         # reset robot states
         self._reset_dofs(env_ids)
@@ -230,7 +231,7 @@ class LeggedRobotTrajectory(BaseTask):
 
     def compute_reward(self):
         """ Compute rewards
-            Calls each reward function which had a non-zero scale (processed in self._prepare_reward_function())
+            Calls each reward function which had a non-zero scale (processed_old in self._prepare_reward_function())
             adds each terms to the episode sums and to the total reward
         """
         self.rew_buf[:] = 0.
@@ -486,19 +487,42 @@ class LeggedRobotTrajectory(BaseTask):
                                                               0))  # (the minumum level is zero)
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
-    # def update_command_curriculum(self, env_ids):
-    #     """ Implements a curriculum of increasing commands
-    #
-    #     Args:
-    #         env_ids (List[int]): ids of environments being reset
-    #     """
-    #     # If the tracking reward is above 80% of the maximum, increase the range of commands
-    #     if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.8 * \
-    #             self.reward_scales["tracking_lin_vel"]:
-    #         self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5,
-    #                                                       -self.cfg.commands.max_curriculum, 0.)
-    #         self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0.,
-    #                                                       self.cfg.commands.max_curriculum)
+    def update_command_curriculum(self, env_ids):
+        """ Implements a curriculum of increasing commands
+
+        Args:
+            env_ids (List[int]): ids of environments being reset
+        """
+        if not self.init_done:
+            # don't change on initial reset
+            return
+
+        # Calculate move up and move down indices based on tracking error
+        tracking_errors = self._reward_tracking_rom()
+        low_error_envs = tracking_errors < self.cfg.rom.curriculum_threshold
+
+        # Filter environments that need weight update
+        valid_env_ids = env_ids[low_error_envs[env_ids]].cpu()
+
+        # TODO: already vectorized, but have to put on cpu to interface with rom_dynamics
+        if len(valid_env_ids) > 0:
+            transition_rate = self.cfg.rom.curriculum_transition_rate
+
+            current_weights = self.traj_gen.weights[valid_env_ids]
+
+            # Calculate target weights
+            current_weights = torch.from_numpy(current_weights)
+            target_weights = torch.ones_like(current_weights) / current_weights.size(1)
+
+            # Update weights towards the target weights
+            new_weights = current_weights + transition_rate * (target_weights - current_weights)
+
+            # Normalize the new weights
+            new_weights = new_weights / new_weights.sum(dim=1, keepdim=True)
+
+            # Update the weights for the valid environments
+            self.traj_gen.weights[valid_env_ids] = new_weights.numpy()
+            print(self.traj_gen.weights[valid_env_ids])
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -528,7 +552,7 @@ class LeggedRobotTrajectory(BaseTask):
 
     # ----------------------------------------
     def _init_buffers(self):
-        """ Initialize torch tensors which will contain simulation states and processed quantities
+        """ Initialize torch tensors which will contain simulation states and processed_old quantities
         """
         # get gym GPU state tensors
         actor_root_state = self.gym.acquire_actor_root_state_tensor(self.sim)

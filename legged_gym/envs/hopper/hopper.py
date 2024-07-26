@@ -223,7 +223,7 @@ class Hopper(LeggedRobot):
 
     # ----------------------------------------
     def _init_buffers(self):
-        """ Initialize torch tensors which will contain simulation states and processed quantities
+        """ Initialize torch tensors which will contain simulation states and processed_old quantities
         """
         super()._init_buffers()
         self.kd_spindown = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)

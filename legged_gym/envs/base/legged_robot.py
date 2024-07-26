@@ -191,7 +191,7 @@ class LeggedRobot(BaseTask):
 
     def compute_reward(self):
         """ Compute rewards
-            Calls each reward function which had a non-zero scale (processed in self._prepare_reward_function())
+            Calls each reward function which had a non-zero scale (processed_old in self._prepare_reward_function())
             adds each terms to the episode sums and to the total reward
         """
         self.rew_buf[:] = 0.
@@ -522,7 +522,7 @@ class LeggedRobot(BaseTask):
 
     # ----------------------------------------
     def _init_buffers(self):
-        """ Initialize torch tensors which will contain simulation states and processed quantities
+        """ Initialize torch tensors which will contain simulation states and processed_old quantities
         """
         # get gym GPU state tensors
         actor_root_state = self.gym.acquire_actor_root_state_tensor(self.sim)
