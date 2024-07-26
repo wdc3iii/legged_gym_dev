@@ -419,6 +419,8 @@ class TrajectoryGenerator:
         self.trajectory = np.zeros((self.rom.n_robots, self.N, self.rom.n))
         self.v = np.zeros((self.rom.n_robots, self.rom.m))
         self.curriculum = curriculum
+        if self.curriculum:
+            self.weights = np.tile(np.array([1., 0., 0., 0.]), (self.rom.n_robots, 1))
 
     def reset_inputs(self):
         t_mask = np.ones_like(self.t_final, dtype=bool)

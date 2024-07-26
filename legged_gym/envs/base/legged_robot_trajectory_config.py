@@ -80,8 +80,8 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         # v_max = [0, vel_max]
         obs_scales = [1, 1]
         curriculum = True
-        curriculum_threshold = 0.2
-        curriculum_transition_rate = 0.1
+        curriculum_threshold = 0.0005
+        curriculum_transition_rate = 0.05
 
     class trajectory_generator:
         cls = 'TrajectoryGenerator'

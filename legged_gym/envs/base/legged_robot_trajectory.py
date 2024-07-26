@@ -505,7 +505,7 @@ class LeggedRobotTrajectory(BaseTask):
         valid_env_ids = env_ids[low_error_envs[env_ids]].cpu()
 
         # TODO: already vectorized, but have to put on cpu to interface with rom_dynamics
-        if len(valid_env_ids) > 0:
+        if len(valid_env_ids) > 1: # ran into issues when it was only 1
             transition_rate = self.cfg.rom.curriculum_transition_rate
 
             current_weights = self.traj_gen.weights[valid_env_ids]
@@ -522,7 +522,6 @@ class LeggedRobotTrajectory(BaseTask):
 
             # Update the weights for the valid environments
             self.traj_gen.weights[valid_env_ids] = new_weights.numpy()
-            print(self.traj_gen.weights[valid_env_ids])
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
