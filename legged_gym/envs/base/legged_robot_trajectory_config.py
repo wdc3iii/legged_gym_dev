@@ -70,23 +70,24 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
 
     class rom:
         cls = 'SingleInt2D'
-        vel_max = 1
+        vel_max = 1.
         pos_max = 1e9
         z_min = [-pos_max, -pos_max]
         z_max = [pos_max, pos_max]
+        # v_min = [-vel_max / 3, -vel_max / 3]
+        # v_max = [vel_max / 3, vel_max / 3]
         v_min = [-vel_max, -vel_max]
         v_max = [vel_max, vel_max]
-        # v_min = [0, vel_max]
-        # v_max = [0, vel_max]
         obs_scales = [1, 1]
-        curriculum = True
-        curriculum_threshold = 0.0005
-        curriculum_transition_rate = 0.05
+        curriculum = False
+        curriculum_threshold = 0.01
+        weights_curriculum_transition_rate = 0.05
+        speed_curriculum_transition_rate = .05
 
     class trajectory_generator:
         cls = 'TrajectoryGenerator'
         t_samp_cls = 'UniformSampleHoldDT'
-        weight_samp_cls = 'WeightSamplerSampleAndHold'
+        weight_samp_cls = 'UniformWeightSamplerNoExtreme'
         N = 10
         t_low = 1
         t_high = 2

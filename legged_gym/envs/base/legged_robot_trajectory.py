@@ -195,8 +195,11 @@ class LeggedRobotTrajectory(BaseTask):
         if self.cfg.terrain.curriculum:
             self._update_terrain_curriculum(env_ids)
         # avoid updating command curriculum at each step since the maximum command is common to all envs
-        if self.cfg.rom.curriculum and (self.common_step_counter % self.max_episode_length == 0):
+        if self.cfg.rom.curriculum and (self.common_step_counter % 500):
             self.update_command_curriculum(env_ids)
+
+        # if True and (self.common_step_counter % self.max_episode_length == 0):
+        #     self.update_speed_curriculum(env_ids)
 
         # reset robot states
         self._reset_dofs(env_ids)
@@ -497,16 +500,18 @@ class LeggedRobotTrajectory(BaseTask):
             # don't change on initial reset
             return
 
+        print('command update')
+
         # Calculate move up and move down indices based on tracking error
-        tracking_errors = self._reward_tracking_rom()
-        low_error_envs = tracking_errors < self.cfg.rom.curriculum_threshold
+        tracking_accuracy = self._reward_tracking_rom()
+        low_error_envs = tracking_accuracy > (1 - self.cfg.rom.curriculum_threshold)
 
         # Filter environments that need weight update
         valid_env_ids = env_ids[low_error_envs[env_ids]].cpu()
 
         # TODO: already vectorized, but have to put on cpu to interface with rom_dynamics
-        if len(valid_env_ids) > 1: # ran into issues when it was only 1
-            transition_rate = self.cfg.rom.curriculum_transition_rate
+        if len(valid_env_ids) > 1:  # ran into issues when it was only 1
+            transition_rate = self.cfg.rom.weights_curriculum_transition_rate
 
             current_weights = self.traj_gen.weights[valid_env_ids]
 
@@ -522,6 +527,45 @@ class LeggedRobotTrajectory(BaseTask):
 
             # Update the weights for the valid environments
             self.traj_gen.weights[valid_env_ids] = new_weights.numpy()
+
+    def update_speed_curriculum(self, env_ids):
+        """ Implements a curriculum of increasing maximum and minimum speeds
+
+        Args:
+            env_ids (List[int]): ids of environments being reset
+        """
+        if not self.init_done:
+            # don't change on initial reset
+            return
+
+        # Calculate move up and move down indices based on tracking error
+        tracking_errors = self._reward_tracking_rom()
+        low_error_envs = tracking_errors < (1 - self.cfg.rom.curriculum_threshold)
+
+        # Filter environments that need speed update
+        valid_env_ids = env_ids[low_error_envs[env_ids]].cpu()
+
+        # TODO: see if we need to separate out the roms so each can have individual speed
+        if len(valid_env_ids) > self.cfg.env.num_envs / 2:  # update for all if 50% are performing well enough.
+            transition_rate = self.cfg.rom.speed_curriculum_transition_rate
+
+            # Get the current max and min speeds
+            current_v_max = self.rom.v_max
+            current_v_min = self.rom.v_min
+
+            # Calculate the increment
+            vel_max = np.array(self.cfg.rom.vel_max)
+            increment = transition_rate * vel_max
+
+            # Calculate new max and min speeds
+            new_v_max = np.minimum(current_v_max + increment, vel_max)
+            new_v_min = np.maximum(current_v_min - increment, -vel_max)
+
+            # Update the max and min speeds for the valid environments
+            self.rom.v_max = new_v_max
+            self.rom.v_min = new_v_min
+
+            print('updated', len(valid_env_ids))
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
