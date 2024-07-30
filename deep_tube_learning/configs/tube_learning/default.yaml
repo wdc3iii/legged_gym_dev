@@ -1,7 +1,7 @@
 seed: 42
 
-batch_size: 4096
-num_epochs: 1000
+batch_size: 2048
+num_epochs: 10
 validation_split: 0.8
 
 experiment_name: "default"
@@ -10,7 +10,7 @@ lr: 1e-3
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarTubeDataset.from_wandb
-  wandb_experiment: "single_integrator_6u8wikhv"
+  wandb_experiment: "dataset_hwj9odcg"
 
 optimizer:
   _target_: torch.optim.Adam

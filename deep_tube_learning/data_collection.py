@@ -2,6 +2,7 @@ import isaacgym
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 
+import os
 import hydra
 import torch
 import wandb
@@ -109,7 +110,7 @@ def data_creation_main(cfg):
         z[0, :, :] = rom.proj_z(base)
         pz_x[0, :, :] = rom.proj_z(base)
 
-        traj_gen.reset()
+        traj_gen.reset(rom.proj_z(env.root_states).cpu())
 
         # Loop over time steps
         for t in range(int(env.max_episode_length)):

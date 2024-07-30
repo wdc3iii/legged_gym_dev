@@ -478,7 +478,7 @@ class TrajectoryGenerator:
 
     def _sinusoid_input_t(self, t):
         return self.sin_mag * np.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
-        # return self.sin_mag * np.sin(self.sin_freq * t + self.sin_off) + self.sin_mean              # change to get trajectory_gen.py to run
+        # return self.sin_mag * np.sin(self.sin_freq * t + self.sin_off) + self.sin_mean              # change to get trajectory_gen.py and data_collection.py to run
 
     def get_input_t(self, t, z):
         idx = (t > self.t_final).nonzero()[0]

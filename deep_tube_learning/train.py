@@ -52,7 +52,7 @@ def create_data_loaders(dataset: TubeDataset, batch_size, validation_split):
 
 @hydra.main(
     config_path=str(Path(__file__).parent / "configs" / "tube_learning"),
-    config_name="default",
+    config_name="tube_learning",
     version_base="1.2",
 )
 def main(cfg):

@@ -6,7 +6,7 @@ experiment_name: "error_dynamics"
 
 dataset:
   _target_: deep_tube_learning.datasets.ErrorDynamicsDataset.from_wandb
-  wandb_experiment: "single_integrator_6u8wikhv"
+  wandb_experiment: "dataset_ikdwrf86"
 
 loss:
   _target_: deep_tube_learning.losses.ErrorLoss
