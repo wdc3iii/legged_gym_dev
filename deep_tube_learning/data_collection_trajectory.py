@@ -2,6 +2,7 @@ import isaacgym
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 
+import os
 import hydra
 import torch
 import wandb
@@ -17,7 +18,7 @@ from hydra.utils import instantiate
 from deep_tube_learning.utils import quat2yaw, yaw2rot, wrap_angles
 
 
-CMD_START_IDX = 9
+CMD_START_IDX = 16  # 9 for any robot except hopper which is 16 (reference compute_observations in hopper_trajectory.py
 
 
 def get_state(base, joint_pos, joint_vel):
@@ -26,7 +27,7 @@ def get_state(base, joint_pos, joint_vel):
 
 @hydra.main(
     config_path=str(Path(__file__).parent / "configs" / "data_generation"),
-    config_name="default",
+    config_name="default_trajectory",
     version_base="1.2",
 )
 def data_creation_main(cfg):
@@ -130,7 +131,6 @@ def data_creation_main(cfg):
             err_local_all[t, :, :] = err_local.copy()
 
             # Step environment
-
             obs[:, CMD] = traj.reshape(env.num_envs, -1)
             actions = policy(obs.detach())
             obs, _, _, dones, _ = env.step(actions.detach())

@@ -3,7 +3,7 @@ dataset_name: "dataset"
 
 num_robots: 2
 epochs: 10
-task: "anymal_c_flat_trajectory"
+task: "hopper_flat_trajectory"
 headless: False
 save_debugging_data: False
 upload_to_wandb: False
@@ -14,8 +14,8 @@ acc_max: 2
 acc_min: -2
 alpha_max: 4
 alpha_min: -4
-vel_max: 1
-vel_min: -1
+vel_max: .35
+vel_min: -.35
 vel_par_max: 1
 vel_perp_max: 0.5
 vel_par_min: -0.5
@@ -61,7 +61,7 @@ trajectory_generator:
     t_low: 1
     t_high: 2
   freq_low: 0.01
-  freq_high: 10
+  freq_high: 2
   weight_sampler:
     _target_: deep_tube_learning.utils.WeightSamplerSampleAndHold
   seed: ${seed}

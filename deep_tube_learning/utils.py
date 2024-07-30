@@ -56,7 +56,11 @@ class WeightSamplerSampleAndHold:
 
     def sample(self, num_samples: int):
         new_weights = self.rng.uniform(size=(num_samples, self.dim))
-        new_weights[:, 1:] = 0
+        # new_weights[:, 2:] = 0
+        # new_weights[:, 0] = 0
+        new_weights[:, 1] = 0
+        # new_weights[:, 2] = 0
+        # new_weights[:, 3] = 0
         return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
 
 

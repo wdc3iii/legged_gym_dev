@@ -108,7 +108,7 @@ class LeggedRobotTrajectory(BaseTask):
             freq_low=traj_cfg.freq_low,
             freq_high=traj_cfg.freq_high,
             seed=traj_cfg.seed,
-            curriculum=self.cfg.rom.curriculum,
+            curriculum=self.cfg.rom.weight_curriculum,
         )
 
     def step(self, actions):
@@ -195,11 +195,11 @@ class LeggedRobotTrajectory(BaseTask):
         if self.cfg.terrain.curriculum:
             self._update_terrain_curriculum(env_ids)
         # avoid updating command curriculum at each step since the maximum command is common to all envs
-        if self.cfg.rom.curriculum and (self.common_step_counter % 500):
+        if self.cfg.rom.weight_curriculum and (self.common_step_counter % 500):
             self.update_command_curriculum(env_ids)
 
-        # if True and (self.common_step_counter % self.max_episode_length == 0):
-        #     self.update_speed_curriculum(env_ids)
+        if self.cfg.rom.speed_curriculum and (self.common_step_counter % self.max_episode_length == 0):
+            self.update_speed_curriculum(env_ids)
 
         # reset robot states
         self._reset_dofs(env_ids)
@@ -540,13 +540,13 @@ class LeggedRobotTrajectory(BaseTask):
 
         # Calculate move up and move down indices based on tracking error
         tracking_errors = self._reward_tracking_rom()
-        low_error_envs = tracking_errors < (1 - self.cfg.rom.curriculum_threshold)
+        low_error_envs = tracking_errors > (1 - self.cfg.rom.curriculum_threshold)
 
         # Filter environments that need speed update
         valid_env_ids = env_ids[low_error_envs[env_ids]].cpu()
 
         # TODO: see if we need to separate out the roms so each can have individual speed
-        if len(valid_env_ids) > self.cfg.env.num_envs / 2:  # update for all if 50% are performing well enough.
+        if len(valid_env_ids) > len(env_ids) / 2:  # update for all if 50% are performing well enough.
             transition_rate = self.cfg.rom.speed_curriculum_transition_rate
 
             # Get the current max and min speeds
@@ -565,7 +565,7 @@ class LeggedRobotTrajectory(BaseTask):
             self.rom.v_max = new_v_max
             self.rom.v_min = new_v_min
 
-            print('updated', len(valid_env_ids))
+            print(f'Updated Speed to v_max of {new_v_max} and v_min of {new_v_min} due to {len(valid_env_ids)} out of {len(env_ids)} achieving tracking errors exceeding {1 - self.cfg.rom.curriculum_threshold}')
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.

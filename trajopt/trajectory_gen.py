@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
                                   ExtendedUnicycle, ExtendedLateralUnicycle, TrajectoryGenerator)
-from deep_tube_learning.utils import UniformSampleHoldDT
+from deep_tube_learning.utils import UniformSampleHoldDT, WeightSamplerSampleAndHold
 
 
 dt = 0.02
@@ -19,8 +19,9 @@ num_robots = 3
 
 def test_numpy_rom(pm):
     t_samp = UniformSampleHoldDT(0.1, 2)
-    traj_gen = TrajectoryGenerator(pm, t_samp)
-    traj_gen.reset()
+    w_samp = WeightSamplerSampleAndHold()
+    traj_gen = TrajectoryGenerator(pm, t_samp, w_samp)
+    # traj_gen.reset()
 
     z0 = np.zeros((num_robots, pm.n,))
     zt = np.zeros((N + 1, num_robots, pm.n))
@@ -95,9 +96,9 @@ def test_numpy_extended_lateral_unicycle():
 
 
 if __name__ == "__main__":
-    # test_numpy_single_int()
+    test_numpy_single_int()
     # test_numpy_double_int()
     # test_numpy_unicycle()
     # test_numpy_lateral_unicycle()
     # test_numpy_extended_unicycle()
-    test_numpy_extended_lateral_unicycle()
+    # test_numpy_extended_lateral_unicycle()
