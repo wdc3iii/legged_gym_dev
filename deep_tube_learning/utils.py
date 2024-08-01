@@ -200,6 +200,20 @@ def update_args_from_hydra(cfg, args):
     return args
 
 
+def set_matching_attributes_from_dict(cfg, new_cfg):
+    for key, val in new_cfg.items():
+        if key in cfg.keys():
+            if isinstance(val, DictConfig):
+                set_attributes_from_dict(cfg[key], val)
+            else:
+                cfg[key] = val
+
+
+def update_hydra_cfg(new_cfg, cfg):
+    set_matching_attributes_from_dict(cfg, new_cfg)
+    return cfg
+
+
 def policy_runner_wandb_callback(
         data,
         lr,

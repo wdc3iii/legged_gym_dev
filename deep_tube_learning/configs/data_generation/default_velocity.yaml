@@ -1,12 +1,12 @@
 seed: 42
 dataset_name: "dataset"
 
-num_robots: 200
-epochs: 100
-task: "hopper_flat_trajectory"
+num_robots: 2
+epochs: 10
+task: null
 headless: False
 save_debugging_data: False
-upload_to_wandb: True
+upload_to_wandb: False
 
 track_yaw: True
 
@@ -14,8 +14,8 @@ acc_max: 2
 acc_min: -2
 alpha_max: 4
 alpha_min: -4
-vel_max: .35
-vel_min: -.35
+vel_max: 0.35
+vel_min: -0.35
 vel_par_max: 1
 vel_perp_max: 0.5
 vel_par_min: -0.5
@@ -58,11 +58,34 @@ trajectory_generator:
   _partial_: True
   t_sampler:
     _target_: deep_tube_learning.utils.UniformSampleHoldDT
-    t_low: 1
+    t_low: 0.01
     t_high: 2
   freq_low: 0.01
-  freq_high: 2
+  freq_high: 10
   weight_sampler:
-    _target_: deep_tube_learning.utils.WeightSamplerSampleAndHold
+    _target_: deep_tube_learning.utils.UniformWeightSampler
   seed: ${seed}
-  N: 10
+
+Kp:
+  _target_: numpy.diag
+  v: [2, 2, 2]
+
+u_vel_max: 1.5
+u_vel_min: -1.5
+u_vel_par_max: 1.5
+u_vel_perp_max: 0.75
+u_vel_par_min: -0.75
+u_omega_max: 1.5
+u_omega_min: -1.5
+u_min:
+  _target_: numpy.array
+  object:
+    - ${u_vel_min}
+    - ${u_vel_min}
+    - ${u_omega_min}
+u_max:
+  _target_: numpy.array
+  object:
+    - ${u_vel_max}
+    - ${u_vel_max}
+    - ${u_omega_max}

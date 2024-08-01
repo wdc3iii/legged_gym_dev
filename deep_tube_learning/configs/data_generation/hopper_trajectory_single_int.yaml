@@ -1,0 +1,30 @@
+defaults:
+  - default_hopper_trajectory
+  - _self_
+
+wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/z7jer8l7"
+dataset_name: "hopper_trajectory_single_int"
+
+env_config:
+  rom:
+    cls: 'SingleInt2D'
+    z_min:
+      - ${pos_min}
+      - ${pos_min}
+    z_max:
+      - ${pos_max}
+      - ${pos_max}
+    v_min:
+      - ${vel_min}
+      - ${vel_min}
+    v_max:
+      - ${vel_max}
+      - ${vel_max}
+    speed_curriculum: False
+    weight_curriculum: False
+  trajectory_generator:
+    t_low: 1
+    t_high: 2
+    freq_low: 0.01
+    freq_high: 1
+    seed: ${seed}

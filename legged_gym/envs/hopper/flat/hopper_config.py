@@ -146,14 +146,14 @@ class HopperRoughCfg( LeggedRobotCfg ):
     class rewards:
         class scales:
             # termination = -5.0
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            orientation = -1.
-            collision = -1.
-            action_rate = -0.1
-            torques = -0.00001
+            # tracking_lin_vel = 1.0
+            # tracking_ang_vel = 0.5
+            # orientation = -1.
+            collision = 0
+            # action_rate = -0.1
+            # torques = -0.00001
             # dof_acc = -2.5e-7
-            unit_quat = -0.1
+            # unit_quat = -0.1
 
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)

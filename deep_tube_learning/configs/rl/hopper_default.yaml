@@ -1,7 +1,10 @@
+defaults:
+  - default
+  - _self_
+
 task: 'hopper'
 experiment_name: 'hopper'
-seed: 42
-steps_per_model_checkpoint: 10
+headless: True
 
 env_config:
   env:
@@ -10,8 +13,6 @@ env_config:
     num_actions: 4
   rewards:
     scales:
-      tracking_lin_vel: 1.0
-      tracking_ang_vel: 0.5
       orientation: -1.
       collision: -1.
       action_rate: -0.1
@@ -51,7 +52,7 @@ env_config:
     decimation: 4
     control_type: "orientation"
 #    control_type: "orientation_spindown"
-    zero_action: [1.0, 0, 0, 0]
+    zero_action: [1.0, 0.0, 0.0, 0.0]
   asset:
     spring_stiffness: 7000
     spring_damping: 4
@@ -121,7 +122,7 @@ train_config:
 
 args:
   task: ${task}
-  headless: True
+  headless: ${headless}
   num_envs: ${env_config.env.num_envs}
   seed: ${seed}
   max_iterations: ${train_config.runner.max_iterations}

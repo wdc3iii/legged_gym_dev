@@ -15,7 +15,7 @@ from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
 from hydra.utils import instantiate
 
-from deep_tube_learning.utils import quat2yaw, yaw2rot, wrap_angles
+from deep_tube_learning.utils import quat2yaw, yaw2rot, wrap_angles, wandb_model_load, update_args_from_hydra, update_cfgs_from_hydra
 
 
 CMD_START_IDX = 9
@@ -35,9 +35,10 @@ def get_state(base, joint_pos, joint_vel):
     version_base="1.2",
 )
 def data_creation_main(cfg):
-    # Seed RNG
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
+    exp_name = cfg.wandb_experiment
+    model_name = f'{exp_name}_model:best'
+    api = wandb.Api()
+    rl_cfg, state_dict = wandb_model_load(api, model_name)
 
     # Send config to wandb
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -55,6 +56,17 @@ def data_creation_main(cfg):
     data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{cfg.dataset_name}_{run_id}")
     os.makedirs(data_path, exist_ok=True)
 
+    args = get_args()
+    args = update_args_from_hydra(rl_cfg, args)
+    env_cfg, train_cfg = task_registry.get_cfgs(rl_cfg.task)
+    env_cfg, train_cfg = update_cfgs_from_hydra(rl_cfg, env_cfg, train_cfg)
+
+    env, env_cfg = task_registry.make_env(name=rl_cfg.task, args=args, env_cfg=env_cfg)
+
+    train_cfg.runner.resume = True
+    ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
+    policy = ppo_runner.get_inference_policy(device=env.device)
+
     # Load configuration
     num_robots = cfg.num_robots
     rom = instantiate(cfg.reduced_order_model)
@@ -66,26 +78,8 @@ def data_creation_main(cfg):
 
     env_cfg, train_cfg = task_registry.get_cfgs(name=cfg.task)
 
-    # Override some parameters for testing
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, num_robots)
-    env_cfg.terrain.num_rows = 5
-    env_cfg.terrain.num_cols = 5
-    env_cfg.terrain.curriculum = False
-    env_cfg.noise.add_noise = False
-    env_cfg.domain_rand.randomize_friction = False
-    env_cfg.domain_rand.push_robots = False
-
-    # Prepare environment
-    args = get_args()
-    args.headless = cfg.headless
-    env, _ = task_registry.make_env(name=cfg.task, args=args, env_cfg=env_cfg)
     obs = env.get_observations()
     x_n = env.dof_pos.shape[1] + env.dof_vel.shape[1] + env.root_states.shape[1]
-
-    # Load policy
-    train_cfg.runner.resume = True
-    ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=cfg.task, args=args, train_cfg=train_cfg)
-    policy = ppo_runner.get_inference_policy(device=env.device)
 
     # Loop over epochs
     for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):

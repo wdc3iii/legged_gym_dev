@@ -133,10 +133,10 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
 
     class rewards(LeggedRobotTrajectoryCfg.rewards):
         class scales(LeggedRobotTrajectoryCfg.rewards.scales):
-            orientation = -1.
+            # orientation = -1.
             collision = -1.
-            action_rate = -0.1
-            torques = -0.00001
+            # action_rate = -0.1
+            # torques = -0.00001
             # dof_acc = -2.5e-7
 
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)

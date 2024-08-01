@@ -52,7 +52,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
         self.foot_pos_des = self.cfg.control.foot_pos_des
-        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0)
+        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -309,3 +309,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
     def _reward_dof_acc(self):
         # Penalize dof accelerations
         return torch.sum(torch.square((self.last_dof_vel[:, self.wheel_joint_indices] - self.dof_vel[:, self.wheel_joint_indices]) / self.dt), dim=1)
+
+    def _reward_unit_quat(self):
+        act_norm = torch.linalg.norm(self.actions, dim=-1)
+        return torch.square(1 - act_norm)

@@ -52,7 +52,7 @@ class Hopper(LeggedRobot):
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
         self.foot_pos_des = self.cfg.control.foot_pos_des
-        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0)
+        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()

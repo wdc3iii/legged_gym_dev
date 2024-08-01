@@ -8,17 +8,19 @@ experiment_name: 'hopper_traj'
 env_config:
   env:
     num_envs: 4096
-    num_observations: 23
+    num_observations: 40
     num_actions: 4
   rewards:
     scales:
-      tracking_lin_vel: 1.0
-      tracking_ang_vel: 0.5
-      orientation: -1.
+      termination: -0.5
+      tracking_rom: 6.0
+      ang_vel_xy: -0.05
+      orientation: -1.0
+      torques: -0.00001
+      dof_vel: -0.
+      dof_acc: -2.5e-7
       collision: -1.
       action_rate: -0.1
-      torques: -0.00001
-      unit_quat: -0.1
     only_positive_rewards: False  # if true negative total rewards are clipped at zero (avoids early termination problems)
     tracking_sigma: 0.25  # tracking reward = exp(-error^2/sigma)
     soft_dof_pos_limit: 1.  # percentage of urdf limits, values above this limit are penalized
@@ -28,20 +30,18 @@ env_config:
     max_contact_force: 100.  # forces above this value are penalized
   rom:
     cls: 'SingleInt2D'
-    vel_max: .35
-    pos_max: 1e9
     z_min:
-      - -${env_config.rom.pos_max}
-      - -${env_config.rom.pos_max}
+      - ${pos_min}
+      - ${pos_min}
     z_max:
-      - ${env_config.rom.pos_max}
-      - ${env_config.rom.pos_max}
+      - ${pos_max}
+      - ${pos_max}
     v_min:
-      - -${env_config.rom.vel_max}
-      - -${env_config.rom.vel_max}
+      - ${vel_min}
+      - ${vel_min}
     v_max:
-      - ${env_config.rom.vel_max}
-      - ${env_config.rom.vel_max}
+      - ${vel_max}
+      - ${vel_max}
     obs_scales: [1, 1]
     speed_curriculum: False
     weight_curriculum: False

@@ -1,0 +1,17 @@
+seed: 42
+steps_per_model_checkpoint: 10
+
+acc_max: 2
+acc_min: -2
+alpha_max: 4
+alpha_min: -4
+vel_max: 0.35
+vel_min: -0.35
+vel_par_max: 1
+vel_perp_max: 0.5
+vel_par_min: -0.5
+vel_perp_min: -0.5
+omega_max: 1
+omega_min: -1
+pos_max: 1e9
+pos_min: -1e9
