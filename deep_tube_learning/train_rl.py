@@ -4,11 +4,12 @@ from legged_gym.utils import get_args, task_registry
 
 import hydra
 import wandb
+import torch
 import pandas as pd
 from pathlib import Path
 from functools import partial
 from omegaconf import OmegaConf
-from deep_tube_learning.utils import update_cfgs_from_hydra, update_args_from_hydra, policy_runner_wandb_callback, CheckPointManager
+from deep_tube_learning.utils import update_cfgs_from_hydra, update_args_from_hydra, policy_runner_wandb_callback, CheckPointManager, wandb_load_artifact
 
 
 @hydra.main(
@@ -43,6 +44,25 @@ def main(cfg):
         )
     )
     ppo_runner.learn(num_learning_iterations=train_cfg.runner.max_iterations, init_at_random_ep_len=True)
+
+    model_name = f'coleonguard-Georgia Institute of Technology/RL_Training/{wandb.run.id}_model:best'
+    api = wandb.Api()
+    config, artifact = wandb_load_artifact(api, model_name)
+
+    dir_name = artifact.download(root=Path(f"models/{wandb.run.id}/best_model"))
+    ppo_runner.load(f'{dir_name}/model.pth')
+    obs = env.get_observations()
+    ppo_runner.alg.actor_critic.eval()
+    onnx_path = f"models/{wandb.run.id}/{cfg.experiment_name}_{wandb.run.id}.onnx"
+    torch.onnx.export(
+        ppo_runner.alg.actor_critic.actor,
+        obs[0].clone().detach(),
+        onnx_path,
+        export_params=True
+    )
+    print(f"Finishing run {wandb.run.id}")
+    print('Exported policy as onnx file to: ', onnx_path)
+    print("Waiting for wandb to finish uploading...")
 
 
 if __name__ == "__main__":

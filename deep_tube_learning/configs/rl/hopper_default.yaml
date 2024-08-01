@@ -9,8 +9,10 @@ headless: True
 env_config:
   env:
     num_envs: 4096
-    num_observations: 23
+    num_observations: 21
     num_actions: 4
+    send_timeouts: True
+    episode_length: 20
   rewards:
     scales:
       orientation: -1.
@@ -51,7 +53,6 @@ env_config:
     action_scale: 1
     decimation: 4
     control_type: "orientation"
-#    control_type: "orientation_spindown"
     zero_action: [1.0, 0.0, 0.0, 0.0]
   asset:
     spring_stiffness: 7000
@@ -71,8 +72,6 @@ env_config:
     obs_scales:
       lin_vel: 0.5
       ang_vel: 0.25
-      foot_pos: 0
-      foot_vel: 0
       dof_vel: 0.01
       z_pos: 1.0
     clip_observations: 100
@@ -81,7 +80,6 @@ env_config:
     add_noise: True
     noise_level: 1.0
     noise_scales:
-      foot_pos: 0.01
       dof_vel: 1.5
       lin_vel: 0.1
       ang_vel: 0.2

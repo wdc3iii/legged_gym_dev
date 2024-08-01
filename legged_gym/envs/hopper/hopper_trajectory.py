@@ -203,14 +203,11 @@ class HopperTrajectory(LeggedRobotTrajectory):
         # Adjust trajectory positions relative to current position
         mod_traj = torch.clone(self.trajectory)
         mod_traj -= self.rom.proj_z(self.root_states)[:, None, :2]
-        # print(self.trajectory[100, 0, :].cpu().numpy(), self.rom.proj_z(self.root_states)[100, :2].cpu().numpy(), mod_traj[100, 0, :].cpu().numpy())
 
         self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,
-                                  self.dof_pos[:, self.foot_joint_index] * self.obs_scales.foot_pos,
                                   self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
-                                  self.dof_vel[:, self.foot_joint_index] * self.obs_scales.foot_vel,
                                   self.dof_vel[:, self.wheel_joint_indices] * self.obs_scales.dof_vel,
                                   (mod_traj * self.trajectory_scale).reshape(self.num_envs, -1),
                                   self.actions
@@ -270,19 +267,17 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
         noise_vec[0] = noise_scales.z_pos * noise_level * self.obs_scales.z_pos
         noise_vec[1:5] = noise_scales.quat * noise_level
-        noise_vec[5] = noise_scales.foot_pos * noise_level * self.obs_scales.foot_pos
-        noise_vec[6:9] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
-        noise_vec[9:12] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
-        noise_vec[12:16] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[5:8] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
+        noise_vec[8:11] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
+        noise_vec[11:14] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
 
         traj_size = self.traj_gen.N * self.rom.n
-        noise_vec[16:16 + traj_size] = 0.  # commands
+        noise_vec[14:14 + traj_size] = 0.  # commands
 
-        noise_vec[16 + traj_size:28 + traj_size] = 0.  # previous actions
+        noise_vec[14 + traj_size:26 + traj_size] = 0.  # previous actions
 
         if self.cfg.terrain.measure_heights:
-            noise_vec[
-            28 + traj_size:215 + traj_size] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
+            noise_vec[26 + traj_size:213 + traj_size] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
 
         return noise_vec
 

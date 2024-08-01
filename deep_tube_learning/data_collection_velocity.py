@@ -68,8 +68,8 @@ def data_creation_main(cfg):
     policy = ppo_runner.get_inference_policy(device=env.device)
 
     # Load configuration
-    num_robots = cfg.num_robots
-    rom = instantiate(cfg.reduced_order_model)
+    num_robots = cfg.env_config.env.num_envs
+    rom = instantiate(cfg.reduced_order_model)(dt=env.dt)
     traj_gen = instantiate(cfg.trajectory_generator)(rom=rom)
     Kp = instantiate(cfg.Kp)
     track_yaw = cfg.track_yaw
@@ -109,7 +109,7 @@ def data_creation_main(cfg):
         # Loop over time steps
         for t in range(int(env.max_episode_length)):
 
-            vt = traj_gen.get_input_t(t * rom.dt, z[t, :, :])
+            vt = traj_gen.get_input_t(t * np.ones((num_robots,)) * rom.dt, z[t, :, :])
 
             # Execute rom action
             zt_p1 = rom.f(z[t, :, :], vt)

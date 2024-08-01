@@ -2,11 +2,10 @@ defaults:
   - default_hopper_velocity
   - _self_
 
-wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/1r5iib0v"
+wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/0w94yf4r"
 dataset_name: "hopper_velocity_single_int"
 
-num_robots: 1000
-epochs: 2
+epochs: 10
 save_debugging_data: True
 upload_to_wandb: False
 
@@ -17,6 +16,7 @@ Kp:
 
 reduced_order_model:
   _target_: trajopt.rom_dynamics.SingleInt2D
+  _partial_: True
   z_min:
     _target_: numpy.array
     object:
@@ -37,3 +37,5 @@ reduced_order_model:
     object:
       - ${vel_max}
       - ${vel_max}
+  backend: 'numpy'
+  n_robots: ${env_config.env.num_envs}

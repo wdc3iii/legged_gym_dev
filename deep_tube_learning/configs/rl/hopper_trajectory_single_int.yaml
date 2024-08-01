@@ -8,8 +8,9 @@ experiment_name: 'hopper_traj'
 env_config:
   env:
     num_envs: 4096
-    num_observations: 40
+    num_observations: 38
     num_actions: 4
+    episode_length: 5
   rewards:
     scales:
       termination: -0.5
@@ -70,4 +71,4 @@ train_config:
     run_name: ''
     experiment_name: ${experiment_name}
     load_run: -1
-    max_iterations: 300
+    max_iterations: 301

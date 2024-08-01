@@ -77,6 +77,7 @@ def play(args):
         print('Exported policy as jit script to: ', path)
 
         onnx_path = f"{path}/{type(env_cfg).__name__}.onnx"
+        ppo_runner.alg.actor_critic.eval()
         torch.onnx.export(
             ppo_runner.alg.actor_critic.actor,
             obs[0],
