@@ -1,9 +1,7 @@
-defaults:
-  - default
-  - _self_
-
 task: 'hopper'
 experiment_name: 'hopper'
+seed: 42
+steps_per_model_checkpoint: 10
 
 env_config:
   env:
@@ -51,8 +49,8 @@ env_config:
     foot_pos_des: 0.021
     action_scale: 1
     decimation: 4
-    # control_type = "orientation"
-    control_type: "orientation_spindown"
+    control_type: "orientation"
+#    control_type: "orientation_spindown"
     zero_action: [1.0, 0, 0, 0]
   asset:
     spring_stiffness: 7000
@@ -90,7 +88,6 @@ env_config:
       z_pos: 0.02
       quat: 0.05
   commands:
-
   domain_rand:
     randomize_friction: True
     friction_range: [0.5, 1.25]
@@ -119,6 +116,8 @@ train_config:
     experiment_name: ${experiment_name}
     load_run: -1
     max_iterations: 300
+    resume: False
+    checkpoint: -1
 
 args:
   task: ${task}

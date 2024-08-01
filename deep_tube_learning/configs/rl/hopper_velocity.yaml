@@ -1,0 +1,52 @@
+defaults:
+  - hopper_default
+  - _self_
+
+task: 'hopper_flat'
+experiment_name: 'hopper_vel'
+
+env_config:
+  env:
+    num_envs: 4096
+    num_observations: 23
+    num_actions: 4
+  rewards:
+    scales:
+      tracking_lin_vel: 1.0
+      tracking_ang_vel: 0.5
+      orientation: -1.
+      collision: -1.
+      action_rate: -0.1
+      torques: -0.00001
+      unit_quat: -0.1
+    only_positive_rewards: False  # if true negative total rewards are clipped at zero (avoids early termination problems)
+    tracking_sigma: 0.25  # tracking reward = exp(-error^2/sigma)
+    soft_dof_pos_limit: 1.  # percentage of urdf limits, values above this limit are penalized
+    soft_dof_vel_limit: 1.
+    soft_torque_limit: 1.
+    base_height_target: .55
+    max_contact_force: 100.  # forces above this value are penalized
+  commands:
+    curriculum: False
+    max_curriculum: 1.
+    num_commands: 4         # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
+    resampling_time: 5.     # time before command are changed[s]
+    heading_command: False  # if true: compute ang vel command from heading error
+    ranges:
+      lin_vel_x: [-0.35, 0.35]  # min max [m/s]
+      lin_vel_y: [-0.35, 0.35]  # min max [m/s]
+      ang_vel_yaw: [-0.5, 0.5]  # min max [rad/s]
+      heading: [-3.14, 3.14]    # min max [rad]
+
+train_config:
+  policy:
+    actor_hidden_dims: [128, 64, 32]
+    critic_hidden_dims: [128, 64, 32]
+    activation: 'elu'
+  algorithm:
+    entropy_coef: 0.01
+  runner:
+    run_name: ''
+    experiment_name: ${experiment_name}
+    load_run: -1
+    max_iterations: 300

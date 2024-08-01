@@ -58,5 +58,5 @@ task_registry.register( "anymal_b", Anymal, AnymalBRoughCfg(), AnymalBRoughCfgPP
 task_registry.register( "a1", LeggedRobot, A1RoughCfg(), A1RoughCfgPPO() )
 task_registry.register( "cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO() )
 task_registry.register( "adam", Adam, AdamRoughCfg(), AdamRoughCfgPPO() )
-task_registry.register( "hopper", Hopper, HopperRoughCfg(), HopperRoughCfgPPO() )
+task_registry.register( "hopper_flat", Hopper, HopperRoughCfg(), HopperRoughCfgPPO() )
 task_registry.register( "hopper_flat_trajectory", HopperTrajectory, HopperRoughTrajectoryCfg(), HopperRoughTrajectoryCfgPPO() )
