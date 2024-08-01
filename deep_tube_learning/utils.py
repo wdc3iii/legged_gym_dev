@@ -1,7 +1,10 @@
+import os
 import torch
+import wandb
+import statistics
 import numpy as np
 from pathlib import Path
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig, ListConfig
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
@@ -162,3 +165,112 @@ def evaluate_error_dynamics(test_dataset, loss_fn, device):
 
     return eval_model
 
+
+def convert_to_native(obj):
+    if isinstance(obj, ListConfig):
+        return [convert_to_native(item) for item in obj]
+    else:
+        return obj
+
+
+def set_attributes_from_dict(obj, nested_dict):
+    for key, value in nested_dict.items():
+        if value is None:
+            continue
+        if isinstance(obj, dict):
+            obj[key] = convert_to_native(value)
+        elif isinstance(value, DictConfig):
+            # Recursively set attributes for nested dictionaries
+            nested_obj = getattr(obj, key)
+            set_attributes_from_dict(nested_obj, value)
+        else:
+            # Set the attribute value for the current object
+            setattr(obj, key, convert_to_native(value))
+
+
+def update_cfgs_from_hydra(cfg, env_cfg, train_cfg):
+    set_attributes_from_dict(env_cfg, cfg.env_config)
+    set_attributes_from_dict(train_cfg, cfg.train_config)
+    return env_cfg, train_cfg
+
+
+def update_args_from_hydra(cfg, args):
+    for key, val in cfg.args.items():
+        setattr(args, key, val)
+    return args
+
+
+def policy_runner_wandb_callback(
+        data,
+        lr,
+        mean_std,
+        actor_critic_state_dict,
+        optimizer_state_dict,
+        device,
+        steps_per_model_checkpoint,
+        checkpointer
+):
+
+    log_dict = {
+        "Loss/value_function": data['mean_value_loss'],
+        'Loss/surrogate': data['mean_surrogate_loss'],
+        'Loss/learning_rate': lr,
+        'Policy/mean_noise_std': mean_std.item()
+    }
+    if len(data['rewbuffer']) > 0:
+        mean_reward = statistics.mean(data['rewbuffer'])
+        log_dict['Train/mean_reward'] = mean_reward
+        log_dict['Train/mean_episode_length'] = statistics.mean(data['lenbuffer'])
+    else:
+        mean_reward = -float("inf")
+
+    if data['ep_infos']:
+        for key in data['ep_infos'][0]:
+            infotensor = torch.tensor([], device=device)
+            for ep_info in data['ep_infos']:
+                # handle scalar and zero dimensional tensor infos
+                if not isinstance(ep_info[key], torch.Tensor):
+                    ep_info[key] = torch.Tensor([ep_info[key]])
+                if len(ep_info[key].shape) == 0:
+                    ep_info[key] = ep_info[key].unsqueeze(0)
+                infotensor = torch.cat((infotensor, ep_info[key].to(device)))
+            value = torch.mean(infotensor)
+            log_dict['Episode/' + key] = value
+    wandb.log(log_dict, step=data['it'])
+
+    if data['it'] % steps_per_model_checkpoint == 0:
+        checkpointer.save({'model_state_dict': actor_critic_state_dict,
+                           'optimizer_state_dict': optimizer_state_dict,
+                           'iter': data['it'],
+                           'infos': None},
+                          metric=mean_reward,
+                          step=data['it'])
+
+
+class CheckPointManager:
+    def __init__(self, metric_name="reward"):
+        self.metric_name = metric_name
+        self.best_reward = -float("inf")
+        self.ckpt_path = str(Path(__file__).parent / "models" / f"{wandb.run.id}")
+        os.makedirs(self.ckpt_path, exist_ok=True)
+
+    def save(self, model, metric, step):
+        self._model_save(model)
+        artifact = wandb.Artifact(
+            type="model",
+            name=f"{wandb.run.id}_model",
+            metadata={self.metric_name: metric, "step": step},
+        )
+
+        artifact.add_dir(str(self.ckpt_path))
+
+        aliases = ["latest"]
+
+        if self.best_reward < metric:
+            self.best_reward = metric
+            aliases.append("best")
+
+        wandb.run.log_artifact(artifact, aliases=aliases)
+
+    def _model_save(self, model_dict):
+        torch.save(model_dict, f"{self.ckpt_path}/model.pth")
