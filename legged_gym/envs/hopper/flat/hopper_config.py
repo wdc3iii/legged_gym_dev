@@ -13,7 +13,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
         measure_heights = False
 
     class init_state(LeggedRobotCfg.init_state):
-        pos = [0.0, 0.0, .3]  # x,y,z [m]
+        pos = [0.0, 0.0, .5]  # x,y,z [m]
         default_joint_angles = {  # = target angles [rad] when action = 0.0
             'foot_slide': 0.0,
             'wheel1_rotation': 0.0,
@@ -24,14 +24,14 @@ class HopperRoughCfg( LeggedRobotCfg ):
     class control(LeggedRobotCfg.control):
         # PD Drive parameters:
         stiffness = {
-            'foot_slide': 400,
+            'foot_slide': 900,
             'wheel1_rotation': 15.0,
             'wheel2_rotation': 15.0,
             'wheel3_rotation': 15.0
         }  # [N*m/rad for revolute, N/m for prismatic]
 
         damping = {
-            'foot_slide': 40,
+            'foot_slide': 60,
             'wheel1_rotation': 3.0,
             'wheel2_rotation': 3.0,
             'wheel3_rotation': 3.0
@@ -43,15 +43,15 @@ class HopperRoughCfg( LeggedRobotCfg ):
             'wheel3_rotation': 0.1
         }  # [N*m/rad for revolute, N/m for prismatic]
 
-        foot_pos_des = 0.03
+        foot_pos_des = 0.021
 
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 1
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 4
 
-        control_type = "orientation"
-        # control_type = "orientation_spindown"
+        # control_type = "orientation"
+        control_type = "orientation_spindown"
 
         zero_action = [1.0, 0, 0, 0]
 
@@ -64,8 +64,8 @@ class HopperRoughCfg( LeggedRobotCfg ):
         self_collisions = 1  # 1 to disable, 0 to enable...bitwise filter
 
         # Foot spring properties
-        spring_stiffness = 11732
-        spring_damping = 50
+        spring_stiffness = 7000
+        spring_damping = 4
 
         # TODO: actuator frame correct on hardware?
         rot_actuator = [
@@ -107,7 +107,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
             height_measurements = 0.1
 
     class commands:
-        curriculum = True
+        curriculum = False
         max_curriculum = 1.
         num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
@@ -145,6 +145,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
 
     class rewards:
         class scales:
+            # termination = -5.0
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
             orientation = -1.
@@ -161,6 +162,11 @@ class HopperRoughCfg( LeggedRobotCfg ):
         soft_torque_limit = 1.
         base_height_target = .55
         max_contact_force = 100.  # forces above this value are penalized
+
+    class viewer:
+        ref_env = 0
+        pos = [-1, -1, 1]  # [m]
+        lookat = [0., 0, 0]  # [m]
 
 
 class HopperRoughCfgPPO( LeggedRobotCfgPPO ):

@@ -96,12 +96,12 @@
   </link>
 
   <joint name="foot_slide" type="prismatic">
-    <origin xyz="0.00000 0.00000 -0.2"/>
+    <origin xyz="0.00000 0.00000 -0.36"/>
     <parent link="torso"/>
     <child link="foot"/>
     <axis xyz="0.00000 0 1.00000"/>
     <!-- velocity can be crazy high, Eric was unsure about the effor on the feet around 300N, FORCE LIMIT IS NOT SYMETRIC!!!, around 10cm is the maximal spring compression-->
-    <limit effort="300" velocity="10" lower="0" upper="0.1" />
+    <limit effort="25000" velocity="100" lower="0" upper="0.1" />
   </joint>
 
   <joint name="wheel1_rotation" type="revolute">

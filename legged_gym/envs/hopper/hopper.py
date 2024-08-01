@@ -163,7 +163,7 @@ class Hopper(LeggedRobot):
         # Compute wheel torques
         if "spindown" in control_type:
             self.torques[contact_inds, self.wheel_joint_indices] = -self.kd_spindown * wheel_vel[contact_inds.squeeze()]
-            orient_inds = not_contact_inds.squeeze()
+            orient_inds = not_contact_inds.reshape((-1,))
         else:
             orient_inds = torch.arange(self.num_envs)
 
