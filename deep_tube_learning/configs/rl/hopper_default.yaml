@@ -12,7 +12,7 @@ env_config:
     num_observations: 21
     num_actions: 4
     send_timeouts: True
-    episode_length: 20
+    episode_length_s: 20
   rewards:
     scales:
       orientation: -1.
@@ -29,7 +29,7 @@ env_config:
     max_contact_force: 100.  # forces above this value are penalized
   init_state:
     pos: [0.0, 0.0, 0.5]  # x,y,z [m]
-    default_joint_angles:  # = target angles [rad] when action = 0.0
+    default_joint_angles:
       foot_slide: 0.021
       wheel1_rotation: 0.0
       wheel2_rotation: 0.0
@@ -104,12 +104,25 @@ env_config:
     inv_mass_range: [-0.5, 0.5]
     push_robots: True
     push_interval_s: 15
-    max_push_vel_xy: 0.2
+    max_push_vel: [0.25, 0.25, 0.25, 0.75, 0.75, 0.75]  # [vx, vy, vz, wx, wy, wz]
     rigid_shape_properties:
-      randomize_stiffness: True
-      added_stiffness_range: [-5.0, 5.0]
+      randomize_restitution: True
+      restitution_range: [0.0, 1.0]
+      randomize_compliance: True
+      compliance_range: [0.0, 1.0]
+      randomize_thickness: True
+      thickness_range: [0.0, 0.05]
+    dof_properties:
+      randomize_stiffness: False
       randomize_damping: True
       added_damping_range: [-0.2, 0.2]
+    spring_properties:
+      randomize_stiffness: True
+      stiffness_range: [0.9, 1.1]  # multiplicative
+      randomize_damping: True
+      damping_range: [ 0.9, 1.1 ]  # multiplicative
+      randomize_setpoint: True
+      setpoint_range: [0.75, 1.25]  # multiplicative
 
 train_config:
   policy:

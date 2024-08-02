@@ -136,6 +136,14 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             randomize_damping = False
             added_damping_range = [-.2, .2]
 
+        class spring_properties:
+            randomize_stiffness = True
+            stiffness_range = [0.9, 1.1]  # multiplicative
+            randomize_damping = True
+            damping_range = [0.9, 1.1]  # multiplicative
+            randomize_setpoint = True
+            setpoint_range = [0.75, 1.25]  # multiplicative
+
     class rewards(LeggedRobotTrajectoryCfg.rewards):
         class scales(LeggedRobotTrajectoryCfg.rewards.scales):
             # orientation = -1.

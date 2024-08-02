@@ -37,8 +37,16 @@ env_config:
     randomize_base_mass: False
     randomize_inv_base_mass: False
     rigid_shape_properties:
+      randomize_restitution: False
+      randomize_compliance: False
+      randomize_thickness: False
+    dof_properties:
       randomize_stiffness: False
       randomize_damping: False
+    spring_properties:
+      randomize_stiffness: False
+      randomize_damping: False
+      randomize_setpoint: False
   init_state:
     default_dof_pos_noise_lower: [ -0., -0., -0., -0. ]  # [foot, wheel1, 2, 3]
     default_dof_pos_noise_upper: [ 0., 0., 0., 0. ]

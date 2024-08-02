@@ -29,8 +29,10 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from isaacgym.torch_utils import *
-from isaacgym import gymtorch
+from isaacgym import gymtorch, gymapi
 
+from legged_gym import LEGGED_GYM_ROOT_DIR
+import os
 import torch
 from typing import Dict
 from legged_gym.envs import LeggedRobot
@@ -47,11 +49,18 @@ class Hopper(LeggedRobot):
         mask[self.foot_joint_index] = False
         self.wxyz_quat_inds = torch.tensor([6, 3, 4, 5])
         self.wheel_joint_indices = torch.arange(self.num_dof)[mask]
-        self.spring_stiffness = self.cfg.asset.spring_stiffness
-        self.spring_damping = self.cfg.asset.spring_damping
+
+        self.nominal_spring_stiffness = self.cfg.asset.spring_stiffness
+        self.nominal_spring_damping = self.cfg.asset.spring_damping
+        self.nominal_spring_setpoint = self.cfg.control.foot_pos_des
+        self.stiffness_range = self.cfg.domain_rand.spring_properties.stiffness_range
+        self.damping_range = self.cfg.domain_rand.spring_properties.damping_range
+        self.setpoint_range = self.cfg.domain_rand.spring_properties.setpoint_range
+        self.spring_stiffness = torch.ones((self.num_envs,)) * self.nominal_spring_stiffness
+        self.spring_damping = torch.ones((self.num_envs,)) * self.nominal_spring_damping
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
-        self.foot_pos_des = self.cfg.control.foot_pos_des
+        self.foot_pos_des = torch.ones((self.num_envs,)) * self.nominal_spring_setpoint
         self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
         self.default_dof_pos_noise_lower = torch.tensor(self.cfg.init_state.default_dof_pos_noise_lower,
                                                         device=self.device)
@@ -69,6 +78,7 @@ class Hopper(LeggedRobot):
                                                          device=self.device)
         self.default_root_vel_noise_upper = torch.tensor(self.cfg.init_state.default_root_vel_noise_upper,
                                                          device=self.device)
+        self.max_vel = torch.tensor(self.cfg.domain_rand.max_push_vel, device=self.device)
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -123,23 +133,11 @@ class Hopper(LeggedRobot):
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.reset_idx(env_ids)
-        self.compute_observations()  # in some cases a simulation step might be required to refresh some obs (for example body positions)
+        self.compute_observations()  # in some cases a simulation step might be required to refresh some obs
 
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
-
-        # Randomize damping by adding a random value within the specified range
-        if self.cfg.domain_rand.dof_properties.randomize_damping:
-            rng = self.cfg.domain_rand.dof_properties.added_damping_range
-            random_damping_addition = np.random.uniform(rng[0], rng[1])
-            self.spring_damping += random_damping_addition
-
-        # Randomize stiffness by adding a random value within the specified range
-        if self.cfg.domain_rand.dof_properties.randomize_stiffness:
-            rng = self.cfg.domain_rand.dof_properties.added_stiffness_range
-            random_stiffness_addition = np.random.uniform(rng[0], rng[1])
-            self.spring_stiffness += random_stiffness_addition
 
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
@@ -290,6 +288,34 @@ class Hopper(LeggedRobot):
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+    def _push_robots(self):
+        """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
+        """
+
+        self.root_states[:, 7:13] = torch_rand_vec_float(-self.max_vel, self.max_vel,
+                                                        (self.num_envs, 6), device=self.device)
+
+        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
+
+    def _create_envs(self):
+        super()._create_envs()
+        self._process_spring_properties()
+
+    def _update_envs(self):
+        super()._update_envs()
+        self._process_spring_properties()
+
+    def _process_spring_properties(self):
+        if self.cfg.domain_rand.spring_properties.randomize_stiffness:
+            self.spring_stiffness = torch_rand_float(self.stiffness_range[0], self.stiffness_range[1],
+                                                     (self.num_envs, 1), self.device) * self.nominal_spring_stiffness
+        if self.cfg.domain_rand.spring_properties.randomize_damping:
+            self.spring_stiffness = torch_rand_float(self.damping_range[0], self.damping_range[1],
+                                                     (self.num_envs, 1), self.device) * self.nominal_spring_damping
+        if self.cfg.domain_rand.spring_properties.randomize_setpoint:
+            self.spring_stiffness = torch_rand_float(self.setpoint_range[0], self.setpoint_range[1],
+                                                     (self.num_envs, 1), self.device) * self.nominal_spring_setpoint
 
     # ----------------------------------------
     def _init_buffers(self):

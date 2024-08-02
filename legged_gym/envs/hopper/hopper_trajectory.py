@@ -29,8 +29,10 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from isaacgym.torch_utils import *
-from isaacgym import gymtorch
+from isaacgym import gymtorch, gymapi
 
+from legged_gym import LEGGED_GYM_ROOT_DIR
+import os
 import torch
 from typing import Dict
 from legged_gym.envs import LeggedRobotTrajectory
@@ -41,17 +43,26 @@ from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log
 class HopperTrajectory(LeggedRobotTrajectory):
 
     def __init__(self, cfg: HopperRoughTrajectoryCfg, sim_params, physics_engine, sim_device, headless):
+        self.nominal_spring_stiffness = cfg.asset.spring_stiffness
+        self.nominal_spring_damping = cfg.asset.spring_damping
+        self.nominal_spring_setpoint = cfg.control.foot_pos_des
+        self.stiffness_range = cfg.domain_rand.spring_properties.stiffness_range
+        self.damping_range = cfg.domain_rand.spring_properties.damping_range
+        self.setpoint_range = cfg.domain_rand.spring_properties.setpoint_range
+
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
+
         self.foot_joint_index = torch.tensor([0])
         mask = torch.ones(self.num_dof, dtype=torch.bool)
         mask[self.foot_joint_index] = False
         self.wxyz_quat_inds = torch.tensor([6, 3, 4, 5])
         self.wheel_joint_indices = torch.arange(self.num_dof)[mask]
-        self.spring_stiffness = self.cfg.asset.spring_stiffness
-        self.spring_damping = self.cfg.asset.spring_damping
+
+        self.spring_stiffness = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_stiffness
+        self.spring_damping = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_damping
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
-        self.foot_pos_des = self.cfg.control.foot_pos_des
+        self.foot_pos_des = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_setpoint
         self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
         self.default_dof_pos_noise_lower = torch.tensor(self.cfg.init_state.default_dof_pos_noise_lower,
                                                         device=self.device)
@@ -69,6 +80,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
                                                          device=self.device)
         self.default_root_vel_noise_upper = torch.tensor(self.cfg.init_state.default_root_vel_noise_upper,
                                                          device=self.device)
+        self.max_vel = torch.tensor(self.cfg.domain_rand.max_push_vel, device=self.device)
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -131,19 +143,6 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
 
-        # Hopper-specific domain randomization
-        # Randomize damping by adding a random value within the specified range
-        if self.cfg.domain_rand.dof_properties.randomize_damping:
-            rng = self.cfg.domain_rand.dof_properties.added_damping_range
-            random_damping_addition = np.random.uniform(rng[0], rng[1])
-            self.spring_damping += random_damping_addition
-
-        # Randomize stiffness by adding a random value within the specified range
-        if self.cfg.domain_rand.dof_properties.randomize_stiffness:
-            rng = self.cfg.domain_rand.dof_properties.added_stiffness_range
-            random_stiffness_addition = np.random.uniform(rng[0], rng[1])
-            self.spring_stiffness += random_stiffness_addition
-
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
 
@@ -175,9 +174,9 @@ class HopperTrajectory(LeggedRobotTrajectory):
             self.torques[:, self.foot_joint_index] = -self.p_gains[self.foot_joint_index] * (foot_pos - actions_scaled[:, -1]) - self.d_gains[self.foot_joint_index] * foot_vel
         else:
             self.torques[contact_inds, self.foot_joint_index] = 0
-            self.torques[not_contact_inds, self.foot_joint_index] = -self.p_gains[self.foot_joint_index] * (foot_pos[not_contact_inds.squeeze()] - self.foot_pos_des) - self.d_gains[self.foot_joint_index] * foot_vel[not_contact_inds.squeeze()]
+            self.torques[not_contact_inds, self.foot_joint_index] = -self.p_gains[self.foot_joint_index] * (foot_pos[not_contact_inds.squeeze()] - self.foot_pos_des[not_contact_inds.squeeze()]) - self.d_gains[self.foot_joint_index] * foot_vel[not_contact_inds.squeeze()]
         # Add in foot spring force
-        self.torques[contact_inds, self.foot_joint_index] += -self.spring_stiffness * foot_pos[contact_inds.squeeze()] - self.spring_damping * foot_vel[contact_inds.squeeze()]
+        self.torques[contact_inds, self.foot_joint_index] += -self.spring_stiffness[contact_inds.squeeze()] * foot_pos[contact_inds.squeeze()] - self.spring_damping[contact_inds.squeeze()] * foot_vel[contact_inds.squeeze()]
 
         # Compute wheel torques
         if "spindown" in control_type:
@@ -300,6 +299,33 @@ class HopperTrajectory(LeggedRobotTrajectory):
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
+    def _push_robots(self):
+        """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
+        """
+        self.root_states[:, 7:13] = torch_rand_vec_float(-self.max_vel, self.max_vel,
+                                                        (self.num_envs, 6), device=self.device)
+
+        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
+
+    def _create_envs(self):
+        super()._create_envs()
+        self._process_spring_properties()
+
+    def _update_envs(self):
+        super()._update_envs()
+        self._process_spring_properties()
+
+    def _process_spring_properties(self):
+        if self.cfg.domain_rand.spring_properties.randomize_stiffness:
+            self.spring_stiffness = torch_rand_float(self.stiffness_range[0], self.stiffness_range[1],
+                                                     (self.num_envs, 1), self.device) * self.nominal_spring_stiffness
+        if self.cfg.domain_rand.spring_properties.randomize_damping:
+            self.spring_stiffness = torch_rand_float(self.damping_range[0], self.damping_range[1],
+                                                     (self.num_envs, 1), self.device) * self.nominal_spring_damping
+        if self.cfg.domain_rand.spring_properties.randomize_setpoint:
+            self.spring_stiffness = torch_rand_float(self.setpoint_range[0], self.setpoint_range[1],
+                                                     (self.num_envs, 1), self.device) * self.nominal_spring_setpoint
+
     # ----------------------------------------
     def _init_buffers(self):
         """ Initialize torch tensors which will contain simulation states and processed_old quantities
@@ -353,22 +379,6 @@ class HopperTrajectory(LeggedRobotTrajectory):
             noise_vec[26 + traj_size:213 + traj_size] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
 
         return noise_vec
-
-    def _resample_commands(self, env_ids):
-        """ Randommly select commands of some environments
-
-        Args:
-            env_ids (List[int]): Environments ids for which new commands are needed
-        """
-        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0], self.command_ranges["lin_vel_x"][1], (len(env_ids), 1), device=self.device).squeeze(1)
-        self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0], self.command_ranges["lin_vel_y"][1], (len(env_ids), 1), device=self.device).squeeze(1)
-        if self.cfg.commands.heading_command:
-            self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0], self.command_ranges["heading"][1], (len(env_ids), 1), device=self.device).squeeze(1)
-        else:
-            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
-
-        # set small commands to zero
-        self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.05).unsqueeze(1)
 
     def _reward_torque_limits(self):
         # penalize torques too close to the limit

@@ -132,7 +132,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
         inv_mass_range = [-1., 1.]
         push_robots = True
         push_interval_s = 15
-        max_push_vel_xy = 1.
+        max_push_vel = [0.25, 0.25, 0.1, 0.75, 0.75, 0.75]
 
         class rigid_shape_properties:
             randomize_restitution = True
@@ -147,6 +147,14 @@ class HopperRoughCfg( LeggedRobotCfg ):
             added_stiffness_range = [-5.0, 5.0]
             randomize_damping = True
             added_damping_range = [-.2, .2]
+
+        class spring_properties:
+            randomize_stiffness = True
+            stiffness_range = [0.9, 1.1]  # multiplicative
+            randomize_damping = True
+            damping_range = [0.9, 1.1]  # multiplicative
+            randomize_setpoint = True
+            setpoint_range = [0.75, 1.25]  # multiplicative
 
     class rewards:
         class scales:

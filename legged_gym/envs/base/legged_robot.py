@@ -695,15 +695,15 @@ class LeggedRobot(BaseTask):
         asset_options.thickness = self.cfg.asset.thickness
         asset_options.disable_gravity = self.cfg.asset.disable_gravity
 
-        robot_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
-        self.num_dof = self.gym.get_asset_dof_count(robot_asset)
-        self.num_bodies = self.gym.get_asset_rigid_body_count(robot_asset)
-        dof_props_asset = self.gym.get_asset_dof_properties(robot_asset)
-        rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(robot_asset)
+        self.robot_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
+        self.num_dof = self.gym.get_asset_dof_count(self.robot_asset)
+        self.num_bodies = self.gym.get_asset_rigid_body_count(self.robot_asset)
+        self.dof_props_asset = self.gym.get_asset_dof_properties(self.robot_asset)
+        self.rigid_shape_props_asset = self.gym.get_asset_rigid_shape_properties(self.robot_asset)
 
         # save body names from the asset
-        body_names = self.gym.get_asset_rigid_body_names(robot_asset)
-        self.dof_names = self.gym.get_asset_dof_names(robot_asset)
+        body_names = self.gym.get_asset_rigid_body_names(self.robot_asset)
+        self.dof_names = self.gym.get_asset_dof_names(self.robot_asset)
         self.num_bodies = len(body_names)
         self.num_dofs = len(self.dof_names)
         feet_names = [s for s in body_names if self.cfg.asset.foot_name in s]
@@ -731,11 +731,11 @@ class LeggedRobot(BaseTask):
             pos[:2] += torch_rand_float(-1., 1., (2, 1), device=self.device).squeeze(1)
             start_pose.p = gymapi.Vec3(*pos)
 
-            rigid_shape_props = self._process_rigid_shape_props(rigid_shape_props_asset, i)
-            self.gym.set_asset_rigid_shape_properties(robot_asset, rigid_shape_props)
-            actor_handle = self.gym.create_actor(env_handle, robot_asset, start_pose, self.cfg.asset.name, i,
+            rigid_shape_props = self._process_rigid_shape_props(self.rigid_shape_props_asset, i)
+            self.gym.set_asset_rigid_shape_properties(self.robot_asset, rigid_shape_props)
+            actor_handle = self.gym.create_actor(env_handle, self.robot_asset, start_pose, self.cfg.asset.name, i,
                                                  self.cfg.asset.self_collisions, 0)
-            dof_props = self._process_dof_props(dof_props_asset, i)
+            dof_props = self._process_dof_props(self.dof_props_asset, i)
             self.gym.set_actor_dof_properties(env_handle, actor_handle, dof_props)
             body_props = self.gym.get_actor_rigid_body_properties(env_handle, actor_handle)
             body_props = self._process_rigid_body_props(body_props, i)
@@ -761,6 +761,22 @@ class LeggedRobot(BaseTask):
             self.termination_contact_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0],
                                                                                         self.actor_handles[0],
                                                                                         termination_contact_names[i])
+
+    def _update_envs(self):
+        for i in range(self.num_envs):
+            # create env instance
+            pos = self.env_origins[i].clone()
+            pos[:2] += torch_rand_float(-1., 1., (2, 1), device=self.device).squeeze(1)
+
+            rigid_shape_props = self._process_rigid_shape_props(self.rigid_shape_props_asset, i)
+            self.gym.set_asset_rigid_shape_properties(self.robot_asset, rigid_shape_props)
+
+            dof_props = self._process_dof_props(self.dof_props_asset, i)
+            self.gym.set_actor_dof_properties(self.envs[i], self.actor_handles[i], dof_props)
+            body_props = self.gym.get_actor_rigid_body_properties(self.envs[i], self.actor_handles[i])
+            body_props = self._process_rigid_body_props(body_props, i)
+            self.gym.set_actor_rigid_body_properties(self.envs[i], self.actor_handles[i], body_props,
+                                                     recomputeInertia=True)
 
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.

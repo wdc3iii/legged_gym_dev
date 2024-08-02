@@ -10,7 +10,7 @@ env_config:
     num_envs: 4096
     num_observations: 38
     num_actions: 4
-    episode_length: 5
+    episode_length_s: 20
   rewards:
     scales:
       termination: -0.5
