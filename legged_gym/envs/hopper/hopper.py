@@ -43,6 +43,18 @@ from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log
 class Hopper(LeggedRobot):
 
     def __init__(self, cfg: HopperRoughCfg, sim_params, physics_engine, sim_device, headless):
+        self.nominal_spring_stiffness = cfg.asset.spring_stiffness
+        self.nominal_spring_damping = cfg.asset.spring_damping
+        self.nominal_spring_setpoint = cfg.control.foot_pos_des
+        self.stiffness_range = cfg.domain_rand.spring_properties.stiffness_range
+        self.damping_range = cfg.domain_rand.spring_properties.damping_range
+        self.setpoint_range = cfg.domain_rand.spring_properties.setpoint_range
+        self.p_gain_range = cfg.domain_rand.pd_gain_properties.p_gain_range
+        self.d_gain_range = cfg.domain_rand.pd_gain_properties.d_gain_range
+        self.max_torque_range = cfg.domain_rand.torque_speed_properties.max_torque_range
+        self.max_speed_range = cfg.domain_rand.torque_speed_properties.max_speed_range
+        self.max_slope_range = cfg.domain_rand.torque_speed_properties.slope_range
+
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self.foot_joint_index = torch.tensor([0])
         mask = torch.ones(self.num_dof, dtype=torch.bool)
@@ -50,12 +62,7 @@ class Hopper(LeggedRobot):
         self.wxyz_quat_inds = torch.tensor([6, 3, 4, 5])
         self.wheel_joint_indices = torch.arange(self.num_dof)[mask]
 
-        self.nominal_spring_stiffness = self.cfg.asset.spring_stiffness
-        self.nominal_spring_damping = self.cfg.asset.spring_damping
-        self.nominal_spring_setpoint = self.cfg.control.foot_pos_des
-        self.stiffness_range = self.cfg.domain_rand.spring_properties.stiffness_range
-        self.damping_range = self.cfg.domain_rand.spring_properties.damping_range
-        self.setpoint_range = self.cfg.domain_rand.spring_properties.setpoint_range
+
         self.spring_stiffness = torch.ones((self.num_envs,)) * self.nominal_spring_stiffness
         self.spring_damping = torch.ones((self.num_envs,)) * self.nominal_spring_damping
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
@@ -165,18 +172,21 @@ class Hopper(LeggedRobot):
         not_contact_inds = torch.nonzero(not_contacts, as_tuple=False)
         wheel_vel = self.dof_vel[:, self.wheel_joint_indices]
 
+        p_gains = self.p_gains * self.p_gain_random
+        d_gains = self.d_gains * self.d_gain_random
+        kd_spindown = self.kd_spindown * self.d_gain_random[:, self.wheel_joint_indices]
         # Compute the foot control action unless the RL agent is responsible for this
         if "w_foot" in control_type:
-            self.torques[:, self.foot_joint_index] = -self.p_gains[self.foot_joint_index] * (foot_pos - actions_scaled[:, -1]) - self.d_gains[self.foot_joint_index] * foot_vel
+            self.torques[:, self.foot_joint_index] = -p_gains[:, self.foot_joint_index] * (foot_pos - actions_scaled[:, -1]) - d_gains[:, self.foot_joint_index] * foot_vel
         else:
             self.torques[contact_inds, self.foot_joint_index] = 0
-            self.torques[not_contact_inds, self.foot_joint_index] = -self.p_gains[self.foot_joint_index] * (foot_pos[not_contact_inds.squeeze()] - self.foot_pos_des) - self.d_gains[self.foot_joint_index] * foot_vel[not_contact_inds.squeeze()]
+            self.torques[not_contact_inds, self.foot_joint_index] = -p_gains[not_contact_inds, self.foot_joint_index] * (foot_pos[not_contact_inds.squeeze()] - self.foot_pos_des[not_contact_inds.squeeze()]) - d_gains[not_contact_inds, self.foot_joint_index] * foot_vel[not_contact_inds.squeeze()]
         # Add in foot spring force
         self.torques[contact_inds, self.foot_joint_index] += -self.spring_stiffness * foot_pos[contact_inds.squeeze()] - self.spring_damping * foot_vel[contact_inds.squeeze()]
 
         # Compute wheel torques
         if "spindown" in control_type:
-            self.torques[contact_inds, self.wheel_joint_indices] = -self.kd_spindown * wheel_vel[contact_inds.squeeze()]
+            self.torques[contact_inds, self.wheel_joint_indices] = -kd_spindown[contact_inds.squeeze(), :] * wheel_vel[contact_inds.squeeze()]
             orient_inds = not_contact_inds.reshape((-1,))
         else:
             orient_inds = torch.arange(self.num_envs)
@@ -190,23 +200,25 @@ class Hopper(LeggedRobot):
                 quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
                 err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
                 log_err = so3_log_map(quaternion_to_matrix(err))
-                local_tau = -self.p_gains[self.wheel_joint_indices] * log_err - self.d_gains[self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
+                local_tau = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * log_err - d_gains[orient_inds[:, None], self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
 
-                # local_tau[:, :] = torch.tensor([-0.8165, 0, -0.5773], device=self.device)
                 tau = self.actuator_transform.transform_points(local_tau)
                 self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
             elif "V" in control_type:
-                self.torques[orient_inds, self.wheel_joint_indices] = -self.p_gains[self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
-                                                      - self.d_gains[self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
+                self.torques[orient_inds, self.wheel_joint_indices] = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
+                    - d_gains[orient_inds[:, None], self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
             elif "T" in control_type:
                 self.torques[orient_inds, self.wheel_joint_indices] = actions_scaled[orient_inds, self.wheel_joint_indices]
             else:
                 raise NameError(f"Unknown controller type: {control_type}")
 
-        state_input_upper = -self.torque_speed_bound_ratio * self.torque_limits[self.wheel_joint_indices] / self.wheel_speed_limits * (wheel_vel - self.wheel_speed_limits)
-        state_input_lower = -self.torque_speed_bound_ratio * self.torque_limits[self.wheel_joint_indices] / self.wheel_speed_limits * (wheel_vel + self.wheel_speed_limits)
+        ts_ratio = self.torque_speed_bound_ratio * self.torque_speed_bound_ratio_random
+        t_bound = self.torque_limits * self.torque_limit_random
+        w_bound = self.wheel_speed_limits * self.wheel_limit_random
+        state_input_upper = -ts_ratio * t_bound[self.wheel_joint_indices] / w_bound * (wheel_vel - w_bound)
+        state_input_lower = -ts_ratio * t_bound[self.wheel_joint_indices] / w_bound * (wheel_vel + w_bound)
         self.torques[:, self.wheel_joint_indices] = torch.clip(self.torques[:, self.wheel_joint_indices], state_input_lower, state_input_upper)
-        return torch.clip(self.torques, -self.torque_limits, self.torque_limits)
+        return torch.clip(self.torques, -t_bound, t_bound)
 
     def compute_observations(self):
         """ Computes observations: (z, quat, foot_pos, v, omega, foot_vel, wheel_vel, cmd, action)
@@ -301,10 +313,14 @@ class Hopper(LeggedRobot):
     def _create_envs(self):
         super()._create_envs()
         self._process_spring_properties()
+        self._process_torque_speed_properties()
+        self._process_pd_gain_properties()
 
     def _update_envs(self):
         super()._update_envs()
         self._process_spring_properties()
+        self._process_torque_speed_properties()
+        self._process_pd_gain_properties()
 
     def _process_spring_properties(self):
         if self.cfg.domain_rand.spring_properties.randomize_stiffness:
@@ -316,6 +332,30 @@ class Hopper(LeggedRobot):
         if self.cfg.domain_rand.spring_properties.randomize_setpoint:
             self.spring_stiffness = torch_rand_float(self.setpoint_range[0], self.setpoint_range[1],
                                                      (self.num_envs, 1), self.device) * self.nominal_spring_setpoint
+
+    def _process_pd_gain_properties(self):
+        if self.cfg.domain_rand.pd_gain_properties.randomize_p_gain:
+            self.p_gain_random = torch_rand_float(self.p_gain_range[0], self.p_gain_range[1], (self.num_envs, 4), device=self.device)
+        else:
+            self.p_gain_random = torch.ones((self.num_envs, 4), device=self.device)
+        if self.cfg.domain_rand.pd_gain_properties.randomize_d_gain:
+            self.d_gain_random = torch_rand_float(self.d_gain_range[0], self.d_gain_range[1], (self.num_envs, 4), device=self.device)
+        else:
+            self.d_gain_random = torch.ones((self.num_envs, 4), device=self.device)
+
+    def _process_torque_speed_properties(self):
+        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+            self.torque_speed_bound_ratio_random = torch_rand_float(self.max_slope_range[0], self.max_slope_range[1], (self.num_envs, 1), device=self.device)
+        else:
+            self.torque_speed_bound_ratio_random = torch.ones((self.num_envs, 1), device=self.device)
+        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+            self.torque_limit_random = torch_rand_float(self.max_torque_range[0], self.max_torque_range[1], (self.num_envs, 4), device=self.device)
+        else:
+            self.torque_limit_random = torch.ones((self.num_envs, 4), device=self.device)
+        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+            self.wheel_limit_random = torch_rand_float(self.max_speed_range[0], self.max_speed_range[1], (self.num_envs, 3), device=self.device)
+        else:
+            self.wheel_limit_random = torch.ones((self.num_envs, 3), device=self.device)
 
     # ----------------------------------------
     def _init_buffers(self):

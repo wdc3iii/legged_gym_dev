@@ -156,6 +156,20 @@ class HopperRoughCfg( LeggedRobotCfg ):
             randomize_setpoint = True
             setpoint_range = [0.75, 1.25]  # multiplicative
 
+        class pd_gain_properties:
+            randomize_p_gain = True
+            p_gain_range = [0.9, 1.1]  # multiplicative
+            randomize_d_gain = True
+            d_gain_range = [0.9, 1.1]  # multiplicative
+
+        class torque_speed_properties:
+            randomize_max_torque = True
+            max_torque_range = [0.95, 1.05]  # multiplicative
+            randomize_max_speed = True
+            max_speed_range = [0.9, 1.1]  # multiplicative
+            randomize_slope = True
+            slope_range = [0.9, 1.1]  # multiplicative
+
     class rewards:
         class scales:
             # termination = -5.0
