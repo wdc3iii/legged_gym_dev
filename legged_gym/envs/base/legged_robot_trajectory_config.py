@@ -145,6 +145,8 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
+        max_push_vel = [0.25, 0.25, 0.25, 0.75, 0.75, 0.75]
+        time_between_pushes = [.5, 10.]  # seconds
 
     class rewards:
         class scales:

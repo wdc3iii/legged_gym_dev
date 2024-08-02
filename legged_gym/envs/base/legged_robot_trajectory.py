@@ -82,6 +82,10 @@ class LeggedRobotTrajectory(BaseTask):
         self._prepare_reward_function()
         self.init_done = True
 
+        self.time_until_next_push = torch_rand_float(self.cfg.domain_rand.time_between_pushes[0],
+                                                     self.cfg.domain_rand.time_between_pushes[1],
+                                                     (self.num_envs, 1),
+                                                     device=self.device)
     def _init_rom(self):
         rom_cfg = self.cfg.rom
         model_class = globals()[rom_cfg.cls]
@@ -165,6 +169,17 @@ class LeggedRobotTrajectory(BaseTask):
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
+
+        self.time_until_next_push -= self.cfg.control.decimation * self.sim_params.dt
+        need_push = self.time_until_next_push <= 0
+
+        if torch.any(need_push):
+            self._push_robots()
+            # Reset the timer for the next push for the environments that needed a push
+            self.time_until_next_push[need_push] = torch_rand_float(self.cfg.domain_rand.time_between_pushes[0],
+                                                                    self.cfg.domain_rand.time_between_pushes[1],
+                                                                    (torch.sum(need_push), 1),
+                                                                    device=self.device)
 
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
@@ -610,6 +625,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.common_step_counter = 0
         self.extras = {}
         self.noise_scale_vec = self._get_noise_scale_vec(self.cfg)
+        self.time_until_next_push = torch.zeros(self.num_envs, device=self.device)
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat(
             (self.num_envs, 1))
         self.forward_vec = to_torch([1., 0., 0.], device=self.device).repeat((self.num_envs, 1))

@@ -5,6 +5,9 @@ defaults:
 task: 'hopper_flat_trajectory'
 experiment_name: 'hopper_traj'
 
+speed_curriculum: False  # Default value
+curriculum_threshold: 0.05  # Default value
+
 env_config:
   env:
     num_envs: 4096
@@ -48,9 +51,9 @@ env_config:
       - ${acc_max}
       - ${acc_max}
     obs_scales: [1, 1, 1, 1]
-    speed_curriculum: False
+    speed_curriculum: ${speed_curriculum}
     weight_curriculum: False
-    curriculum_threshold: 0.05
+    curriculum_threshold: ${curriculum_threshold}
     weights_curriculum_transition_rate: 0.05
     speed_curriculum_transition_rate: 0.15
   trajectory_generator:

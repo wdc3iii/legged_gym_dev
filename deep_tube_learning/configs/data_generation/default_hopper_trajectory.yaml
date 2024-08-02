@@ -30,9 +30,9 @@ env_config:
 #  terrain:
 #    curriculum: False
   noise:
-    add_noise: False
+    add_noise: ${add_noise}
   domain_rand:
-    push_robots: False
+    push_robots: ${push_robots}
     randomize_friction: False
     randomize_base_mass: False
     randomize_inv_base_mass: False
