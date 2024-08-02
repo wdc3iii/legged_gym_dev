@@ -20,6 +20,14 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             'wheel2_rotation': 0.0,
             'wheel3_rotation': 0.0
         }
+        default_dof_pos_noise_lower = [-0.02, 0, 0, 0]  # [foot, wheel1, 2, 3]
+        default_dof_pos_noise_upper = [0.02, 0, 0, 0]
+        default_dof_vel_noise_lower = [-0.1, -100., -100., -100.]
+        default_dof_vel_noise_upper = [0.1, 100., 100., 100.]
+        default_root_pos_noise_lower = [-0.0, -0.0, -0.05, -0.03, -0.03, -0.03, -0.03]  # [x, y, z, qx, qy, qz, qw]
+        default_root_pos_noise_upper = [0.0, 0.0, 0.05, 0.03, 0.03, 0.03, 0.03]
+        default_root_vel_noise_lower = [-0.05, -0.05, -0.05, -0.2, -0.2, -0.2]  # [vx, vy, vz, wx, wy, wz]
+        default_root_vel_noise_upper = [0.05, 0.05, 0.05, 0.2, 0.2, 0.2]
 
     class control(LeggedRobotTrajectoryCfg.control):
         # PD Drive parameters:

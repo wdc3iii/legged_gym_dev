@@ -39,6 +39,15 @@ env_config:
     rigid_shape_properties:
       randomize_stiffness: False
       randomize_damping: False
+  init_state:
+    default_dof_pos_noise_lower: [ -0., -0., -0., -0. ]  # [foot, wheel1, 2, 3]
+    default_dof_pos_noise_upper: [ 0., 0., 0., 0. ]
+    default_dof_vel_noise_lower: [ -0., -0., -0., -0. ]
+    default_dof_vel_noise_upper: [ 0., 0., 0., 0. ]
+    default_root_pos_noise_lower: [ -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [x, y, z, qx, qy, qz, qw]
+    default_root_pos_noise_upper: [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    default_root_vel_noise_lower: [ -0.0, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [vx, vy, vz, wx, wy, wz]
+    default_root_vel_noise_upper: [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
 
 trajectory_generator:
   _target_: trajopt.rom_dynamics.TrajectoryGenerator

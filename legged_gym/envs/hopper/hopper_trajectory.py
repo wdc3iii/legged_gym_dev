@@ -53,6 +53,22 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
         self.foot_pos_des = self.cfg.control.foot_pos_des
         self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
+        self.default_dof_pos_noise_lower = torch.tensor(self.cfg.init_state.default_dof_pos_noise_lower,
+                                                        device=self.device)
+        self.default_dof_pos_noise_upper = torch.tensor(self.cfg.init_state.default_dof_pos_noise_upper,
+                                                        device=self.device)
+        self.default_dof_vel_noise_lower = torch.tensor(self.cfg.init_state.default_dof_vel_noise_lower,
+                                                        device=self.device)
+        self.default_dof_vel_noise_upper = torch.tensor(self.cfg.init_state.default_dof_vel_noise_upper,
+                                                        device=self.device)
+        self.default_root_pos_noise_lower = torch.tensor(self.cfg.init_state.default_root_pos_noise_lower,
+                                                         device=self.device)
+        self.default_root_pos_noise_upper = torch.tensor(self.cfg.init_state.default_root_pos_noise_upper,
+                                                         device=self.device)
+        self.default_root_vel_noise_lower = torch.tensor(self.cfg.init_state.default_root_vel_noise_lower,
+                                                         device=self.device)
+        self.default_root_vel_noise_upper = torch.tensor(self.cfg.init_state.default_root_vel_noise_upper,
+                                                         device=self.device)
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -228,12 +244,69 @@ class HopperTrajectory(LeggedRobotTrajectory):
         obs, privileged_obs, _, _, _ = self.step(self.zero_action)
         return obs, privileged_obs
 
+    def _reset_dofs(self, env_ids):
+        """ Resets DOF position and velocities of selected environmments
+        Positions are randomly selected within 0.5:1.5 x default positions.
+        Velocities are set to zero.
+
+        Args:
+            env_ids (List[int]): Environemnt ids
+        """
+        self.dof_pos[env_ids] = self.default_dof_pos + torch_rand_vec_float(
+            self.default_dof_pos_noise_lower, self.default_dof_pos_noise_upper,
+            (len(env_ids), self.num_dof), device=self.device
+        )
+        self.dof_vel[env_ids] = torch_rand_vec_float(
+            self.default_dof_vel_noise_lower, self.default_dof_vel_noise_upper,
+            (len(env_ids), self.num_dof), device=self.device
+        )
+
+        env_ids_int32 = env_ids.to(dtype=torch.int32)
+        self.gym.set_dof_state_tensor_indexed(self.sim,
+                                              gymtorch.unwrap_tensor(self.dof_state),
+                                              gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
+    def _reset_root_states(self, env_ids):
+        """ Resets ROOT states position and velocities of selected environmments
+            Sets base position based on the curriculum
+            Selects randomized base velocities within -0.5:0.5 [m/s, rad/s]
+        Args:
+            env_ids (List[int]): Environment ids
+        """
+        # base position
+        if self.custom_origins:
+            self.root_states[env_ids] = self.base_init_state
+            self.root_states[env_ids, :3] += self.env_origins[env_ids]
+            self.root_states[env_ids, :7] += torch_rand_vec_float(
+                self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
+                (len(env_ids), 2), device=self.device
+            )  # xy position within 1m of the center
+            self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
+        else:
+            self.root_states[env_ids] = self.base_init_state
+            self.root_states[env_ids, :3] += self.env_origins[env_ids]
+            self.root_states[env_ids, :7] += torch_rand_vec_float(
+                self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
+                (len(env_ids), 7), device=self.device
+            )  # xy position within 1m of the center
+            self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
+        # base velocities
+        self.root_states[env_ids, 7:13] = torch_rand_vec_float(
+            self.default_root_vel_noise_lower, self.default_root_vel_noise_upper,
+            (len(env_ids), 6), device=self.device
+        )  # [7:10]: lin vel, [10:13]: ang vel
+        env_ids_int32 = env_ids.to(dtype=torch.int32)
+        self.gym.set_actor_root_state_tensor_indexed(self.sim,
+                                                     gymtorch.unwrap_tensor(self.root_states),
+                                                     gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+
     # ----------------------------------------
     def _init_buffers(self):
         """ Initialize torch tensors which will contain simulation states and processed_old quantities
         """
         super()._init_buffers()
         self.kd_spindown = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
+        self.wheel_speed_limits = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
         self.wheel_speed_limits = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
 
         for i in range(1, 4):
