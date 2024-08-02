@@ -82,6 +82,10 @@ class LeggedRobotTrajectory(BaseTask):
         self._prepare_reward_function()
         self.init_done = True
 
+        if self.cfg.curriculum.use_curriculum:
+            self.update_command_curriculum()
+
+
     def _init_rom(self):
         rom_cfg = self.cfg.rom
         model_class = globals()[rom_cfg.cls]
@@ -108,7 +112,6 @@ class LeggedRobotTrajectory(BaseTask):
             freq_low=traj_cfg.freq_low,
             freq_high=traj_cfg.freq_high,
             seed=traj_cfg.seed,
-            curriculum=self.cfg.rom.weight_curriculum,
         )
 
     def step(self, actions):
@@ -194,12 +197,6 @@ class LeggedRobotTrajectory(BaseTask):
         # update curriculum
         if self.cfg.terrain.curriculum:
             self._update_terrain_curriculum(env_ids)
-        # avoid updating command curriculum at each step since the maximum command is common to all envs
-        if self.cfg.rom.weight_curriculum and (self.common_step_counter % 500):
-            self.update_command_curriculum(env_ids)
-
-        if self.cfg.rom.speed_curriculum and (self.common_step_counter % self.max_episode_length == 0):
-            self.update_speed_curriculum(env_ids)
 
         # reset robot states
         self._reset_dofs(env_ids)
@@ -378,8 +375,12 @@ class LeggedRobotTrajectory(BaseTask):
 
         if self.cfg.terrain.measure_heights:
             self.measured_heights = self._get_heights()
-        if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
+        if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.push_time == 0):
             self._push_robots()
+        if self.cfg.curriculum.use_curriculum and self.curriculum_state < len(self.cfg.curriculum.curriculum_steps) and \
+                self.common_step_counter % self.cfg.curriculum.curriculum_steps[self.curriculum_state] == 0:
+            self.curriculum_state += 1
+            self.update_command_curriculum()
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
@@ -481,82 +482,31 @@ class LeggedRobotTrajectory(BaseTask):
                                                               0))  # (the minumum level is zero)
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
-    def update_command_curriculum(self, env_ids):
+    def update_command_curriculum(self):
         """ Implements a curriculum of increasing commands
 
         Args:
             env_ids (List[int]): ids of environments being reset
         """
-        if not self.init_done:
-            # don't change on initial reset
-            return
+        ind = self.curriculum_state
+        # Pushes
+        self.max_push_vel = [v * self.cfg.curriculum.push.magnitude[ind] for v in self.nominal_max_push_vel]
+        self.push_time = self.nominal_push_time * self.cfg.curriculum.push.time[ind]
+        # RoM bounds
+        self.rom.z_max = np.array([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_max])
+        self.rom.z_min = np.array([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_min])
+        self.rom.v_max = np.array([v * self.cfg.curriculum.rom.v[ind] for v in self.nominal_rom_v_max])
+        self.rom.v_min = np.array([v * self.cfg.curriculum.rom.v[ind] for v in self.nominal_rom_v_min])
+        # Trajectory sampler
+        traj_cfg = self.cfg.trajectory_generator
+        t_samp = globals()[traj_cfg.t_samp_cls](
+            traj_cfg.t_low * self.cfg.curriculum.trajectory_generator.t_low[ind],
+            traj_cfg.t_high * self.cfg.curriculum.trajectory_generator.t_high[ind]
+        )
+        self.traj_gen.t_sampler = t_samp
+        weight_samp = globals()[traj_cfg.weight_samp_cls]()
+        self.traj_gen.weight_sampler = weight_samp
 
-        print('command update')
-
-        # Calculate move up and move down indices based on tracking error
-        tracking_accuracy = self._reward_tracking_rom()
-        low_error_envs = tracking_accuracy > (1 - self.cfg.rom.curriculum_threshold)
-
-        # Filter environments that need weight update
-        valid_env_ids = env_ids[low_error_envs[env_ids]].cpu()
-
-        # TODO: already vectorized, but have to put on cpu to interface with rom_dynamics
-        if len(valid_env_ids) > 1:  # ran into issues when it was only 1
-            transition_rate = self.cfg.rom.weights_curriculum_transition_rate
-
-            current_weights = self.traj_gen.weights[valid_env_ids]
-
-            # Calculate target weights
-            current_weights = torch.from_numpy(current_weights)
-            target_weights = torch.ones_like(current_weights) / current_weights.size(1)
-
-            # Update weights towards the target weights
-            new_weights = current_weights + transition_rate * (target_weights - current_weights)
-
-            # Normalize the new weights
-            new_weights = new_weights / new_weights.sum(dim=1, keepdim=True)
-
-            # Update the weights for the valid environments
-            self.traj_gen.weights[valid_env_ids] = new_weights.numpy()
-
-    def update_speed_curriculum(self, env_ids):
-        """ Implements a curriculum of increasing maximum and minimum speeds
-
-        Args:
-            env_ids (List[int]): ids of environments being reset
-        """
-        if not self.init_done:
-            # don't change on initial reset
-            return
-
-        # Calculate move up and move down indices based on tracking error
-        tracking_errors = self._reward_tracking_rom()
-        low_error_envs = tracking_errors > (1 - self.cfg.rom.curriculum_threshold)
-
-        # Filter environments that need speed update
-        valid_env_ids = env_ids[low_error_envs[env_ids]].cpu()
-
-        # TODO: see if we need to separate out the roms so each can have individual speed
-        if len(valid_env_ids) > len(env_ids) / 2:  # update for all if 50% are performing well enough.
-            transition_rate = self.cfg.rom.speed_curriculum_transition_rate
-
-            # Get the current max and min speeds
-            current_v_max = self.rom.v_max
-            current_v_min = self.rom.v_min
-
-            # Calculate the increment
-            vel_max = np.array(self.cfg.rom.vel_max)
-            increment = transition_rate * vel_max
-
-            # Calculate new max and min speeds
-            new_v_max = np.minimum(current_v_max + increment, vel_max)
-            new_v_min = np.maximum(current_v_min - increment, -vel_max)
-
-            # Update the max and min speeds for the valid environments
-            self.rom.v_max = new_v_max
-            self.rom.v_min = new_v_min
-
-            print(f'Updated Speed to v_max of {new_v_max} and v_min of {new_v_min} due to {len(valid_env_ids)} out of {len(env_ids)} achieving tracking errors exceeding {1 - self.cfg.rom.curriculum_threshold}')
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -627,7 +577,7 @@ class LeggedRobotTrajectory(BaseTask):
         #                             device=self.device, requires_grad=False)  # x vel, y vel, yaw vel, heading
         self.trajectory = torch.zeros(self.num_envs, self.traj_gen.N, self.rom.n, dtype=torch.float, device=self.device, requires_grad=False)
         self.trajectory_scale = torch.repeat_interleave(
-            torch.tensor(self.cfg.rom.obs_scales, device=self.device, requires_grad=False)[None, :],
+            torch.tensor(self.cfg.normalization.obs_scales.trajectory, device=self.device, requires_grad=False)[None, :],
             self.cfg.trajectory_generator.N,
             dim=0
         )
@@ -879,13 +829,24 @@ class LeggedRobotTrajectory(BaseTask):
         self.dt = self.cfg.control.decimation * self.sim_params.dt
         self.obs_scales = self.cfg.normalization.obs_scales
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
-        # self.command_ranges = class_to_dict(self.cfg.commands.ranges)
-        if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
-            self.cfg.terrain.curriculum = False
         self.max_episode_length_s = self.cfg.env.episode_length_s
         self.max_episode_length = np.ceil(self.max_episode_length_s / self.dt)
+        self.nominal_rom_z_max = self.cfg.rom.z_max
+        self.nominal_rom_z_min = self.cfg.rom.z_min
+        self.nominal_rom_v_max = self.cfg.rom.v_max
+        self.nominal_rom_v_min = self.cfg.rom.v_min
 
-        self.cfg.domain_rand.push_interval = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
+        # nominal values (curriculum)
+        self.curriculum_state = 0
+        self.nominal_push_time = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
+        self.nominal_max_push_vel = self.cfg.domain_rand.max_push_vel
+
+        if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
+            self.cfg.terrain.curriculum = False
+
+        else:
+            self.push_time = self.nominal_push_time
+            self.max_push_vel = self.nominal_max_push_vel
 
     def _draw_debug_vis(self):
         """ Draws visualizations for debugging (slows down simulation a lot).

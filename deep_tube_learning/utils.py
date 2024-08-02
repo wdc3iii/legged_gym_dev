@@ -221,6 +221,7 @@ def policy_runner_wandb_callback(
         actor_critic_state_dict,
         optimizer_state_dict,
         device,
+        curriculum,
         steps_per_model_checkpoint,
         checkpointer
 ):
@@ -229,7 +230,8 @@ def policy_runner_wandb_callback(
         "Loss/value_function": data['mean_value_loss'],
         'Loss/surrogate': data['mean_surrogate_loss'],
         'Loss/learning_rate': lr,
-        'Policy/mean_noise_std': mean_std.item()
+        'Policy/mean_noise_std': mean_std.item(),
+        'Train/curriculum': curriculum
     }
     if len(data['rewbuffer']) > 0:
         mean_reward = statistics.mean(data['rewbuffer'])
@@ -258,7 +260,8 @@ def policy_runner_wandb_callback(
                            'iter': data['it'],
                            'infos': None},
                           metric=mean_reward,
-                          step=data['it'])
+                          step=data['it'],
+                          curriculum=curriculum)
 
 
 class CheckPointManager:
@@ -267,8 +270,9 @@ class CheckPointManager:
         self.best_reward = -float("inf")
         self.ckpt_path = str(Path(__file__).parent / "models" / f"{wandb.run.id}")
         os.makedirs(self.ckpt_path, exist_ok=True)
+        self.previous_curriculum = 0
 
-    def save(self, model, metric, step):
+    def save(self, model, metric, step, curriculum):
         self._model_save(model)
         artifact = wandb.Artifact(
             type="model",
@@ -280,9 +284,12 @@ class CheckPointManager:
 
         aliases = ["latest"]
 
+        if curriculum != self.previous_curriculum:
+            self.best_reward = -float("inf")
+            self.previous_curriculum = curriculum
         if self.best_reward < metric:
             self.best_reward = metric
-            aliases.append("best")
+            aliases.append(f"best{curriculum}")
 
         wandb.run.log_artifact(artifact, aliases=aliases)
 

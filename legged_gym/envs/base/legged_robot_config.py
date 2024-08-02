@@ -68,8 +68,6 @@ class LeggedRobotCfg(BaseConfig):
         slope_treshold = 0.75  # slopes above this threshold will be corrected to vertical surfaces
 
     class commands:
-        curriculum = False
-        max_curriculum = 1.
         num_commands = 4  # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10.  # time before command are changed[s]
         heading_command = True  # if true: compute ang vel command from heading error
@@ -176,6 +174,15 @@ class LeggedRobotCfg(BaseConfig):
         soft_torque_limit = 1.
         base_height_target = 1.
         max_contact_force = 100.  # forces above this value are penalized
+
+    class curriculum:
+        use_curriculum: False
+        curriculum_steps: [100, 200]
+        commands = [0.5, 0.75, 1]
+
+        class push:
+            magnitude = [0.1, 0.5, 1]
+            time = [3, 2, 1]
 
     class normalization:
         class obs_scales:

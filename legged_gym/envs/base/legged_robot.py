@@ -147,7 +147,6 @@ class LeggedRobot(BaseTask):
     def reset_idx(self, env_ids):
         """ Reset some environments.
             Calls self._reset_dofs(env_ids), self._reset_root_states(env_ids), and self._resample_commands(env_ids)
-            [Optional] calls self._update_terrain_curriculum(env_ids), self.update_command_curriculum(env_ids) and
             Logs episode info
             Resets some buffers
 
@@ -159,9 +158,7 @@ class LeggedRobot(BaseTask):
         # update curriculum
         if self.cfg.terrain.curriculum:
             self._update_terrain_curriculum(env_ids)
-        # avoid updating command curriculum at each step since the maximum command is common to all envs
-        if self.cfg.commands.curriculum and (self.common_step_counter % self.max_episode_length == 0):
-            self.update_command_curriculum(env_ids)
+
         # reset robot states
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)
@@ -183,7 +180,7 @@ class LeggedRobot(BaseTask):
         # log additional curriculum info
         if self.cfg.terrain.curriculum:
             self.extras["episode"]["terrain_level"] = torch.mean(self.terrain_levels.float())
-        if self.cfg.commands.curriculum:
+        if self.cfg.curriculum.use_curriculum:
             self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
         # send timeout info to the algorithm
         if self.cfg.env.send_timeouts:
@@ -354,8 +351,12 @@ class LeggedRobot(BaseTask):
 
         if self.cfg.terrain.measure_heights:
             self.measured_heights = self._get_heights()
-        if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
+        if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.push_time == 0):
             self._push_robots()
+        if self.cfg.curriculum.use_curriculum and self.curriculum_state < len(self.cfg.curriculum.curriculum_steps) and \
+                self.common_step_counter % self.cfg.curriculum.curriculum_steps[self.curriculum_state] == 0:
+            self.curriculum_state += 1
+            self.update_command_curriculum()
 
     def _resample_commands(self, env_ids):
         """ Randommly select commands of some environments
@@ -451,8 +452,7 @@ class LeggedRobot(BaseTask):
     def _push_robots(self):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
-        max_vel = self.cfg.domain_rand.max_push_vel_xy
-        self.root_states[:, 7:9] = torch_rand_float(-max_vel, max_vel, (self.num_envs, 2),
+        self.root_states[:, 7:9] = torch_rand_float(-self.max_push_vel, self.max_push_vel, (self.num_envs, 2),
                                                     device=self.device)  # lin vel x/y
         self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
 
@@ -481,19 +481,24 @@ class LeggedRobot(BaseTask):
                                                               0))  # (the minumum level is zero)
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
-    def update_command_curriculum(self, env_ids):
+    def update_command_curriculum(self):
         """ Implements a curriculum of increasing commands
 
         Args:
             env_ids (List[int]): ids of environments being reset
         """
         # If the tracking reward is above 80% of the maximum, increase the range of commands
-        if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.8 * \
-                self.reward_scales["tracking_lin_vel"]:
-            self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5,
-                                                          -self.cfg.commands.max_curriculum, 0.)
-            self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0.,
-                                                          self.cfg.commands.max_curriculum)
+        # if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.8 * \
+        #         self.reward_scales["tracking_lin_vel"]:
+        #     self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5,
+        #                                                   -self.cfg.commands.max_curriculum, 0.)
+        #     self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0.,
+        #                                                   self.cfg.commands.max_curriculum)
+        ind = self.curriculum_state
+        self.command_ranges = {key: [v * self.cfg.curriculum.commands[ind] if not key == 'heading' else v for v in val] for key, val in
+                               self.nominal_command_ranges.items()}
+        self.max_push_vel = [v * self.cfg.curriculum.push.magnitude[ind]  for v in self.nominal_max_push_vel]
+        self.push_time = self.nominal_push_time * self.cfg.curriculum.push.time[ind]
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -811,13 +816,21 @@ class LeggedRobot(BaseTask):
         self.dt = self.cfg.control.decimation * self.sim_params.dt
         self.obs_scales = self.cfg.normalization.obs_scales
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
-        self.command_ranges = class_to_dict(self.cfg.commands.ranges)
+        self.nominal_command_ranges = class_to_dict(self.cfg.commands.ranges)
+        self.curriculum_state = 0
+        self.nominal_command_ranges = class_to_dict(self.cfg.commands.ranges)
+        self.nominal_push_time = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
+        self.nominal_max_push_vel = self.cfg.domain_rand.max_push_vel
+        if self.cfg.curriculum.use_curriculum:
+            self.update_command_curriculum()
+        else:
+            self.command_ranges = self.nominal_command_ranges
+            self.push_time = self.nominal_push_time
+            self.max_push_vel = self.nominal_max_push_vel
         if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
             self.cfg.terrain.curriculum = False
         self.max_episode_length_s = self.cfg.env.episode_length_s
         self.max_episode_length = np.ceil(self.max_episode_length_s / self.dt)
-
-        self.cfg.domain_rand.push_interval = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
 
     def _draw_debug_vis(self):
         """ Draws visualizations for dubugging (slows down simulation a lot).

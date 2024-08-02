@@ -8,6 +8,7 @@ headless: False
 save_debugging_data: False
 upload_to_wandb: False
 track_yaw: False
+curriculum: 0
 
 acc_max: 1.5
 acc_min: -1.5

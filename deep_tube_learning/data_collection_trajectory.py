@@ -29,7 +29,7 @@ def get_state(base, joint_pos, joint_vel):
 def data_creation_main(cfg):
 
     exp_name = cfg.wandb_experiment
-    model_name = f'{exp_name}_model:best'
+    model_name = f'{exp_name}_model:best{cfg.curriculum}'
     api = wandb.Api()
     rl_cfg, state_dict = wandb_model_load(api, model_name)
     rl_cfg = update_hydra_cfg(cfg, rl_cfg)

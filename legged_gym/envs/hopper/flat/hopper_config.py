@@ -112,8 +112,6 @@ class HopperRoughCfg( LeggedRobotCfg ):
             height_measurements = 0.1
 
     class commands:
-        curriculum = False
-        max_curriculum = 1.
         num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 10. # time before command are changed[s]
         heading_command = False # if true: compute ang vel command from heading error
@@ -189,6 +187,16 @@ class HopperRoughCfg( LeggedRobotCfg ):
         soft_torque_limit = 1.
         base_height_target = .55
         max_contact_force = 100.  # forces above this value are penalized
+
+    class curriculum:
+        use_curriculum: False
+        curriculum_steps: [100, 200]
+        commands = [0.5, 0.75, 1]
+
+        class push:
+            magnitude = [0.1, 0.5, 1]
+            time = [3, 2, 1]
+
 
     class viewer:
         ref_env = 0

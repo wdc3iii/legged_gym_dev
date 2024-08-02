@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/0w94yf4r"
+curriculum: 2
 dataset_name: "hopper_velocity_single_int"
 
 epochs: 10

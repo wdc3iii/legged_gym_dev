@@ -78,7 +78,6 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         # v_max = [vel_max / 3, vel_max / 3]
         v_min = [-vel_max, -vel_max]
         v_max = [vel_max, vel_max]
-        obs_scales = [1, 1]
         speed_curriculum = False
         weight_curriculum = False
         curriculum_threshold = 0.05
@@ -180,6 +179,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
             dof_pos = 1.0
             dof_vel = 0.05
             height_measurements = 5.0
+            trajectory = [1.0, 1.0]
 
         clip_observations = 100.
         clip_actions = 100.

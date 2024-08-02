@@ -3,6 +3,7 @@ defaults:
   - _self_
 
 wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/tko18h10"
+curriculum: 2
 dataset_name: "hopper_trajectory_single_int"
 
 env_config:

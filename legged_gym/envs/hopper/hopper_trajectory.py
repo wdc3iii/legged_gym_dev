@@ -29,10 +29,8 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from isaacgym.torch_utils import *
-from isaacgym import gymtorch, gymapi
+from isaacgym import gymtorch
 
-from legged_gym import LEGGED_GYM_ROOT_DIR
-import os
 import torch
 from typing import Dict
 from legged_gym.envs import LeggedRobotTrajectory
@@ -86,6 +84,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.default_root_vel_noise_upper = torch.tensor(self.cfg.init_state.default_root_vel_noise_upper,
                                                          device=self.device)
         self.max_vel = torch.tensor(self.cfg.domain_rand.max_push_vel, device=self.device)
+        self._update_envs()
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -196,8 +195,6 @@ class HopperTrajectory(LeggedRobotTrajectory):
         if orient_inds.shape[0] > 0:
             if "orientation" in control_type:
                 quat_des = actions_scaled[orient_inds, :] / torch.linalg.norm(actions_scaled[orient_inds, :], dim=-1, keepdim=True)
-                # quat_des = torch.zeros_like(actions_scaled[orient_inds, :]).to(self.device)
-                # quat_des[:, 0] = 1
 
                 quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
                 err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
@@ -318,12 +315,6 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
         self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
 
-    def _create_envs(self):
-        super()._create_envs()
-        self._process_spring_properties()
-        self._process_torque_speed_properties()
-        self._process_pd_gain_properties()
-
     def _update_envs(self):
         super()._update_envs()
         self._process_spring_properties()
@@ -335,10 +326,10 @@ class HopperTrajectory(LeggedRobotTrajectory):
             self.spring_stiffness = torch_rand_float(self.stiffness_range[0], self.stiffness_range[1],
                                                      (self.num_envs, 1), self.device) * self.nominal_spring_stiffness
         if self.cfg.domain_rand.spring_properties.randomize_damping:
-            self.spring_stiffness = torch_rand_float(self.damping_range[0], self.damping_range[1],
+            self.spring_damping = torch_rand_float(self.damping_range[0], self.damping_range[1],
                                                      (self.num_envs, 1), self.device) * self.nominal_spring_damping
         if self.cfg.domain_rand.spring_properties.randomize_setpoint:
-            self.spring_stiffness = torch_rand_float(self.setpoint_range[0], self.setpoint_range[1],
+            self.foot_pos_des = torch_rand_float(self.setpoint_range[0], self.setpoint_range[1],
                                                      (self.num_envs, 1), self.device) * self.nominal_spring_setpoint
 
     def _process_pd_gain_properties(self):
@@ -352,15 +343,15 @@ class HopperTrajectory(LeggedRobotTrajectory):
             self.d_gain_random = torch.ones((self.num_envs, 4), device=self.device)
 
     def _process_torque_speed_properties(self):
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.torque_speed_properties.randomize_slope:
             self.torque_speed_bound_ratio_random = torch_rand_float(self.max_slope_range[0], self.max_slope_range[1], (self.num_envs, 1), device=self.device)
         else:
             self.torque_speed_bound_ratio_random = torch.ones((self.num_envs, 1), device=self.device)
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.torque_speed_properties.randomize_max_torque:
             self.torque_limit_random = torch_rand_float(self.max_torque_range[0], self.max_torque_range[1], (self.num_envs, 4), device=self.device)
         else:
             self.torque_limit_random = torch.ones((self.num_envs, 4), device=self.device)
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.torque_speed_properties.randomize_max_speed:
             self.wheel_limit_random = torch_rand_float(self.max_speed_range[0], self.max_speed_range[1], (self.num_envs, 3), device=self.device)
         else:
             self.wheel_limit_random = torch.ones((self.num_envs, 3), device=self.device)

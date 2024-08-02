@@ -29,10 +29,8 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from isaacgym.torch_utils import *
-from isaacgym import gymtorch, gymapi
+from isaacgym import gymtorch
 
-from legged_gym import LEGGED_GYM_ROOT_DIR
-import os
 import torch
 from typing import Dict
 from legged_gym.envs import LeggedRobot
@@ -56,18 +54,17 @@ class Hopper(LeggedRobot):
         self.max_slope_range = cfg.domain_rand.torque_speed_properties.slope_range
 
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
-        self.foot_joint_index = torch.tensor([0])
+        self.foot_joint_index = torch.tensor([0], device=self.device)
         mask = torch.ones(self.num_dof, dtype=torch.bool)
         mask[self.foot_joint_index] = False
         self.wxyz_quat_inds = torch.tensor([6, 3, 4, 5])
         self.wheel_joint_indices = torch.arange(self.num_dof)[mask]
 
-
-        self.spring_stiffness = torch.ones((self.num_envs,)) * self.nominal_spring_stiffness
-        self.spring_damping = torch.ones((self.num_envs,)) * self.nominal_spring_damping
+        self.spring_stiffness = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_stiffness
+        self.spring_damping = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_damping
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
-        self.foot_pos_des = torch.ones((self.num_envs,)) * self.nominal_spring_setpoint
+        self.foot_pos_des = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_setpoint
         self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
         self.default_dof_pos_noise_lower = torch.tensor(self.cfg.init_state.default_dof_pos_noise_lower,
                                                         device=self.device)
@@ -86,6 +83,7 @@ class Hopper(LeggedRobot):
         self.default_root_vel_noise_upper = torch.tensor(self.cfg.init_state.default_root_vel_noise_upper,
                                                          device=self.device)
         self.max_vel = torch.tensor(self.cfg.domain_rand.max_push_vel, device=self.device)
+        self._update_envs()
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -182,7 +180,7 @@ class Hopper(LeggedRobot):
             self.torques[contact_inds, self.foot_joint_index] = 0
             self.torques[not_contact_inds, self.foot_joint_index] = -p_gains[not_contact_inds, self.foot_joint_index] * (foot_pos[not_contact_inds.squeeze()] - self.foot_pos_des[not_contact_inds.squeeze()]) - d_gains[not_contact_inds, self.foot_joint_index] * foot_vel[not_contact_inds.squeeze()]
         # Add in foot spring force
-        self.torques[contact_inds, self.foot_joint_index] += -self.spring_stiffness * foot_pos[contact_inds.squeeze()] - self.spring_damping * foot_vel[contact_inds.squeeze()]
+        self.torques[contact_inds, self.foot_joint_index] += -self.spring_stiffness[contact_inds.squeeze()] * foot_pos[contact_inds.squeeze()] - self.spring_damping[contact_inds.squeeze()] * foot_vel[contact_inds.squeeze()]
 
         # Compute wheel torques
         if "spindown" in control_type:
@@ -215,8 +213,8 @@ class Hopper(LeggedRobot):
         ts_ratio = self.torque_speed_bound_ratio * self.torque_speed_bound_ratio_random
         t_bound = self.torque_limits * self.torque_limit_random
         w_bound = self.wheel_speed_limits * self.wheel_limit_random
-        state_input_upper = -ts_ratio * t_bound[self.wheel_joint_indices] / w_bound * (wheel_vel - w_bound)
-        state_input_lower = -ts_ratio * t_bound[self.wheel_joint_indices] / w_bound * (wheel_vel + w_bound)
+        state_input_upper = -ts_ratio * t_bound[:, self.wheel_joint_indices] / w_bound * (wheel_vel - w_bound)
+        state_input_lower = -ts_ratio * t_bound[:, self.wheel_joint_indices] / w_bound * (wheel_vel + w_bound)
         self.torques[:, self.wheel_joint_indices] = torch.clip(self.torques[:, self.wheel_joint_indices], state_input_lower, state_input_upper)
         return torch.clip(self.torques, -t_bound, t_bound)
 
@@ -253,12 +251,12 @@ class Hopper(LeggedRobot):
         Args:
             env_ids (List[int]): Environemnt ids
         """
-        self.dof_pos[env_ids] = self.default_dof_pos + torch_rand_float(
+        self.dof_pos[env_ids] = self.default_dof_pos + torch_rand_vec_float(
             self.default_dof_pos_noise_lower, self.default_dof_pos_noise_upper,
             (len(env_ids), self.num_dof), device=self.device
         )
-        self.dof_vel[env_ids] = torch_rand_float(
-            self.default_dof_vel_noise_lower, self.default_vel_pos_noise_upper,
+        self.dof_vel[env_ids] = torch_rand_vec_float(
+            self.default_dof_vel_noise_lower, self.default_dof_vel_noise_upper,
             (len(env_ids), self.num_dof), device=self.device
         )
 
@@ -278,21 +276,21 @@ class Hopper(LeggedRobot):
         if self.custom_origins:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
-            self.root_states[env_ids, :7] += torch_rand_float(
+            self.root_states[env_ids, :7] += torch_rand_vec_float(
                 self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
-                (len(env_ids), 2), device=self.device
+                (len(env_ids), 7), device=self.device
             )  # xy position within 1m of the center
             self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
-            self.root_states[env_ids, :7] += torch_rand_float(
+            self.root_states[env_ids, :7] += torch_rand_vec_float(
                 self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
-                (len(env_ids), 2), device=self.device
+                (len(env_ids), 7), device=self.device
             )  # xy position within 1m of the center
             self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
         # base velocities
-        self.root_states[env_ids, 7:13] = torch_rand_float(
+        self.root_states[env_ids, 7:13] = torch_rand_vec_float(
             self.default_root_vel_noise_lower, self.default_root_vel_noise_upper,
             (len(env_ids), 6), device=self.device
         )  # [7:10]: lin vel, [10:13]: ang vel
@@ -310,12 +308,6 @@ class Hopper(LeggedRobot):
 
         self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
 
-    def _create_envs(self):
-        super()._create_envs()
-        self._process_spring_properties()
-        self._process_torque_speed_properties()
-        self._process_pd_gain_properties()
-
     def _update_envs(self):
         super()._update_envs()
         self._process_spring_properties()
@@ -327,10 +319,10 @@ class Hopper(LeggedRobot):
             self.spring_stiffness = torch_rand_float(self.stiffness_range[0], self.stiffness_range[1],
                                                      (self.num_envs, 1), self.device) * self.nominal_spring_stiffness
         if self.cfg.domain_rand.spring_properties.randomize_damping:
-            self.spring_stiffness = torch_rand_float(self.damping_range[0], self.damping_range[1],
+            self.spring_damping = torch_rand_float(self.damping_range[0], self.damping_range[1],
                                                      (self.num_envs, 1), self.device) * self.nominal_spring_damping
         if self.cfg.domain_rand.spring_properties.randomize_setpoint:
-            self.spring_stiffness = torch_rand_float(self.setpoint_range[0], self.setpoint_range[1],
+            self.foot_pos_des = torch_rand_float(self.setpoint_range[0], self.setpoint_range[1],
                                                      (self.num_envs, 1), self.device) * self.nominal_spring_setpoint
 
     def _process_pd_gain_properties(self):
@@ -344,15 +336,15 @@ class Hopper(LeggedRobot):
             self.d_gain_random = torch.ones((self.num_envs, 4), device=self.device)
 
     def _process_torque_speed_properties(self):
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.torque_speed_properties.randomize_slope:
             self.torque_speed_bound_ratio_random = torch_rand_float(self.max_slope_range[0], self.max_slope_range[1], (self.num_envs, 1), device=self.device)
         else:
             self.torque_speed_bound_ratio_random = torch.ones((self.num_envs, 1), device=self.device)
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.torque_speed_properties.randomize_max_torque:
             self.torque_limit_random = torch_rand_float(self.max_torque_range[0], self.max_torque_range[1], (self.num_envs, 4), device=self.device)
         else:
             self.torque_limit_random = torch.ones((self.num_envs, 4), device=self.device)
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.torque_speed_properties.randomize_max_speed:
             self.wheel_limit_random = torch_rand_float(self.max_speed_range[0], self.max_speed_range[1], (self.num_envs, 3), device=self.device)
         else:
             self.wheel_limit_random = torch.ones((self.num_envs, 3), device=self.device)

@@ -95,6 +95,7 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             ang_vel = 0.25
             dof_vel = 0.01
             z_pos = 1.0
+            trajectory = [1.0, 1.0]
             height_measurements = 5.0
         clip_observations = 100.
         clip_actions = 100.
@@ -174,6 +175,22 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
         base_height_target = .55
         max_contact_force = 100.  # forces above this value are penalized
 
+    class curriculum:
+        use_curriculum = False
+        curriculum_steps = [2500, 5000]
+        class push:
+            magnitude = [0.1, 0.5, 1]  # multiplier
+            time = [3, 2, 1]  # multiplier
+
+        class trajectory_generator:
+            weight_sampler = ['WeightSamplerSampleAndHold', 'WeightSamplerSampleAndHold', 'WeightSamplerSampleAndHold']
+            t_low = [3, 2, 1]  # multiplier
+            t_high = [3, 2, 1]  # multiplier
+            freq_low = [0.01, 0.1, 1]  # multiplier
+            freq_high = [0.1, 0.5, 1]  # multiplier
+        class rom:
+            z = [1, 1, 1]
+            v = [0.5, 0.75, 1]
 
 class HopperRoughTrajectoryCfgPPO( LeggedRobotTrajectoryCfgPPO ):
     class policy(LeggedRobotTrajectoryCfgPPO.policy):
