@@ -14,7 +14,7 @@ from deep_tube_learning.utils import update_cfgs_from_hydra, update_args_from_hy
 
 @hydra.main(
     config_path=str(Path(__file__).parent / "configs" / "rl"),
-    config_name="hopper",
+    config_name="hopper_trajectory_double_int",
     version_base="1.2",
 )
 def main(cfg):

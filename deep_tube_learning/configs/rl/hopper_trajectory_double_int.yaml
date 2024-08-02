@@ -1,0 +1,78 @@
+defaults:
+  - hopper_default
+  - _self_
+
+task: 'hopper_flat_trajectory'
+experiment_name: 'hopper_traj'
+
+env_config:
+  env:
+    num_envs: 4096
+    num_observations: 58
+    num_actions: 4
+    episode_length_s: 20
+  rewards:
+    scales:
+      termination: -0.5
+      tracking_rom: 6.0
+      ang_vel_xy: -0.05
+      orientation: -1.0
+      torques: -0.00001
+      dof_vel: -0.
+      dof_acc: -2.5e-7
+      collision: -1.
+      action_rate: -0.1
+    only_positive_rewards: False  # if true negative total rewards are clipped at zero (avoids early termination problems)
+    tracking_sigma: 0.25  # tracking reward = exp(-error^2/sigma)
+    soft_dof_pos_limit: 1.  # percentage of urdf limits, values above this limit are penalized
+    soft_dof_vel_limit: 1.
+    soft_torque_limit: 1.
+    base_height_target: .55
+    max_contact_force: 100.  # forces above this value are penalized
+  rom:
+    cls: 'DoubleInt2D'
+    z_min:
+      - ${pos_min}
+      - ${pos_min}
+      - ${vel_min}
+      - ${vel_min}
+    z_max:
+      - ${pos_max}
+      - ${pos_max}
+      - ${vel_max}
+      - ${vel_max}
+    v_min:
+      - ${acc_min}
+      - ${acc_min}
+    v_max:
+      - ${acc_max}
+      - ${acc_max}
+    obs_scales: [1, 1, 1, 1]
+    speed_curriculum: False
+    weight_curriculum: False
+    curriculum_threshold: 0.05
+    weights_curriculum_transition_rate: 0.05
+    speed_curriculum_transition_rate: 0.15
+  trajectory_generator:
+    cls: 'TrajectoryGenerator'
+    t_samp_cls: 'UniformSampleHoldDT'
+    weight_samp_cls: 'WeightSamplerSampleAndHold'
+    N: 10
+    t_low: 1
+    t_high: 2
+    freq_low: 0.01
+    freq_high: 2
+    seed: ${seed}
+
+train_config:
+  policy:
+    actor_hidden_dims: [128, 64, 32]
+    critic_hidden_dims: [128, 64, 32]
+    activation: 'elu'
+  algorithm:
+    entropy_coef: 0.01
+  runner:
+    run_name: ''
+    experiment_name: ${experiment_name}
+    load_run: -1
+    max_iterations: 301

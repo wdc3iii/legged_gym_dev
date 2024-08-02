@@ -36,6 +36,7 @@ import os
 import torch
 from typing import Dict
 from legged_gym.envs import LeggedRobotTrajectory
+from legged_gym.utils.helpers import torch_rand_vec_float
 from legged_gym.envs.hopper.flat_trajectory.hopper_trajectory_config import HopperRoughTrajectoryCfg
 from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate
 
@@ -228,7 +229,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         """
         # Adjust trajectory positions relative to current position
         mod_traj = torch.clone(self.trajectory)
-        mod_traj -= self.rom.proj_z(self.root_states)[:, None, :2]
+        mod_traj -= torch.tensor(self.rom.proj_z(self.root_states.cpu())[:, None, :mod_traj.shape[2]]).cuda()
 
         self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,
@@ -352,15 +353,15 @@ class HopperTrajectory(LeggedRobotTrajectory):
             self.d_gain_random = torch.ones((self.num_envs, 4), device=self.device)
 
     def _process_torque_speed_properties(self):
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.pd_gain_properties.randomize_p_gain:
             self.torque_speed_bound_ratio_random = torch_rand_float(self.max_slope_range[0], self.max_slope_range[1], (self.num_envs, 1), device=self.device)
         else:
             self.torque_speed_bound_ratio_random = torch.ones((self.num_envs, 1), device=self.device)
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.pd_gain_properties.randomize_p_gain:
             self.torque_limit_random = torch_rand_float(self.max_torque_range[0], self.max_torque_range[1], (self.num_envs, 4), device=self.device)
         else:
             self.torque_limit_random = torch.ones((self.num_envs, 4), device=self.device)
-        if self.cfg.domain_rand.torque_speed_properties.randomize_p_gain:
+        if self.cfg.domain_rand.pd_gain_properties.randomize_p_gain:
             self.wheel_limit_random = torch_rand_float(self.max_speed_range[0], self.max_speed_range[1], (self.num_envs, 3), device=self.device)
         else:
             self.wheel_limit_random = torch.ones((self.num_envs, 3), device=self.device)

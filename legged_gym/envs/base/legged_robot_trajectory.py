@@ -230,7 +230,7 @@ class LeggedRobotTrajectory(BaseTask):
             self.extras["time_outs"] = self.time_out_buf
 
     def reset_traj(self, env_ids):
-        self.traj_gen.reset_idx(env_ids.cpu(), self.rom.proj_z(self.root_states).cpu())
+        self.traj_gen.reset_idx(env_ids.cpu(), self.rom.proj_z(self.root_states.cpu()))
 
     def compute_reward(self):
         """ Compute rewards
@@ -1051,7 +1051,7 @@ class LeggedRobotTrajectory(BaseTask):
 
     def _reward_tracking_rom(self):
         desired_state = self.trajectory[:, 0, :]
-        pz_x = self.rom.proj_z(self.root_states)
+        pz_x = torch.tensor(self.rom.proj_z(self.root_states.cpu())).cuda()
         tracking_error = torch.sum(torch.square(pz_x - desired_state), dim=1)
         # print(torch.min(tracking_error).cpu().numpy(), torch.mean(tracking_error).cpu().numpy(), torch.max(tracking_error).cpu().numpy())
         # print(pz_x[0, :] - desired_state[0, :], desired_state[0, :])
