@@ -8,7 +8,7 @@ from deep_tube_learning.utils import UniformSampleHoldDT, WeightSamplerSampleAnd
 
 dt = 0.02
 N = 500
-acc_max = 2
+acc_max = 1
 alpha_max = 4
 vel_max = 1
 omega_max = 2
@@ -96,8 +96,8 @@ def test_numpy_extended_lateral_unicycle():
 
 
 if __name__ == "__main__":
-    test_numpy_single_int()
-    # test_numpy_double_int()
+    # test_numpy_single_int()
+    test_numpy_double_int()
     # test_numpy_unicycle()
     # test_numpy_lateral_unicycle()
     # test_numpy_extended_unicycle()

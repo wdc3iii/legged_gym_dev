@@ -232,8 +232,9 @@ class DoubleInt2D(RomDynamics):
         :param z: current state
         :return: state-dependent input bounds (lower, upper)
         """
-        v_max_z = self.minimum(self.v_max, (self.z_max[2:] - z[:, 2:]) / self.dt)
-        v_min_z = self.maximum(self.v_min, (self.z_min[2:] - z[:, 2:]) / self.dt)
+        z_indexed = z[:, 2:] if z.ndim == 2 else z[2:]
+        v_max_z = self.minimum(self.v_max, (self.z_max[2:] - z_indexed) / self.dt)
+        v_min_z = self.maximum(self.v_min, (self.z_min[2:] - z_indexed) / self.dt)
         return v_min_z, v_max_z
 
     def clip_v_z(self, z, v):
@@ -426,7 +427,7 @@ class TrajectoryGenerator:
         self.resample(t_mask, z)
 
     def resample(self, idx, z):
-        if len(idx) > 0:
+        if len(idx) > 1:
             v_min, v_max = self.rom.compute_state_dependent_input_bounds(z[idx, :])
             self._resample_const_input(idx, v_min, v_max)
             self._resample_ramp_input(idx, z, v_min, v_max)
@@ -450,8 +451,11 @@ class TrajectoryGenerator:
         self.ramp_v_end[idx, :] = self.rng.uniform(v_min, v_max)
         self.ramp_t_start[idx] = self.t_final[idx]
 
-    def _resample_extreme_input(self, t_mask,v_min, v_max):
-        arr = np.concatenate((v_min[:, :, None], np.zeros_like(v_min)[:, :, None], v_max[:, :, None]), axis=-1)
+    def _resample_extreme_input(self, t_mask, v_min, v_max):
+        if v_min.ndim == 3:
+            arr = np.concatenate((v_min[:, :, None], np.zeros_like(v_min)[:, :, None], v_max[:, :, None]), axis=-1)
+        else:
+            arr = np.concatenate((v_min[..., None], np.zeros_like(v_min)[..., None], v_max[..., None]), axis=-1)
         mask = np.arange(3)[None, None, :] == np.random.choice(np.arange(3), size=(*v_min.shape, 1))
         self.extreme_input[t_mask, :] = arr[mask].reshape(v_min.shape)
 
@@ -479,9 +483,9 @@ class TrajectoryGenerator:
         idx = (t > self.t_final).nonzero()[0]
         self.resample(idx, z)
         return self.weights[:, 0][:, None] * self.rom.clip_v_z(z, self._const_input()) + \
-            self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
             self.weights[:, 2][:, None] * self.rom.clip_v_z(z, self._extreme_input()) + \
             self.weights[:, 3][:, None] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
+            # self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
 
     def step(self):
         # Get input to apply for trajectory
