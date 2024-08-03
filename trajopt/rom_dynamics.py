@@ -397,7 +397,8 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 
 class TrajectoryGenerator:
 
-    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42, curriculum=False):
+    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42, curriculum=False,
+                 prob_stationary=.01, stationary_duration=1.):
         self.rom = rom
         self.rng = np.random.RandomState(seed)
         self.N = N
@@ -420,6 +421,10 @@ class TrajectoryGenerator:
         self.trajectory = np.zeros((self.rom.n_robots, self.N, self.rom.n))
         self.v = np.zeros((self.rom.n_robots, self.rom.m))
         self.curriculum = curriculum
+        self.prob_stationary = prob_stationary
+        self.stationary_duration = stationary_duration  # Duration for holding inputs at zero
+        self.stationary_time_left = np.zeros((self.rom.n_robots,))  # Time left to hold stationary state
+
         if self.curriculum:
             self.weights = np.tile(np.array([1., 0., 0., 0.]), (self.rom.n_robots, 1))
 
@@ -481,16 +486,40 @@ class TrajectoryGenerator:
         return self.extreme_input
 
     def _sinusoid_input_t(self, t):
-        return self.sin_mag * np.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
-        # return self.sin_mag * np.sin(self.sin_freq * t + self.sin_off) + self.sin_mean              # change to get trajectory_gen.py and data_collection.py to run
+        # return self.sin_mag * np.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
+        return self.sin_mag * np.sin(self.sin_freq * t + self.sin_off) + self.sin_mean              # change to get trajectory_gen.py and data_collection.py to run
 
     def get_input_t(self, t, z):
-        idx = (t > self.t_final).nonzero()[0]
-        self.resample(idx, z)
-        return self.weights[:, 0][:, None] * self.rom.clip_v_z(z, self._const_input()) + \
-            self.weights[:, 2][:, None] * self.rom.clip_v_z(z, self._extreme_input()) + \
-            self.weights[:, 3][:, None] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
-            # self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
+        # Update the stationary time left for each robot, ensuring it doesn't go below zero
+        self.stationary_time_left = np.maximum(0, self.stationary_time_left - self.rom.dt)
+
+        # Only trigger a new stationary state if the current stationary time has reached zero
+        can_trigger_stationary = self.stationary_time_left == 0
+
+        # Determine if the system should hold at zero, but only if not already stationary
+        new_stationary_mask = (self.rng.uniform(0, 1, size=(
+        self.rom.n_robots,)) < self.prob_stationary) & can_trigger_stationary
+        self.stationary_time_left[new_stationary_mask] = self.stationary_duration
+
+        # Set inputs to zero where stationary time is left
+        stationary_mask = self.stationary_time_left > 0
+        zero_input = np.zeros((self.rom.n_robots, self.rom.m))
+
+        # Refresh the weights if not stationary
+        if not np.any(stationary_mask):
+            idx = (t > self.t_final).nonzero()[0]
+            self.resample(idx, z)
+
+        # Calculate the input considering the stationary condition
+        v_t = self.weights[:, 0][:, None] * self.rom.clip_v_z(z, self._const_input()) + \
+              self.weights[:, 2][:, None] * self.rom.clip_v_z(z, self._extreme_input()) + \
+              self.weights[:, 3][:, None] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
+        # self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
+
+        # Apply the stationary condition
+        v_t[stationary_mask] = zero_input[stationary_mask]
+
+        return v_t
 
     def step(self):
         # Get input to apply for trajectory

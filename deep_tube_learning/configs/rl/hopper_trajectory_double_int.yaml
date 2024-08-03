@@ -56,6 +56,8 @@ env_config:
     curriculum_threshold: ${curriculum_threshold}
     weights_curriculum_transition_rate: 0.05
     speed_curriculum_transition_rate: 0.15
+    prob_stationary: .0001
+    stationary_duration: 1.
   trajectory_generator:
     cls: 'TrajectoryGenerator'
     t_samp_cls: 'UniformSampleHoldDT'

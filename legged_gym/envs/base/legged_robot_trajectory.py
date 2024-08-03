@@ -113,6 +113,7 @@ class LeggedRobotTrajectory(BaseTask):
             freq_high=traj_cfg.freq_high,
             seed=traj_cfg.seed,
             curriculum=self.cfg.rom.weight_curriculum,
+            prob_stationary=self.cfg.rom.prob_stationary,
         )
 
     def step(self, actions):
