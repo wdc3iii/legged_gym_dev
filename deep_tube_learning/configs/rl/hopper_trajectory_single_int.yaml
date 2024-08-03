@@ -3,7 +3,7 @@ defaults:
   - _self_
 
 task: 'hopper_flat_trajectory'
-experiment_name: 'hopper_traj'
+experiment_name: 'hopper_traj_single_int'
 
 env_config:
   env:

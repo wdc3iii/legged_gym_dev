@@ -106,31 +106,6 @@ def quaternion_to_direction_vector(quaternion):
     return v[:3]
 
 
-def torch_rand_vec_float(lower, upper, shape, device='cpu'):
-    """
-    Generates a random vector with values sampled uniformly from a specified range.
-
-    Parameters:
-    - lower (list or torch.Tensor): The lower bounds for the random values.
-    - upper (list or torch.Tensor): The upper bounds for the random values.
-    - shape (tuple): The shape of the output tensor.
-    - device (str): The device on which to create the tensor.
-
-    Returns:
-    - torch.Tensor: A tensor of random values within the specified bounds.
-    """
-    lower = torch.tensor(lower, device=device)
-    upper = torch.tensor(upper, device=device)
-
-    # Ensuring that lower and upper bounds match the desired shape
-    if lower.shape[0] != shape[-1]:
-        lower = lower.unsqueeze(0).repeat(shape[0], 1)
-    if upper.shape[0] != shape[-1]:
-        upper = upper.unsqueeze(0).repeat(shape[0], 1)
-
-    return lower + (upper - lower) * torch.rand(shape, device=device)
-
-
 def class_to_dict(obj) -> dict:
     if not hasattr(obj, "__dict__"):
         return obj

@@ -91,18 +91,19 @@ class LeggedRobotTrajectory(BaseTask):
         model_class = globals()[rom_cfg.cls]
         self.rom = model_class(
             dt=self.dt,
-            z_min=np.array(rom_cfg.z_min),
-            z_max=np.array(rom_cfg.z_max),
-            v_min=np.array(rom_cfg.v_min),
-            v_max=np.array(rom_cfg.v_max),
+            z_min=torch.tensor(rom_cfg.z_min, device=self.device),
+            z_max=torch.tensor(rom_cfg.z_max, device=self.device),
+            v_min=torch.tensor(rom_cfg.v_min, device=self.device),
+            v_max=torch.tensor(rom_cfg.v_max, device=self.device),
             n_robots=self.cfg.env.num_envs,
-            backend='numpy'
+            backend='torch',
+            device=self.device
         )
 
     def _init_trajectory_generator(self):
         traj_cfg = self.cfg.trajectory_generator
         traj_cls = globals()[traj_cfg.cls]
-        t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high)
+        t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high, backend='torch', device=self.device)
         weight_samp = globals()[traj_cfg.weight_samp_cls]()
         self.traj_gen = traj_cls(
             self.rom,
@@ -112,6 +113,8 @@ class LeggedRobotTrajectory(BaseTask):
             freq_low=traj_cfg.freq_low,
             freq_high=traj_cfg.freq_high,
             seed=traj_cfg.seed,
+            backend='torch',
+            device=self.device
         )
 
     def step(self, actions):
@@ -227,7 +230,7 @@ class LeggedRobotTrajectory(BaseTask):
             self.extras["time_outs"] = self.time_out_buf
 
     def reset_traj(self, env_ids):
-        self.traj_gen.reset_idx(env_ids.cpu(), self.rom.proj_z(self.root_states.cpu()))
+        self.traj_gen.reset_idx(env_ids, self.rom.proj_z(self.root_states))
 
     def compute_reward(self):
         """ Compute rewards
@@ -322,6 +325,20 @@ class LeggedRobotTrajectory(BaseTask):
 
             for s in range(len(props)):
                 props[s].friction = self.friction_coeffs[env_id]
+                # Randomize restitution
+                if self.cfg.domain_rand.rigid_shape_properties.randomize_restitution:
+                    rng = self.cfg.domain_rand.rigid_shape_properties.restitution_range
+                    props[s].restitution = np.random.uniform(rng[0], rng[1])
+
+                # Randomize compliance
+                if self.cfg.domain_rand.rigid_shape_properties.randomize_compliance:
+                    rng = self.cfg.domain_rand.rigid_shape_properties.compliance_range
+                    props[s].compliance = np.random.uniform(rng[0], rng[1])
+
+                # Randomize thickness
+                if self.cfg.domain_rand.rigid_shape_properties.randomize_thickness:
+                    rng = self.cfg.domain_rand.rigid_shape_properties.thickness_range
+                    props[s].thickness = np.random.uniform(rng[0], rng[1])
         return props
 
     def _process_dof_props(self, props, env_id):
@@ -354,16 +371,15 @@ class LeggedRobotTrajectory(BaseTask):
         return props
 
     def _process_rigid_body_props(self, props, env_id):
-        # if env_id==0:
-        #     sum = 0
-        #     for i, p in enumerate(props):
-        #         sum += p.mass
-        #         print(f"Mass of body {i}: {p.mass} (before randomization)")
-        #     print(f"Total mass {sum} (before randomization)")
-        # randomize base mass
+        # Randomize base mass
         if self.cfg.domain_rand.randomize_base_mass:
             rng = self.cfg.domain_rand.added_mass_range
             props[0].mass += np.random.uniform(rng[0], rng[1])
+
+        # Randomize inv mass
+        if self.cfg.domain_rand.randomize_inv_base_mass:
+            rng = self.cfg.domain_rand.inv_mass_range
+            props[0].invMass = np.random.uniform(rng[0], rng[1])
         return props
 
     def _post_physics_step_callback(self):
@@ -371,7 +387,7 @@ class LeggedRobotTrajectory(BaseTask):
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
         self.traj_gen.step()
-        self.trajectory = torch.from_numpy(self.traj_gen.trajectory).to(self.device).float()
+        self.trajectory = torch.clone(self.traj_gen.trajectory)
 
         if self.cfg.terrain.measure_heights:
             self.measured_heights = self._get_heights()
@@ -493,15 +509,17 @@ class LeggedRobotTrajectory(BaseTask):
         self.max_push_vel = [v * self.cfg.curriculum.push.magnitude[ind] for v in self.nominal_max_push_vel]
         self.push_time = self.nominal_push_time * self.cfg.curriculum.push.time[ind]
         # RoM bounds
-        self.rom.z_max = np.array([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_max])
-        self.rom.z_min = np.array([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_min])
-        self.rom.v_max = np.array([v * self.cfg.curriculum.rom.v[ind] for v in self.nominal_rom_v_max])
-        self.rom.v_min = np.array([v * self.cfg.curriculum.rom.v[ind] for v in self.nominal_rom_v_min])
+        self.rom.z_max = torch.tensor([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_max], device=self.device)
+        self.rom.z_min = torch.tensor([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_min], device=self.device)
+        self.rom.v_max = torch.tensor([v * self.cfg.curriculum.rom.v[ind] for v in self.nominal_rom_v_max], device=self.device)
+        self.rom.v_min = torch.tensor([v * self.cfg.curriculum.rom.v[ind] for v in self.nominal_rom_v_min], device=self.device)
         # Trajectory sampler
         traj_cfg = self.cfg.trajectory_generator
         t_samp = globals()[traj_cfg.t_samp_cls](
             traj_cfg.t_low * self.cfg.curriculum.trajectory_generator.t_low[ind],
-            traj_cfg.t_high * self.cfg.curriculum.trajectory_generator.t_high[ind]
+            traj_cfg.t_high * self.cfg.curriculum.trajectory_generator.t_high[ind],
+            backend='torch',
+            device=self.device
         )
         self.traj_gen.t_sampler = t_samp
         weight_samp = globals()[traj_cfg.weight_samp_cls]()

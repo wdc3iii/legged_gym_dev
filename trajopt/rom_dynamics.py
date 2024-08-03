@@ -15,7 +15,7 @@ class RomDynamics(ABC):
     n: int  # Dimension of state
     m: int  # Dimension of input
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
         """
         Common constructor functionality
         :param dt: time discretization
@@ -58,9 +58,9 @@ class RomDynamics(ABC):
             self.repeat = lambda arr, n, ax: np.repeat(arr, n, axis=ax)
             self.squeeze = torch.squeeze
         elif backend == 'torch':
-            self.zero_mat = lambda r, c: torch.zeros((r, c))
-            self.zero_vec = lambda n: torch.zeros((n,))
-            self.const_mat = lambda m: torch.tensor(m)
+            self.zero_mat = lambda r, c: torch.zeros((r, c), device=device)
+            self.zero_vec = lambda n: torch.zeros((n,), device=device)
+            self.const_mat = lambda m: torch.tensor(m, device=device)
             self.sin = lambda x: torch.sin(x)
             self.cos = lambda x: torch.cos(x)
             self.stack = lambda lst: torch.hstack(lst)
@@ -68,7 +68,7 @@ class RomDynamics(ABC):
             self.arctan2 = lambda y, x: torch.arctan2(y, x)
             self.maximum = torch.max
             self.minimum = torch.min
-            self.repeat = lambda arr, n, ax: torch.repeat_interleave(arr, n, dim=ax)
+            self.repeat = lambda arr, n, ax: torch.repeat_interleave(arr, n, dim=ax, device=device)
             self.squeeze = torch.squeeze
 
     @abstractmethod
@@ -180,8 +180,8 @@ class SingleInt2D(RomDynamics):
     n = 2   # [x, y]
     m = 2   # [vx, vy]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
         self.A = self.const_mat([[1.0, 0], [0, 1.0]])
         self.B = self.const_mat([[dt, 0], [0, dt]])
 
@@ -207,8 +207,8 @@ class DoubleInt2D(RomDynamics):
     n = 4   # [x, y, vx, vy]
     m = 2   # [ax, ay]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
         self.A = self.const_mat([[1.0, 0, dt, 0], [0, 1.0, 0, dt], [0, 0, 1.0, 0], [0, 0, 0, 1.0]])
         self.B = self.const_mat([[0, 0], [0, 0], [dt, 0], [0, dt]])
 
@@ -232,9 +232,8 @@ class DoubleInt2D(RomDynamics):
         :param z: current state
         :return: state-dependent input bounds (lower, upper)
         """
-        z_indexed = z[:, 2:] if z.ndim == 2 else z[2:]
-        v_max_z = self.minimum(self.v_max, (self.z_max[2:] - z_indexed) / self.dt)
-        v_min_z = self.maximum(self.v_min, (self.z_min[2:] - z_indexed) / self.dt)
+        v_max_z = self.minimum(self.v_max, (self.z_max[2:] - z[:, 2:]) / self.dt)
+        v_min_z = self.maximum(self.v_min, (self.z_min[2:] - z[:, 2:]) / self.dt)
         return v_min_z, v_max_z
 
     def clip_v_z(self, z, v):
@@ -251,8 +250,8 @@ class Unicycle(RomDynamics):
     n = 3   # [x, y, theta]
     m = 2   # [v, omega]
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi'):
-        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend)
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
 
     def f(self, x, u):
         gu = self.zero_mat(self.n_robots, self.n)
@@ -397,37 +396,65 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 
 class TrajectoryGenerator:
 
-    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42):
+    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42, backend='numpy', device='gpu'):
         self.rom = rom
-        self.rng = np.random.RandomState(seed)
+        self.device = device
+        if backend == 'numpy':
+            self.zeros = np.zeros
+            self.ones_like = lambda sh, dt: np.ones_like(dt, dtype=dt)
+            self.zeros_like = np.zeros_like
+            self.rng = np.random.default_rng(seed)
+            self.arange = np.arange
+            self.concatenate = lambda d, dim: np.concatenate(d, axis=dim)
+            self.choice = lambda h, sh: np.random.choice(np.arrange(h), size=(*sh, 1))
+            self.nonzero = lambda n: n.nonzero()[0]
+            self.sin = np.sin
+
+            def uniform(low, high, size=1):
+                return self.rng.uniform(low, high, size)
+        elif backend == 'torch':
+            self.zeros = lambda sh: torch.zeros(sh, device=device)
+            self.ones_like = lambda sh, dt: torch.ones_like(dt, dtype=dt, device=device)
+            self.zeros_like = lambda m: torch.zeros_like(m, device=device)
+            self.arange = lambda l: torch.arange(l, device=device)
+            self.concatenate = lambda d, dim: torch.concatenate(d, dim=dim)
+            self.choice = lambda h, sh: torch.randint(0, h, (*sh, 1), device=device)
+            self.nonzero = lambda n: n.nonzero()
+            self.sin = torch.sin
+
+            def uniform(low, high, size=1):
+                return low + (high - low) * torch.rand(size, device=device)
+        else:
+            raise ValueError(f'Unsupported backend: {device}')
+        self.uniform = uniform
         self.N = N
-        self.weights = np.zeros((self.rom.n_robots, 4))
-        self.t_final = np.zeros((self.rom.n_robots,))
-        self.t = np.zeros((self.rom.n_robots,))
-        self.sample_hold_input = np.zeros((self.rom.n_robots, self.rom.m))
-        self.extreme_input = np.zeros((self.rom.n_robots, self.rom.m))
-        self.ramp_t_start = np.zeros((self.rom.n_robots,))
-        self.ramp_v_start = np.zeros((self.rom.n_robots, self.rom.m))
-        self.ramp_v_end = self.rng.uniform(self.rom.v_min, self.rom.v_max, size=(self.rom.n_robots, self.rom.m))
-        self.sin_mag = np.zeros((self.rom.n_robots, self.rom.m))
-        self.sin_freq = np.zeros((self.rom.n_robots, self.rom.m))
-        self.sin_off = np.zeros((self.rom.n_robots, self.rom.m))
-        self.sin_mean = np.zeros((self.rom.n_robots, self.rom.m))
+        self.weights = self.zeros((self.rom.n_robots, 4))
+        self.t_final = self.zeros((self.rom.n_robots,))
+        self.t = self.zeros((self.rom.n_robots,))
+        self.sample_hold_input = self.zeros((self.rom.n_robots, self.rom.m))
+        self.extreme_input = self.zeros((self.rom.n_robots, self.rom.m))
+        self.ramp_t_start = self.zeros((self.rom.n_robots,))
+        self.ramp_v_start = self.zeros((self.rom.n_robots, self.rom.m))
+        self.ramp_v_end = self.uniform(self.rom.v_min, self.rom.v_max, size=(self.rom.n_robots, self.rom.m))
+        self.sin_mag = self.zeros((self.rom.n_robots, self.rom.m))
+        self.sin_freq = self.zeros((self.rom.n_robots, self.rom.m))
+        self.sin_off = self.zeros((self.rom.n_robots, self.rom.m))
+        self.sin_mean = self.zeros((self.rom.n_robots, self.rom.m))
         self.t_sampler = t_sampler
         self.freq_low = freq_low
         self.freq_high = freq_high
         self.weight_sampler = weight_sampler
-        self.trajectory = np.zeros((self.rom.n_robots, self.N, self.rom.n))
-        self.v = np.zeros((self.rom.n_robots, self.rom.m))
+        self.trajectory = self.zeros((self.rom.n_robots, self.N, self.rom.n))
+        self.v = self.zeros((self.rom.n_robots, self.rom.m))
 
     def reset_inputs(self):
-        t_mask = np.ones_like(self.t_final, dtype=bool)
-        z = np.zeros((self.rom.n_robots, self.rom.n))
-        self.t_final = np.zeros((self.rom.n_robots,))
+        t_mask = self.ones_like(self.t_final, bool)
+        z = self.zeros((self.rom.n_robots, self.rom.n))
+        self.t_final = self.zeros((self.rom.n_robots,))
         self.resample(t_mask, z)
 
     def resample(self, idx, z):
-        if len(idx) > 1:
+        if len(idx) > 0:
             v_min, v_max = self.rom.compute_state_dependent_input_bounds(z[idx, :])
             self._resample_const_input(idx, v_min, v_max)
             self._resample_ramp_input(idx, z, v_min, v_max)
@@ -440,30 +467,25 @@ class TrajectoryGenerator:
 
     def _resample_weight(self, idx):
         self.weights[idx, :] = self.weight_sampler.sample(len(idx))
-        # self.weights[t_mask, :] = np.array([0, 0, 0, 1])
 
     def _resample_const_input(self, idx, v_min, v_max):
-        self.sample_hold_input[idx, :] = self.rng.uniform(v_min, v_max)
+        self.sample_hold_input[idx, :] = self.uniform(v_min, v_max)
 
     def _resample_ramp_input(self, idx, z, v_min, v_max):
-        # self.ramp_v_start[idx, :] = self.rng.uniform(v_min, v_max)
         self.ramp_v_start[idx, :] = self.rom.clip_v_z(z[idx, :], self.ramp_v_end[idx, :])
-        self.ramp_v_end[idx, :] = self.rng.uniform(v_min, v_max)
+        self.ramp_v_end[idx, :] = self.uniform(v_min, v_max)
         self.ramp_t_start[idx] = self.t_final[idx]
 
-    def _resample_extreme_input(self, t_mask, v_min, v_max):
-        if v_min.ndim == 3:
-            arr = np.concatenate((v_min[:, :, None], np.zeros_like(v_min)[:, :, None], v_max[:, :, None]), axis=-1)
-        else:
-            arr = np.concatenate((v_min[..., None], np.zeros_like(v_min)[..., None], v_max[..., None]), axis=-1)
-        mask = np.arange(3)[None, None, :] == np.random.choice(np.arange(3), size=(*v_min.shape, 1))
+    def _resample_extreme_input(self, t_mask,v_min, v_max):
+        arr = self.concatenate((v_min[:, :, None], self.zeros_like(v_min)[:, :, None], v_max[:, :, None]), -1)
+        mask = self.arange(3)[None, None, :] == self.choice(3, v_min.shape)
         self.extreme_input[t_mask, :] = arr[mask].reshape(v_min.shape)
 
     def _resample_sinusoid_input(self, idx, v_min, v_max):
-        self.sin_mag[idx, :] = self.rng.uniform(0, (v_max - v_min) / 2)
-        self.sin_mean[idx, :] = self.rng.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :])
-        self.sin_freq[idx, :] = self.rng.uniform(self.freq_low, self.freq_high, size=v_max.shape)
-        self.sin_off[idx, :] = self.rng.uniform(-np.pi, np.pi, size=v_max.shape)
+        self.sin_mag[idx, :] = self.uniform(0, (v_max - v_min) / 2)
+        self.sin_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :])
+        self.sin_freq[idx, :] = self.uniform(self.freq_low, self.freq_high, size=v_max.shape)
+        self.sin_off[idx, :] = self.uniform(-3.14159, 3.14159, size=v_max.shape)
 
     def _const_input(self):
         return self.sample_hold_input
@@ -476,11 +498,10 @@ class TrajectoryGenerator:
         return self.extreme_input
 
     def _sinusoid_input_t(self, t):
-        return self.sin_mag * np.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
-        # return self.sin_mag * np.sin(self.sin_freq * t + self.sin_off) + self.sin_mean              # change to get trajectory_gen.py and data_collection.py to run
+        return self.sin_mag * self.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
 
     def get_input_t(self, t, z):
-        idx = (t > self.t_final).nonzero()[0]
+        idx = self.nonzero(t > self.t_final)
         self.resample(idx, z)
         return self.weights[:, 0][:, None] * self.rom.clip_v_z(z, self._const_input()) + \
             self.weights[:, 2][:, None] * self.rom.clip_v_z(z, self._extreme_input()) + \
@@ -503,11 +524,11 @@ class TrajectoryGenerator:
         self.trajectory[idx, -1, :] = z_next
 
     def reset(self, z):
-        self.reset_idx(np.ones((self.rom.n_robots,), dtype=bool), z)
+        self.reset_idx(self.ones((self.rom.n_robots,), dtype=bool), z)
 
     def reset_idx(self, idx, z):
         # TODO: Sample the stationary trajectory with small probability
-        self.trajectory[idx, :, :] = np.zeros((len(idx), self.N, self.rom.n))
+        self.trajectory[idx, :, :] = self.zeros((len(idx), self.N, self.rom.n))
         self.trajectory[idx, -1, :] = z[idx, :]
         self.resample(idx, z)
         self.t[idx] = 0

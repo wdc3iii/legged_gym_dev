@@ -4,6 +4,7 @@ import wandb
 import statistics
 import numpy as np
 from pathlib import Path
+from isaacgym.torch_utils import *
 from omegaconf import OmegaConf, DictConfig, ListConfig
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
@@ -19,13 +20,21 @@ class AbstractSampleHoldDT(ABC):
 
 class UniformSampleHoldDT:
 
-    def __init__(self, t_low, t_high, seed=42):
+    def __init__(self, t_low, t_high, seed=42, backend='numpy', device='cuda'):
         self.t_low = t_low
         self.t_high = t_high
-        self.rng = np.random.RandomState(seed)
+        if backend == 'numpy':
+            self.rng = np.random.RandomState(seed)
+            def uniform(l, h, n):
+                self.rng.uniform(self.t_low, self.t_high, size=(n,))
+        elif backend == 'torch':
+            def uniform(l, h, n):
+                return torch_rand_float(l, h, (n, 1), device).squeeze()
+
+        self.uniform = uniform
 
     def sample(self, num_samples: int):
-        return self.rng.uniform(self.t_low, self.t_high, size=(num_samples,))
+        return self.uniform(self.t_low, self.t_high, num_samples)
 
 
 class UniformWeightSampler:

@@ -66,7 +66,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
         self.foot_pos_des = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_setpoint
-        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
+        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action, device=self.device).reshape((1, -1)), self.num_envs, 0).float()
         self.default_dof_pos_noise_lower = torch.tensor(self.cfg.init_state.default_dof_pos_noise_lower,
                                                         device=self.device)
         self.default_dof_pos_noise_upper = torch.tensor(self.cfg.init_state.default_dof_pos_noise_upper,
@@ -225,7 +225,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         """
         # Adjust trajectory positions relative to current position
         mod_traj = torch.clone(self.trajectory)
-        mod_traj -= self.rom.proj_z(self.root_states)[:, None, :2]
+        mod_traj[:, :, :2] -= self.rom.proj_z(self.root_states)[:, None, :2]
 
         self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,
