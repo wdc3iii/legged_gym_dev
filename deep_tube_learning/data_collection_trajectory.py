@@ -28,6 +28,13 @@ def get_state(base, joint_pos, joint_vel):
 )
 def data_creation_main(cfg):
 
+    # Construct a dynamic experiment name based on overridden parameters
+    if "hydra" in cfg and "sweep" in cfg.hydra:
+        experiment_name = f"{cfg.dataset_name}_epochs={cfg.epochs}_track_yaw={cfg.track_yaw}"
+        # replace the above with the actual attributes being changed
+    else:
+        experiment_name = cfg.dataset_name
+
     exp_name = cfg.wandb_experiment
     model_name = f'{exp_name}_model:best{cfg.curriculum}'
     api = wandb.Api()
@@ -40,7 +47,7 @@ def data_creation_main(cfg):
     if cfg.upload_to_wandb:
         wandb.init(project="RoM_Tracking_Data",
                    entity="coleonguard-Georgia Institute of Technology",
-                   name=cfg.dataset_name,
+                   name=experiment_name,  # Use the dynamic experiment name
                    config=cfg_dict)
         run_id = wandb.run.id
     else:
@@ -178,4 +185,15 @@ def data_creation_main(cfg):
 
 
 if __name__ == "__main__":
-    data_creation_main()
+    # Define parameter sweeps
+    overrides = [
+        "env_config/domain_rand/push_robots=True",
+        "env_config/domain_rand/push_robots=False",
+        "env_config/noise/add_noise=True",
+        "env_config/noise/add_noise=False"
+    ]
+
+    # Run multirun programmatically
+    with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "data_generation")):
+        hydra.core.global_hydra.GlobalHydra.instance().clear()
+        hydra.multirun.main(overrides)

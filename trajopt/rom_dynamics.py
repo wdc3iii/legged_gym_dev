@@ -396,7 +396,8 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 
 class TrajectoryGenerator:
 
-    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42, backend='numpy', device='gpu'):
+    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42, backend='numpy', device='gpu',
+                 prob_stationary=.01, stationary_duration=1.):
         self.rom = rom
         self.device = device
         if backend == 'numpy':
@@ -446,6 +447,9 @@ class TrajectoryGenerator:
         self.weight_sampler = weight_sampler
         self.trajectory = self.zeros((self.rom.n_robots, self.N, self.rom.n))
         self.v = self.zeros((self.rom.n_robots, self.rom.m))
+        self.prob_stationary = prob_stationary
+        self.stationary_duration = stationary_duration  # Duration for holding inputs at zero
+        self.stationary_time_left = self.zeros((self.rom.n_robots,))  # Time left to hold stationary state
 
     def reset_inputs(self):
         t_mask = self.ones_like(self.t_final, bool)

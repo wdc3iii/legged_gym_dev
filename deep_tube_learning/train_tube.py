@@ -50,6 +50,7 @@ def create_data_loaders(dataset: TubeDataset, batch_size, validation_split):
     return train_loader, test_dataset
 
 
+
 @hydra.main(
     config_path=str(Path(__file__).parent / "configs" / "tube_learning"),
     config_name="tube_learning",
@@ -77,12 +78,19 @@ def main(cfg):
     optimizer = instantiate(cfg.optimizer)(model.parameters())
     lr_scheduler = instantiate(cfg.lr_scheduler)(optimizer)
 
+    # Construct a dynamic experiment name based on overridden parameters
+    if "hydra" in cfg and "sweep" in cfg.hydra:
+        experiment_name = f"{cfg.experiment_name}_batch_size={cfg.batch_size}_learning_rate={cfg.lr_scheduler.lr}"
+        # replace the above with the actual attributes being changed
+    else:
+        experiment_name = cfg.experiment_name
+
     # Send config to wandb
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
     wandb.init(project="Deep_Tube_Training",
                entity="coleonguard-Georgia Institute of Technology",
-               name=cfg.experiment_name,
+               name=experiment_name,  # Use the dynamic experiment name
                config=cfg_dict)
 
     ckpt_manager = CheckPointManager(metric_name="loss")
@@ -137,4 +145,16 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    main()
+    # Define parameter sweeps (example overrides, adjust accordingly)
+    overrides = [
+        "batch_size=32",
+        "batch_size=64",
+        "batch_size=2048",
+        "lr_scheduler.gamma=0.001",
+        "lr_scheduler.gamma=0.01",
+    ]
+
+    # Run multirun programmatically
+    with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "tube_learning")):
+        hydra.core.global_hydra.GlobalHydra.instance().clear()
+        hydra.multirun.main(overrides)

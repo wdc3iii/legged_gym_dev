@@ -83,6 +83,8 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         curriculum_threshold = 0.05
         weights_curriculum_transition_rate = 0.05
         speed_curriculum_transition_rate = .15
+        prob_stationary = .0001  # probability that the robot receives zero input from the rom
+        stationary_duration = 1.
 
     class trajectory_generator:
         cls = 'TrajectoryGenerator'
@@ -144,6 +146,8 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
+        max_push_vel = [0.25, 0.25, 0.25, 0.75, 0.75, 0.75]
+        time_between_pushes = [.5, 10.]  # seconds
 
     class rewards:
         class scales:
