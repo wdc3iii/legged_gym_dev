@@ -57,6 +57,7 @@ env_config:
     freq_low: 0.01
     freq_high: 2
     seed: ${seed}
+    prob_stationary: 0.01
   curriculum:
     use_curriculum: True
     curriculum_steps: [ 2500, 5000 ]

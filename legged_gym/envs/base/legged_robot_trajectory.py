@@ -119,7 +119,7 @@ class LeggedRobotTrajectory(BaseTask):
             seed=traj_cfg.seed,
             backend='torch',
             device=self.device,
-            prob_stationary=self.cfg.rom.prob_stationary
+            prob_stationary=self.cfg.trajectory_generator.prob_stationary
         )
 
     def step(self, actions):
@@ -854,7 +854,7 @@ class LeggedRobotTrajectory(BaseTask):
             # create a grid of robots
             num_cols = np.floor(np.sqrt(self.num_envs))
             num_rows = np.ceil(self.num_envs / num_cols)
-            xx, yy = torch.meshgrid(torch.arange(num_rows), torch.arange(num_cols))
+            xx, yy = torch.meshgrid(torch.arange(num_rows), torch.arange(num_cols), indexing='ij')
             spacing = self.cfg.env.env_spacing
             self.env_origins[:, 0] = spacing * xx.flatten()[:self.num_envs]
             self.env_origins[:, 1] = spacing * yy.flatten()[:self.num_envs]
@@ -1047,11 +1047,8 @@ class LeggedRobotTrajectory(BaseTask):
 
     def _reward_tracking_rom(self):
         desired_state = self.trajectory[:, 0, :]
-        pz_x = torch.tensor(self.rom.proj_z(self.root_states.cpu())).cuda()
+        pz_x = self.rom.proj_z(self.root_states)
         tracking_error = torch.sum(torch.square(pz_x - desired_state), dim=1)
-        # print(torch.min(tracking_error).cpu().numpy(), torch.mean(tracking_error).cpu().numpy(), torch.max(tracking_error).cpu().numpy())
-        # print(pz_x[0, :] - desired_state[0, :], desired_state[0, :])
-        # print(desired_state[0, :], desired_state[1, :])
         return torch.exp(-tracking_error / self.cfg.rewards.tracking_sigma)
 
     def _reward_feet_air_time(self):

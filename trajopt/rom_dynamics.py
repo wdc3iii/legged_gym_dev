@@ -32,7 +32,7 @@ class RomDynamics(ABC):
         self.z_min = z_min
         self.z_max = z_max
         self.n_robots = n_robots
-        self.precomputed_v = None
+        self.vel_inds = None
 
         if backend == 'casadi':
             self.zero_mat = lambda r, c: ca.MX(r, c)
@@ -68,7 +68,7 @@ class RomDynamics(ABC):
             self.arctan2 = lambda y, x: torch.arctan2(y, x)
             self.maximum = torch.max
             self.minimum = torch.min
-            self.repeat = lambda arr, n, ax: torch.repeat_interleave(arr, n, dim=ax, device=device)
+            self.repeat = lambda arr, n, ax: torch.repeat_interleave(arr, n, dim=ax)
             self.squeeze = torch.squeeze
 
     @abstractmethod
@@ -104,7 +104,7 @@ class RomDynamics(ABC):
         return self.maximum(self.minimum(v, self.v_max), self.v_min)
 
     def compute_state_dependent_input_bounds(self, z):
-        return self.repeat(self.v_min[None, :], z.shape[0], 0), np.repeat(self.v_max[None, :], z.shape[0], 0)
+        return self.repeat(self.v_min[None, :], z.shape[0], 0), self.repeat(self.v_max[None, :], z.shape[0], 0)
 
     @abstractmethod
     def clip_v_z(self, z, v):
@@ -184,6 +184,7 @@ class SingleInt2D(RomDynamics):
         super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
         self.A = self.const_mat([[1.0, 0], [0, 1.0]])
         self.B = self.const_mat([[dt, 0], [0, dt]])
+        self.vel_inds = self.const_mat([False, False])
 
     def f(self, x, u):
         return (self.A @ x.T).T + (self.B @ u.T).T
@@ -211,6 +212,7 @@ class DoubleInt2D(RomDynamics):
         super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
         self.A = self.const_mat([[1.0, 0, dt, 0], [0, 1.0, 0, dt], [0, 0, 1.0, 0], [0, 0, 0, 1.0]])
         self.B = self.const_mat([[0, 0], [0, 0], [dt, 0], [0, dt]])
+        self.vel_inds = self.const_mat([False, False, True, True])
 
     def f(self, x, u):
         return (self.A @ x.T).T + (self.B @ u.T).T
@@ -252,6 +254,7 @@ class Unicycle(RomDynamics):
 
     def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
         super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
+        self.vel_inds = self.const_mat([False, False, False])
 
     def f(self, x, u):
         gu = self.zero_mat(self.n_robots, self.n)
@@ -313,6 +316,10 @@ class ExtendedUnicycle(Unicycle):
     n = 5   # [x, y, theta, v, omega]
     m = 2   # [a, alpha]
 
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
+        self.vel_inds = self.const_mat([False, False, False, True, True])
+
     def f(self, x, u):
         gu = self.zero_mat(self.n_robots, self.n)
         gu[:, 0] = x[:, 3] * self.cos(x[:, 2])
@@ -364,6 +371,10 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
     n = 6   # [x, y, theta, v, v_perp, omega]
     m = 3   # [a, a_perp, alpha]
 
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
+        self.vel_inds = self.const_mat([False, False, False, True, True, True])
+
     def f(self, x, u):
         gu = self.zero_mat(self.n_robots, self.n)
         gu[:, 0] = x[:, 3] * self.cos(x[:, 2]) - x[:, 4] * self.sin(x[:, 2])
@@ -396,8 +407,8 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 
 class TrajectoryGenerator:
 
-    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42, backend='numpy', device='gpu',
-                 prob_stationary=.01, stationary_duration=1.):
+    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42,
+                 backend='numpy', device='gpu', prob_stationary=.01):
         self.rom = rom
         self.device = device
         if backend == 'numpy':
@@ -410,6 +421,7 @@ class TrajectoryGenerator:
             self.choice = lambda h, sh: np.random.choice(np.arrange(h), size=(*sh, 1))
             self.nonzero = lambda n: n.nonzero()[0]
             self.sin = np.sin
+            self.sum = np.sum
 
             def uniform(low, high, size=1):
                 return self.rng.uniform(low, high, size)
@@ -420,8 +432,9 @@ class TrajectoryGenerator:
             self.arange = lambda l: torch.arange(l, device=device)
             self.concatenate = lambda d, dim: torch.concatenate(d, dim=dim)
             self.choice = lambda h, sh: torch.randint(0, h, (*sh, 1), device=device)
-            self.nonzero = lambda n: n.nonzero()
+            self.nonzero = lambda n: torch.nonzero(n)
             self.sin = torch.sin
+            self.sum = torch.sum
 
             def uniform(low, high, size=1):
                 return low + (high - low) * torch.rand(size, device=device)
@@ -448,8 +461,7 @@ class TrajectoryGenerator:
         self.trajectory = self.zeros((self.rom.n_robots, self.N, self.rom.n))
         self.v = self.zeros((self.rom.n_robots, self.rom.m))
         self.prob_stationary = prob_stationary
-        self.stationary_duration = stationary_duration  # Duration for holding inputs at zero
-        self.stationary_time_left = self.zeros((self.rom.n_robots,))  # Time left to hold stationary state
+        self.stationary_inds = self.zeros((self.rom.n_robots,)).bool()
 
     def reset_inputs(self):
         t_mask = self.ones_like(self.t_final, bool)
@@ -465,6 +477,8 @@ class TrajectoryGenerator:
             self._resample_extreme_input(idx, v_min, v_max)
             self._resample_sinusoid_input(idx, v_min, v_max)
             self._resample_t_final(idx)
+            n = self.sum(idx) if idx.dtype == bool else len(idx)
+            self.stationary_inds[idx] = self.uniform(0, 1, (n, 1)).squeeze() < self.prob_stationary
 
     def _resample_t_final(self, idx):
         self.t_final[idx] += self.t_sampler.sample(len(idx))
@@ -515,7 +529,10 @@ class TrajectoryGenerator:
     def step(self):
         # Get input to apply for trajectory
         self.v = self.get_input_t(self.t, self.trajectory[:, -1, :])
+        self.v[self.stationary_inds, :] = 0
         z_next = self.rom.f(self.trajectory[:, -1, :], self.v)
+        mask = self.stationary_inds[:, None] & self.rom.vel_inds
+        z_next[mask] = 0
         self.trajectory[:, :-1, :] = self.trajectory[:, 1:, :]
         self.trajectory[:, -1, :] = z_next
         self.t += self.rom.dt
@@ -523,7 +540,10 @@ class TrajectoryGenerator:
     def step_idx(self, idx):
         # Get input to apply for trajectory
         self.v = self.get_input_t(self.t, self.trajectory[:, -1, :])
+        self.v[self.stationary_inds, :] = 0
         z_next = self.rom.f(self.trajectory[idx, -1, :], self.v[idx, :])
+        mask = self.stationary_inds[:, None] & self.rom.vel_inds
+        z_next[mask[idx, :]] = 0
         self.trajectory[idx, :-1, :] = self.trajectory[idx, 1:, :]
         self.trajectory[idx, -1, :] = z_next
 
@@ -531,7 +551,6 @@ class TrajectoryGenerator:
         self.reset_idx(self.ones((self.rom.n_robots,), dtype=bool), z)
 
     def reset_idx(self, idx, z):
-        # TODO: Sample the stationary trajectory with small probability
         self.trajectory[idx, :, :] = self.zeros((len(idx), self.N, self.rom.n))
         self.trajectory[idx, -1, :] = z[idx, :]
         self.resample(idx, z)
