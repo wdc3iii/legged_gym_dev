@@ -1,17 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from deep_tube_learning.utils import UniformSampleHoldDT, WeightSamplerSampleAndHold
 
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
-                                  ExtendedUnicycle, ExtendedLateralUnicycle, TrajectoryGenerator)
-from deep_tube_learning.utils import UniformSampleHoldDT, WeightSamplerSampleAndHold
+                                  ExtendedUnicycle, ExtendedLateralUnicycle, TrajectoryGenerator,
+                                  ZeroTrajectoryGenerator, SquareTrajectoryGenerator, CircleTrajectoryGenerator)
+import torch
 
 
 dt = 0.02
 N = 500
-acc_max = 1
-alpha_max = 4
-vel_max = 1
-omega_max = 2
+acc_max = 1.0
+alpha_max = 4.0
+vel_max = 1.0
+omega_max = 2.0
 pos_max = np.inf
 
 num_robots = 3
@@ -95,10 +97,116 @@ def test_numpy_extended_lateral_unicycle():
     test_numpy_rom(pm)
 
 
+def test_torch_single_stationary():
+    z_max = torch.tensor([pos_max, pos_max], device='cuda')
+    v_max = torch.tensor([vel_max, vel_max], device='cuda')
+    pm = SingleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="torch")
+    traj_gen = ZeroTrajectoryGenerator(pm, None, None, N=500, backend="torch")
+
+    z0 = torch.zeros((num_robots, pm.n,), device='cuda')
+    traj_gen.reset(z0)
+    zt = traj_gen.trajectory.cpu().numpy()
+
+    rbot = 1
+    fig, ax = plt.subplots()
+    pm.plot_spacial(ax, zt[rbot, :, :])
+    plt.axis("square")
+    plt.show()
+
+def test_torch_double_stationary():
+    z_max = torch.tensor([pos_max, pos_max, vel_max, vel_max], device='cuda')
+    v_max = torch.tensor([acc_max, acc_max], device='cuda')
+    pm = DoubleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="torch")
+    traj_gen = ZeroTrajectoryGenerator(pm, None, None, N=500, backend="torch")
+
+    z0 = torch.zeros((num_robots, pm.n,), device='cuda')
+    traj_gen.reset(z0)
+    zt = traj_gen.trajectory.cpu().numpy()
+
+    rbot = 1
+    fig, ax = plt.subplots()
+    pm.plot_spacial(ax, zt[rbot, :, :])
+    plt.axis("square")
+    plt.show()
+
+def test_torch_double_square():
+    z_max = torch.tensor([pos_max, pos_max, vel_max, vel_max], device='cuda')
+    v_max = torch.tensor([acc_max, acc_max], device='cuda')
+    pm = DoubleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="torch")
+
+    traj_gen = SquareTrajectoryGenerator(pm, None, None, N=500, backend="torch")
+
+    z0 = torch.zeros((num_robots, pm.n,), device='cuda')
+    traj_gen.reset(z0)
+    zt = traj_gen.trajectory.cpu().numpy()
+
+    rbot = 1
+    fig, ax = plt.subplots()
+    pm.plot_spacial(ax, zt[rbot, :, :])
+    plt.axis("square")
+    plt.show()
+
+def test_torch_single_square():
+    z_max = torch.tensor([pos_max, pos_max], device='cuda')
+    v_max = torch.tensor([vel_max, vel_max], device='cuda')
+    pm = SingleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="torch")
+    traj_gen = SquareTrajectoryGenerator(pm, None, None, N=500, backend="torch")
+
+    z0 = torch.zeros((num_robots, pm.n,), device='cuda')
+    traj_gen.reset(z0)
+    zt = traj_gen.trajectory.cpu().numpy()
+
+    rbot = 1
+    fig, ax = plt.subplots()
+    pm.plot_spacial(ax, zt[rbot, :, :])
+    plt.axis("square")
+    plt.show()
+
+
+def test_torch_double_circle():
+    z_max = torch.tensor([pos_max, pos_max, vel_max, vel_max], device='cuda')
+    v_max = torch.tensor([acc_max, acc_max], device='cuda')
+    pm = DoubleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="torch")
+
+    traj_gen = CircleTrajectoryGenerator(pm, None, None, N=1000, backend="torch")
+
+    z0 = torch.zeros((num_robots, pm.n,), device='cuda')
+    traj_gen.reset(z0)
+    zt = traj_gen.trajectory.cpu().numpy()
+
+    rbot = 1
+    fig, ax = plt.subplots()
+    pm.plot_spacial(ax, zt[rbot, :, :])
+    plt.axis("square")
+    plt.show()
+
+def test_torch_single_circle():
+    z_max = torch.tensor([pos_max, pos_max], device='cuda')
+    v_max = torch.tensor([vel_max, vel_max], device='cuda')
+    pm = SingleInt2D(dt, -z_max, z_max, -v_max, v_max, n_robots=num_robots, backend="torch")
+    traj_gen = CircleTrajectoryGenerator(pm, None, None, N=500, backend="torch")
+
+    z0 = torch.zeros((num_robots, pm.n,), device='cuda')
+    traj_gen.reset(z0)
+    zt = traj_gen.trajectory.cpu().numpy()
+
+    rbot = 1
+    fig, ax = plt.subplots()
+    pm.plot_spacial(ax, zt[rbot, :, :])
+    plt.axis("square")
+    plt.show()
+
+
 if __name__ == "__main__":
-    test_numpy_single_int()
+    # test_numpy_single_int()
     # test_numpy_double_int()
     # test_numpy_unicycle()
     # test_numpy_lateral_unicycle()
     # test_numpy_extended_unicycle()
     # test_numpy_extended_lateral_unicycle()
+    test_torch_single_stationary()
+    test_torch_double_stationary()
+    test_torch_single_square()
+    test_torch_double_square()
+    test_torch_single_circle()
+    test_torch_double_circle()

@@ -1,10 +1,10 @@
 import os
-import torch
 import wandb
 import statistics
 import numpy as np
 from pathlib import Path
 from isaacgym.torch_utils import *
+import torch
 from omegaconf import OmegaConf, DictConfig, ListConfig
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation

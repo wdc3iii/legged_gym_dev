@@ -408,11 +408,12 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 class TrajectoryGenerator:
 
     def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42,
-                 backend='numpy', device='gpu', prob_stationary=.01):
+                 backend='numpy', device='cuda', prob_stationary=.01):
         self.rom = rom
         self.device = device
         if backend == 'numpy':
             self.zeros = np.zeros
+            self.ones = lambda sh, dtype: np.ones(sh, dtype=dtype)
             self.ones_like = lambda sh, dt: np.ones_like(dt, dtype=dt)
             self.zeros_like = np.zeros_like
             self.rng = np.random.default_rng(seed)
@@ -427,6 +428,7 @@ class TrajectoryGenerator:
                 return self.rng.uniform(low, high, size)
         elif backend == 'torch':
             self.zeros = lambda sh: torch.zeros(sh, device=device)
+            self.ones = lambda sh, dtype: torch.ones(sh, dtype=dtype, device=device)
             self.ones_like = lambda sh, dt: torch.ones_like(dt, dtype=dt, device=device)
             self.zeros_like = lambda m: torch.zeros_like(m, device=device)
             self.arange = lambda l: torch.arange(l, device=device)
@@ -546,9 +548,10 @@ class TrajectoryGenerator:
         z_next[mask[idx, :]] = 0
         self.trajectory[idx, :-1, :] = self.trajectory[idx, 1:, :]
         self.trajectory[idx, -1, :] = z_next
+        self.t[idx] += self.rom.dt
 
     def reset(self, z):
-        self.reset_idx(self.ones((self.rom.n_robots,), dtype=bool), z)
+        self.reset_idx(self.ones((self.rom.n_robots,), bool), z)
 
     def reset_idx(self, idx, z):
         self.trajectory[idx, :, :] = self.zeros((len(idx), self.N, self.rom.n))
@@ -558,3 +561,87 @@ class TrajectoryGenerator:
 
         for t in range(self.N - 1):
             self.step_idx(idx)
+
+
+class ZeroTrajectoryGenerator(TrajectoryGenerator):
+
+    def resample(self, idx, z):
+        self.stationary_inds[idx] = True
+
+    def get_input_t(self, t, z):
+        return self.zeros((self.rom.n_robots, self.rom.m))
+
+
+class SquareTrajectoryGenerator(TrajectoryGenerator):
+
+    def resample(self, idx, z):
+        pass
+
+    def get_input_t(self, t, z):
+        v = self.zeros((self.rom.n_robots, self.rom.m))
+        if isinstance(self.rom, SingleInt2D):
+            c1 = 2 / self.rom.v_max[1]
+            c2 = c1 + 1 / self.rom.v_max[0]
+            c3 = c2 + 2 / abs(self.rom.v_min[1])
+            c4 = c3 + 1 / abs(self.rom.v_min[0])
+            v[(0 <= t) & (t < c1), 1] = self.rom.v_max[1] / 2
+            v[(c1 <= t) & (t < c2), 0] = self.rom.v_max[0]
+            v[(c2 <= t) & (t < c3), 1] = self.rom.v_min[1] / 2
+            v[(c3 <= t) & (t < c4), 0] = self.rom.v_min[1]
+        elif isinstance(self.rom, DoubleInt2D):
+            c0 = self.rom.z_max[3] / 2 / self.rom.v_max[1]
+            c1 = c0 + (1 - 2 * (0.5 * self.rom.v_max[1] * c0**2)) / (self.rom.z_max[3] / 2)
+            c2 = c1 + self.rom.z_min[3] / 2 / self.rom.v_min[1]
+            c3 = c2
+            c4 = c3 + self.rom.z_max[2] / self.rom.v_max[0]
+            c5 = c4 + (1 - 2 * (0.5 * self.rom.v_max[0] * (c4 - c3) ** 2)) / (self.rom.z_max[2] / 2)
+            c6 = c5 + self.rom.z_min[2] / self.rom.v_min[0]
+            c7 = c6
+            c8 = c7 + self.rom.z_min[3] / 2 /self.rom.v_min[1]
+            c9 = c8 + (1 - 2 * (0.5 * abs(self.rom.v_min[1]) * (c8 - c7) ** 2)) / (abs(self.rom.z_min[3]) / 2)
+            c10 = c9 + self.rom.z_max[3] / 2 / self.rom.v_max[1]
+            c11 = c10
+            c12 = c11 + self.rom.z_min[2] / self.rom.v_min[0]
+            c13 = c12 + (1 - 2 * (0.5 * abs(self.rom.v_min[0]) * (c12 - c11) ** 2)) / (abs(self.rom.z_min[2]) / 2)
+            c14 = c13 + self.rom.z_max[2] / self.rom.v_max[0]
+
+            v[(0 <= t) & (t < c0), 1] = self.rom.v_max[1]
+            v[(c1 <= t) & (t < c2), 1] = self.rom.v_min[1]
+            v[(c3 <= t) & (t < c4), 0] = self.rom.v_max[0]
+            v[(c5 <= t) & (t < c6), 0] = self.rom.v_min[0]
+            v[(c7 <= t) & (t < c8), 1] = self.rom.v_min[1]
+            v[(c9 <= t) & (t < c10), 1] = self.rom.v_max[1]
+            v[(c11 <= t) & (t < c12), 0] = self.rom.v_min[0]
+            v[(c13 <= t) & (t < c14), 0] = self.rom.v_max[0]
+        else:
+            raise ValueError("Only SingleInt2D and DoubleInt2D are supported")
+        return v
+
+    def reset_idx(self, idx, z):
+        z[:, self.rom.vel_inds] = 0
+        super().reset_idx(idx, z)
+
+
+class CircleTrajectoryGenerator(TrajectoryGenerator):
+
+    def resample(self, idx, z):
+        self.center = torch.clone(z.detach())[:, :2]
+        self.center[:, 0] -= 0.5
+
+    def get_input_t(self, t, z):
+        v = self.zeros((self.rom.n_robots, self.rom.m))
+        if isinstance(self.rom, SingleInt2D):
+            e = z - self.center
+            v[:, 0] = - e[:, 1]
+            v[:, 1] = e[:, 0]
+            v += -(e - 0.5 * e / torch.linalg.norm(v, dim=-1, keepdim=True))
+            v = v / torch.linalg.norm(v, dim=-1, keepdim=True) * torch.min(torch.minimum(self.rom.v_max, torch.abs(self.rom.v_min)))
+        elif isinstance(self.rom, DoubleInt2D):
+            m = torch.min(torch.minimum(self.rom.v_max, torch.abs(self.rom.v_min)))
+            z_des = self.center + 0.5 * torch.concatenate([torch.cos(t / m)[:, None], torch.sin(t / m)[:, None]], dim=-1)
+            v_des = 0.5 * torch.concatenate([-torch.sin(t / m)[:, None], torch.cos(t / m)[:, None]], dim=-1) / m
+            v = self.rom.clip_v_z(z, -4 * (z[:, :2] - z_des) - 4 * (z[:, 2:] - v_des))
+        else:
+            raise ValueError("Only SingleInt2D and DoubleInt2D are supported")
+        return v
+
