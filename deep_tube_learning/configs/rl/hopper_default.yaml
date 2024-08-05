@@ -102,9 +102,8 @@ env_config:
     randomize_inv_base_mass: True
     inv_mass_range: [-0.5, 0.5]
     push_robots: True
-    push_interval_s: 5
     max_push_vel: [0.25, 0.25, 0.25, 0.75, 0.75, 0.75]  # [vx, vy, vz, wx, wy, wz]
-    time_between_pushes: [.5, 10.] # min max time (sec) between pushes of the robot. randomly selected in this range
+    time_between_pushes: [2., 10.] # min max time (sec) between pushes of the robot. randomly selected in this range
     rigid_shape_properties:
       randomize_restitution: True
       restitution_range: [0.0, 1.0]

@@ -14,7 +14,7 @@ EP_LEN = int(600)
 
 def main():
     """main"""
-    task = "hopper"
+    task = "hopper_flat"
 
     """First, load in the environment"""
     env_cfg, train_cfg = task_registry.get_cfgs(name=task)
@@ -59,6 +59,7 @@ def main():
     env.gym.set_actor_root_state_tensor_indexed(env.sim,
                                                  gymtorch.unwrap_tensor(env.root_states),
                                                  gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+    env.render()
 
     def control(t, x):
         a = torch.zeros((2, 4))

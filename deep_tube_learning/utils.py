@@ -40,12 +40,11 @@ class UniformSampleHoldDT:
 class UniformWeightSampler:
 
     def __init__(self, dim=4, seed=42):
-        self.rng = np.random.RandomState(seed)
         self.dim = dim
 
     def sample(self, num_samples: int):
-        new_weights = self.rng.uniform(size=(num_samples, self.dim))
-        return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
+        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
+        return new_weights / torch.sum(new_weights, axis=-1, keepdims=True)
 
 
 class UniformWeightSamplerNoExtreme:
@@ -55,36 +54,22 @@ class UniformWeightSamplerNoExtreme:
         self.dim = dim
 
     def sample(self, num_samples: int):
-        new_weights = self.rng.uniform(size=(num_samples, self.dim))
+        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
         new_weights[:, 2] = 0
         return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
 
 
-class WeightSamplerSampleAndHold:
+class UniformWeightSamplerNoRamp:
 
     def __init__(self, dim=4, seed=42):
         self.rng = np.random.RandomState(seed)
         self.dim = dim
 
     def sample(self, num_samples: int):
-        new_weights = self.rng.uniform(size=(num_samples, self.dim))
-        # new_weights[:, 2:] = 0
-        # new_weights[:, 0] = 0
-        new_weights[:, 1] = 0
-        # new_weights[:, 2] = 0
-        # new_weights[:, 3] = 0
-        return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
-
-class WeightSamplerStationaryUniform:
-    # no ramp. I don't know why no ramp. but no ramp!
-    def __init__(self, dim=4, seed=42):
-        self.rng = np.random.RandomState(seed)
-        self.dim = dim
-
-    def sample(self, num_samples: int):
-        new_weights = self.rng.uniform(size=(num_samples, self.dim))
+        new_weights = torch.rand(size=(num_samples, self.dim))
         new_weights[:, 1] = 0
         return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
+
 
 def quat2yaw(quat):
     rot = Rotation.from_quat(quat)

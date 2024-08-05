@@ -48,8 +48,9 @@ from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_fl
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_trajectory_config import LeggedRobotTrajectoryCfg
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
-                                  ExtendedLateralUnicycle, TrajectoryGenerator)
-from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, WeightSamplerSampleAndHold
+                                  ExtendedLateralUnicycle, TrajectoryGenerator,ZeroTrajectoryGenerator,
+                                  CircleTrajectoryGenerator, SquareTrajectoryGenerator)
+from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, UniformWeightSamplerNoRamp
 
 
 class LeggedRobotTrajectory(BaseTask):
@@ -166,6 +167,17 @@ class LeggedRobotTrajectory(BaseTask):
 
         self._post_physics_step_callback()
 
+        self.time_until_next_push -= self.cfg.control.decimation * self.sim_params.dt
+        need_push = (self.time_until_next_push <= 0).reshape((-1,))
+
+        if torch.any(need_push):
+            self._push_robots(need_push)
+            # Reset the timer for the next push for the environments that needed a push
+            self.time_until_next_push[need_push] = torch_rand_float(self.cfg.domain_rand.time_between_pushes[0],
+                                                                    self.cfg.domain_rand.time_between_pushes[1],
+                                                                    (torch.sum(need_push), 1),
+                                                                    device=self.device)
+
         # compute observations, rewards, resets, ...
         self.check_termination()
         self.compute_reward()
@@ -176,17 +188,6 @@ class LeggedRobotTrajectory(BaseTask):
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
-
-        self.time_until_next_push -= self.cfg.control.decimation * self.sim_params.dt
-        need_push = self.time_until_next_push <= 0
-
-        if torch.any(need_push):
-            self._push_robots(need_push)
-            # Reset the timer for the next push for the environments that needed a push
-            self.time_until_next_push[need_push] = torch_rand_float(self.cfg.domain_rand.time_between_pushes[0],
-                                                                    self.cfg.domain_rand.time_between_pushes[1],
-                                                                    (torch.sum(need_push), 1),
-                                                                    device=self.device)
 
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
@@ -403,12 +404,10 @@ class LeggedRobotTrajectory(BaseTask):
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
         self.traj_gen.step()
-        self.trajectory = torch.clone(self.traj_gen.trajectory)
+        self.trajectory = torch.clone(self.traj_gen.trajectory.detach())
 
         if self.cfg.terrain.measure_heights:
             self.measured_heights = self._get_heights()
-        # if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.push_time == 0):
-        #     self._push_robots()
         if self.cfg.curriculum.use_curriculum and self.curriculum_state < len(self.cfg.curriculum.curriculum_steps) and \
                 self.common_step_counter % self.cfg.curriculum.curriculum_steps[self.curriculum_state] == 0:
             self.curriculum_state += 1

@@ -6,6 +6,7 @@ from scipy.spatial.transform import Rotation
 from deep_tube_learning.utils import yaw2rot
 import matplotlib.cm as cm
 import torch
+from isaacgym.torch_utils import *
 
 
 class RomDynamics(ABC):
@@ -423,8 +424,10 @@ class TrajectoryGenerator:
             self.nonzero = lambda n: n.nonzero()[0]
             self.sin = np.sin
             self.sum = np.sum
+            self.array = np.array
+            self.pi = np.pi
 
-            def uniform(low, high, size=1):
+            def uniform(low, high, size):
                 return self.rng.uniform(low, high, size)
         elif backend == 'torch':
             self.zeros = lambda sh: torch.zeros(sh, device=device)
@@ -437,9 +440,11 @@ class TrajectoryGenerator:
             self.nonzero = lambda n: torch.nonzero(n)
             self.sin = torch.sin
             self.sum = torch.sum
+            self.array = lambda a: torch.tensor(a, device=device)
+            self.pi = torch.pi
 
-            def uniform(low, high, size=1):
-                return low + (high - low) * torch.rand(size, device=device)
+            def uniform(low, high, size):
+                return torch_rand_vec_float(low, high, size, device=device)
         else:
             raise ValueError(f'Unsupported backend: {device}')
         self.uniform = uniform
@@ -479,8 +484,9 @@ class TrajectoryGenerator:
             self._resample_extreme_input(idx, v_min, v_max)
             self._resample_sinusoid_input(idx, v_min, v_max)
             self._resample_t_final(idx)
+            self._resample_weight(idx)
             n = self.sum(idx) if idx.dtype == bool else len(idx)
-            self.stationary_inds[idx] = self.uniform(0, 1, (n, 1)).squeeze() < self.prob_stationary
+            self.stationary_inds[idx] = self.uniform(self.array([0.0]), self.array([1.0]), (n, 1)).squeeze() < self.prob_stationary
 
     def _resample_t_final(self, idx):
         self.t_final[idx] += self.t_sampler.sample(len(idx))
@@ -489,11 +495,11 @@ class TrajectoryGenerator:
         self.weights[idx, :] = self.weight_sampler.sample(len(idx))
 
     def _resample_const_input(self, idx, v_min, v_max):
-        self.sample_hold_input[idx, :] = self.uniform(v_min, v_max)
+        self.sample_hold_input[idx, :] = self.uniform(v_min, v_max, size=(len(idx), self.rom.m))
 
     def _resample_ramp_input(self, idx, z, v_min, v_max):
         self.ramp_v_start[idx, :] = self.rom.clip_v_z(z[idx, :], self.ramp_v_end[idx, :])
-        self.ramp_v_end[idx, :] = self.uniform(v_min, v_max)
+        self.ramp_v_end[idx, :] = self.uniform(v_min, v_max, size=(len(idx), self.rom.m))
         self.ramp_t_start[idx] = self.t_final[idx]
 
     def _resample_extreme_input(self, t_mask,v_min, v_max):
@@ -502,10 +508,10 @@ class TrajectoryGenerator:
         self.extreme_input[t_mask, :] = arr[mask].reshape(v_min.shape)
 
     def _resample_sinusoid_input(self, idx, v_min, v_max):
-        self.sin_mag[idx, :] = self.uniform(0, (v_max - v_min) / 2)
-        self.sin_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :])
-        self.sin_freq[idx, :] = self.uniform(self.freq_low, self.freq_high, size=v_max.shape)
-        self.sin_off[idx, :] = self.uniform(-3.14159, 3.14159, size=v_max.shape)
+        self.sin_mag[idx, :] = self.uniform(self.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx), self.rom.m))
+        self.sin_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :], size=(len(idx), self.rom.m))
+        self.sin_freq[idx, :] = self.uniform(self.array([self.freq_low]), self.array([self.freq_high]), size=(len(idx), self.rom.m))
+        self.sin_off[idx, :] = self.uniform(self.array([-self.pi]), self.array([-self.pi]), size=(len(idx), self.rom.m))
 
     def _const_input(self):
         return self.sample_hold_input
@@ -521,12 +527,12 @@ class TrajectoryGenerator:
         return self.sin_mag * self.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
 
     def get_input_t(self, t, z):
-        idx = self.nonzero(t > self.t_final)
+        idx = self.nonzero(t > self.t_final).reshape((-1,))
         self.resample(idx, z)
         return self.weights[:, 0][:, None] * self.rom.clip_v_z(z, self._const_input()) + \
+            self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
             self.weights[:, 2][:, None] * self.rom.clip_v_z(z, self._extreme_input()) + \
             self.weights[:, 3][:, None] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
-            # self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
 
     def step(self):
         # Get input to apply for trajectory
@@ -605,14 +611,14 @@ class SquareTrajectoryGenerator(TrajectoryGenerator):
             c13 = c12 + (1 - 2 * (0.5 * abs(self.rom.v_min[0]) * (c12 - c11) ** 2)) / (abs(self.rom.z_min[2]) / 2)
             c14 = c13 + self.rom.z_max[2] / self.rom.v_max[0]
 
-            v[(0 <= t) & (t < c0), 1] = self.rom.v_max[1]
-            v[(c1 <= t) & (t < c2), 1] = self.rom.v_min[1]
-            v[(c3 <= t) & (t < c4), 0] = self.rom.v_max[0]
-            v[(c5 <= t) & (t < c6), 0] = self.rom.v_min[0]
-            v[(c7 <= t) & (t < c8), 1] = self.rom.v_min[1]
-            v[(c9 <= t) & (t < c10), 1] = self.rom.v_max[1]
-            v[(c11 <= t) & (t < c12), 0] = self.rom.v_min[0]
-            v[(c13 <= t) & (t < c14), 0] = self.rom.v_max[0]
+            v[(0 <= t) & (t < c0), 1] = self.rom.v_max[1].float()
+            v[(c1 <= t) & (t < c2), 1] = self.rom.v_min[1].float()
+            v[(c3 <= t) & (t < c4), 0] = self.rom.v_max[0].float()
+            v[(c5 <= t) & (t < c6), 0] = self.rom.v_min[0].float()
+            v[(c7 <= t) & (t < c8), 1] = self.rom.v_min[1].float()
+            v[(c9 <= t) & (t < c10), 1] = self.rom.v_max[1].float()
+            v[(c11 <= t) & (t < c12), 0] = self.rom.v_min[0].float()
+            v[(c13 <= t) & (t < c14), 0] = self.rom.v_max[0].float()
         else:
             raise ValueError("Only SingleInt2D and DoubleInt2D are supported")
         return v

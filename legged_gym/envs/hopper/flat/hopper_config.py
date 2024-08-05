@@ -189,8 +189,8 @@ class HopperRoughCfg( LeggedRobotCfg ):
         max_contact_force = 100.  # forces above this value are penalized
 
     class curriculum:
-        use_curriculum: False
-        curriculum_steps: [100, 200]
+        use_curriculum = False
+        curriculum_steps = [100, 200]
         commands = [0.5, 0.75, 1]
 
         class push:

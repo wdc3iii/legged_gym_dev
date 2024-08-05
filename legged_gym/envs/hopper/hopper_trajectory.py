@@ -136,6 +136,22 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
         self._post_physics_step_callback()
 
+        self.time_until_next_push -= self.cfg.control.decimation * self.sim_params.dt
+        need_push = self.time_until_next_push <= 0
+
+        if self.cfg.domain_rand.push_robots and torch.any(need_push):
+            self._push_robots(need_push.nonzero(as_tuple=False).flatten())
+            # Reset the timer for the next push for the environments that needed a push
+            lb = self.cfg.domain_rand.time_between_pushes[0]
+            ub = self.cfg.domain_rand.time_between_pushes[1]
+            if self.cfg.curriculum.use_curriculum:
+                lb *= self.cfg.curriculum.push.time[self.curriculum_state]
+                ub *= self.cfg.curriculum.push.time[self.curriculum_state]
+            self.time_until_next_push[need_push] = torch_rand_float(lb,
+                                                                    ub,
+                                                                    (torch.sum(need_push), 1),
+                                                                    device=self.device).flatten()
+
         # compute observations, rewards, resets, ...
         self.check_termination()
         self.compute_reward()
@@ -292,9 +308,9 @@ class HopperTrajectory(LeggedRobotTrajectory):
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
-            self.root_states[env_ids, :7] += torch_rand_vec_float(
-                self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
-                (len(env_ids), 7), device=self.device
+            self.root_states[env_ids, 2:7] += torch_rand_vec_float(
+                self.default_root_pos_noise_lower[2:], self.default_root_pos_noise_upper[2:],
+                (len(env_ids), 5), device=self.device
             )  # xy position within 1m of the center
             self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
         # base velocities
@@ -307,13 +323,17 @@ class HopperTrajectory(LeggedRobotTrajectory):
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-    def _push_robots(self):
+    def _push_robots(self, push_idx):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
-        self.root_states[:, 7:13] = torch_rand_vec_float(-self.max_vel, self.max_vel,
-                                                        (self.num_envs, 6), device=self.device)
 
-        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
+        self.root_states[push_idx, 7:13] = torch_rand_vec_float(-self.max_vel, self.max_vel,
+                                                                (len(push_idx), 6), device=self.device)
+
+        env_ids_int32 = push_idx.to(dtype=torch.int32)
+        self.gym.set_actor_root_state_tensor_indexed(self.sim,
+                                             gymtorch.unwrap_tensor(self.root_states),
+                                             gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
     def _update_envs(self):
         super()._update_envs()

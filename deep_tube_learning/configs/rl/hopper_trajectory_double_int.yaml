@@ -50,7 +50,7 @@ env_config:
   trajectory_generator:
     cls: 'TrajectoryGenerator'
     t_samp_cls: 'UniformSampleHoldDT'
-    weight_samp_cls: 'WeightSamplerSampleAndHold'
+    weight_samp_cls: 'UniformWeightSampler'
     N: 10
     t_low: 1
     t_high: 2
@@ -62,10 +62,10 @@ env_config:
     use_curriculum: True
     curriculum_steps: [ 2500, 5000 ]
     push:
-      magnitude: [ 0.1, 0.5, 1 ]  # multiplier
+      magnitude: [ 0.0, 0.2, 1 ]  # multiplier
       time: [ 3, 2, 1 ]         # multiplier
     trajectory_generator:
-      weight_sampler: [ 'WeightSamplerSampleAndHold', 'WeightSamplerSampleAndHold', 'WeightSamplerSampleAndHold' ]
+      weight_sampler: [ 'UniformWeightSampler', 'UniformWeightSampler', 'UniformWeightSampler' ]
       t_low: [ 3, 2, 1 ]   # multiplier
       t_high: [ 3, 2, 1 ]  # multiplier
       freq_low: [ 0.01, 0.1, 1 ]  # multiplier
