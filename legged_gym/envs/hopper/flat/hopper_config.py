@@ -20,6 +20,7 @@ class HopperRoughCfg( LeggedRobotCfg ):
             'wheel2_rotation': 0.0,
             'wheel3_rotation': 0.0
         }
+        randomize_yaw = True
         default_dof_pos_noise_lower = [-0.02, 0, 0, 0]  # [foot, wheel1, 2, 3]
         default_dof_pos_noise_upper = [0.02, 0, 0, 0]
         default_dof_vel_noise_lower = [-0.1, 100, 100, 100]
