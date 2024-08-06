@@ -269,6 +269,9 @@ class HopperTrajectory(LeggedRobotTrajectory):
         """ Reset all robots"""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
         obs, privileged_obs, _, _, _ = self.step(self.zero_action)
+        # For some reason we need an addiontional reset
+        self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        obs, privileged_obs, _, _, _ = self.step(self.zero_action)
         return obs, privileged_obs
 
     def _reset_dofs(self, env_ids):
