@@ -86,6 +86,12 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         prob_stationary = .0001  # probability that the robot receives zero input from the rom
         stationary_duration = 1.
 
+        class reward_weighting:
+            position: 1.0
+            velocity: 0.5
+            orientation: 0.3
+            angular_velocity: 0.2
+
     class trajectory_generator:
         cls = 'TrajectoryGenerator'
         t_samp_cls = 'UniformSampleHoldDT'
@@ -167,9 +173,6 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
             # stand_still = -0.
 
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.25
-
-        # tracking reward = exp(-error^2/sigma)
         soft_dof_pos_limit = 1.  # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.

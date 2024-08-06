@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from deep_tube_learning.utils import UniformSampleHoldDT, WeightSamplerSampleAndHold
+from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler
 
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
                                   ExtendedUnicycle, ExtendedLateralUnicycle, TrajectoryGenerator,
@@ -21,7 +21,7 @@ num_robots = 3
 
 def test_numpy_rom(pm):
     t_samp = UniformSampleHoldDT(0.1, 2)
-    w_samp = WeightSamplerSampleAndHold()
+    w_samp = UniformWeightSampler()
     traj_gen = TrajectoryGenerator(pm, t_samp, w_samp, prob_stationary=.0001)
     # traj_gen.reset()
 

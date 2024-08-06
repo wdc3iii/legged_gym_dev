@@ -540,6 +540,12 @@ class LeggedRobotTrajectory(BaseTask):
         weight_samp = globals()[traj_cfg.weight_samp_cls]()
         self.traj_gen.weight_sampler = weight_samp
 
+        if self.cfg.curriculum.use_sigma_curriculum:
+            for key in self.sigma_values:
+                if hasattr(self.cfg.curriculum.rewards, key):
+                    self.sigma_values[key] = getattr(self.cfg.curriculum.rewards, key)[ind]
+
+        print('----- Updated Curriculum -----')
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -882,6 +888,10 @@ class LeggedRobotTrajectory(BaseTask):
             self.push_time = self.nominal_push_time
             self.max_push_vel = self.nominal_max_push_vel
 
+        # Automatically construct the sigma_values dictionary
+        self.sigma_values = {attr: 1.0 for attr in dir(self.cfg.rewards.scales) if
+                             not attr.startswith("__") and not callable(getattr(self.cfg.rewards.scales, attr))}
+
     def _draw_debug_vis(self):
         """ Draws visualizations for debugging (slows down simulation a lot).
             Default behavior: draws height measurement points and trajectory points.
@@ -976,79 +986,126 @@ class LeggedRobotTrajectory(BaseTask):
     # ------------ reward functions----------------
     def _reward_lin_vel_z(self):
         # Penalize z axis base linear velocity
-        return torch.square(self.base_lin_vel[:, 2])
+        return torch.square(self.base_lin_vel[:, 2]) / self.sigma_values["lin_vel_z"]
 
     def _reward_ang_vel_xy(self):
         # Penalize xy axes base angular velocity
-        return torch.sum(torch.square(self.base_ang_vel[:, :2]), dim=1)
+        return torch.sum(torch.square(self.base_ang_vel[:, :2]), dim=1) / self.sigma_values["ang_vel_xy"]
 
     def _reward_orientation(self):
-        # Penalize non flat base orientation
-        return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
+        # Penalize non-flat base orientation
+        return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1) / self.sigma_values[
+            "orientation"]
 
     def _reward_base_height(self):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-        return torch.square(base_height - self.cfg.rewards.base_height_target)
+        return torch.square(base_height - self.cfg.rewards.base_height_target) / self.sigma_values[
+            "base_height"]
 
     def _reward_torques(self):
         # Penalize torques
-        return torch.sum(torch.square(self.torques), dim=1)
+        return torch.sum(torch.square(self.torques), dim=1) / self.sigma_values["torques"]
 
     def _reward_dof_vel(self):
         # Penalize dof velocities
-        return torch.sum(torch.square(self.dof_vel), dim=1)
+        return torch.sum(torch.square(self.dof_vel), dim=1) / self.sigma_values["dof_vel"]
 
     def _reward_dof_acc(self):
         # Penalize dof accelerations
-        return torch.sum(torch.square((self.last_dof_vel - self.dof_vel) / self.dt), dim=1)
+        return torch.sum(torch.square((self.last_dof_vel - self.dof_vel) / self.dt), dim=1) / \
+            self.sigma_values["dof_acc"]
 
     def _reward_action_rate(self):
         # Penalize changes in actions
-        return torch.sum(torch.square(self.last_actions - self.actions), dim=1)
+        return torch.sum(torch.square(self.last_actions - self.actions), dim=1) / self.sigma_values[
+            "action_rate"]
 
     def _reward_collision(self):
         # Penalize collisions on selected bodies
         return torch.sum(1. * (torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1),
-                         dim=1)
+                         dim=1) / self.sigma_values["collision"]
 
     def _reward_termination(self):
         # Terminal reward / penalty
-        return self.reset_buf * ~self.time_out_buf
+        return self.reset_buf * ~self.time_out_buf / self.sigma_values["termination"]
 
     def _reward_dof_pos_limits(self):
         # Penalize dof positions too close to the limit
         out_of_limits = -(self.dof_pos - self.dof_pos_limits[:, 0]).clip(max=0.)  # lower limit
         out_of_limits += (self.dof_pos - self.dof_pos_limits[:, 1]).clip(min=0.)
-        return torch.sum(out_of_limits, dim=1)
+        return torch.sum(out_of_limits, dim=1) / self.sigma_values["dof_pos_limits"]
 
     def _reward_dof_vel_limits(self):
         # Penalize dof velocities too close to the limit
         # clip to max error = 1 rad/s per joint to avoid huge penalties
         return torch.sum(
             (torch.abs(self.dof_vel) - self.dof_vel_limits * self.cfg.rewards.soft_dof_vel_limit).clip(min=0., max=1.),
-            dim=1)
+            dim=1) / self.sigma_values["dof_vel_limits"]
 
     def _reward_torque_limits(self):
-        # penalize torques too close to the limit
+        # Penalize torques too close to the limit
         return torch.sum(
-            (torch.abs(self.torques) - self.torque_limits * self.cfg.rewards.soft_torque_limit).clip(min=0.), dim=1)
+            (torch.abs(self.torques) - self.torque_limits * self.cfg.rewards.soft_torque_limit).clip(min=0.), dim=1) / \
+            self.sigma_values["torque_limits"]
 
     # def _reward_tracking_lin_vel(self):
     #     # Tracking of linear velocity commands (xy axes)
     #     lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
-    #     return torch.exp(-lin_vel_error / self.cfg.rewards.tracking_sigma)
+    #     return torch.exp(-lin_vel_error / self.sigma_values["tracking_lin_vel"])
 
     # def _reward_tracking_ang_vel(self):
     #     # Tracking of angular velocity commands (yaw)
     #     ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
-    #     return torch.exp(-ang_vel_error / self.cfg.rewards.tracking_sigma)
+    #     return torch.exp(-ang_vel_error / self.sigma_values["tracking_ang_vel"])
 
     def _reward_tracking_rom(self):
+        """
+        Computes a reward based on tracking error with different weights for each component of the trajectory.
+        This function is generalized to work with any type of ROM, using weights from the configuration file.
+        """
         desired_state = self.trajectory[:, 0, :]
         pz_x = self.rom.proj_z(self.root_states)
-        tracking_error = torch.sum(torch.square(pz_x - desired_state), dim=1)
-        return torch.exp(-tracking_error / self.cfg.rewards.tracking_sigma)
+        tracking_error = torch.zeros_like(pz_x)
+
+        if isinstance(self.rom, SingleInt2D):
+            # SingleInt2D has [x, y] for position only
+            tracking_error[:, :2] = getattr(self.cfg.rom.reward_weighting, 'position', 0.0) * torch.square(
+                pz_x[:, :2] - desired_state[:, :2])
+
+        elif isinstance(self.rom, DoubleInt2D):
+            # DoubleInt2D has [x, y, vx, vy]
+            tracking_error[:, :2] = getattr(self.cfg.rom.reward_weighting, 'position', 0.0) * torch.square(
+                pz_x[:, :2] - desired_state[:, :2])
+            tracking_error[:, 2:4] = getattr(self.cfg.rom.reward_weighting, 'velocity', 0.0) * torch.square(
+                pz_x[:, 2:4] - desired_state[:, 2:4])
+
+        elif isinstance(self.rom, Unicycle):
+            # Unicycle has [x, y, theta]
+            tracking_error[:, :2] = getattr(self.cfg.rom.reward_weighting, 'position', 0.0) * torch.square(
+                pz_x[:, :2] - desired_state[:, :2])
+            tracking_error[:, 2] = getattr(self.cfg.rom.reward_weighting, 'orientation', 0.0) * torch.square(
+                pz_x[:, 2] - desired_state[:, 2])
+
+        elif isinstance(self.rom, ExtendedUnicycle):
+            # ExtendedUnicycle has [x, y, theta, v, omega]
+            tracking_error[:, :2] = getattr(self.cfg.rom.reward_weighting, 'position', 0.0) * torch.square(
+                pz_x[:, :2] - desired_state[:, :2])
+            tracking_error[:, 2] = getattr(self.cfg.rom.reward_weighting, 'orientation', 0.0) * torch.square(
+                pz_x[:, 2] - desired_state[:, 2])
+            tracking_error[:, 3] = getattr(self.cfg.rom.reward_weighting, 'velocity', 0.0) * torch.square(
+                pz_x[:, 3] - desired_state[:, 3])
+            tracking_error[:, 4] = getattr(self.cfg.rom.reward_weighting, 'angular_velocity', 0.0) * torch.square(
+                pz_x[:, 4] - desired_state[:, 4])
+
+        # Add additional elif blocks here for other ROM types with different state vector structures.
+
+        else:
+            raise ValueError(f'Unsupported ROM type: {type(self.rom)}')
+
+        total_tracking_error = torch.sum(tracking_error, dim=1)
+        reward = torch.exp(-total_tracking_error / self.sigma_values["tracking_rom"])
+        return reward
 
     def _reward_feet_air_time(self):
         # Reward long steps
@@ -1062,19 +1119,20 @@ class LeggedRobotTrajectory(BaseTask):
                                 dim=1)  # reward only on first contact with the ground
         # rew_airTime *= torch.norm(self.commands[:, :2], dim=1) > 0.1  # no reward for zero command # TODO: correct this
         self.feet_air_time *= ~contact_filt
-        return rew_airTime
+        return rew_airTime / self.sigma_values["feet_air_time"]
 
     def _reward_stumble(self):
         # Penalize feet hitting vertical surfaces
-        return torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) > \
-                         5 * torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
+        return torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) > 5 * torch.abs(
+            self.contact_forces[:, self.feet_indices, 2]), dim=1) / self.sigma_values["stumble"]
 
     def _reward_stand_still(self):
         # Penalize motion at zero commands
         return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1) * (
-                    torch.norm(self.commands[:, :2], dim=1) < 0.1)
+                    torch.norm(self.commands[:, :2], dim=1) < 0.1) / self.sigma_values["stand_still"]
 
     def _reward_feet_contact_forces(self):
-        # penalize high contact forces
+        # Penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :],
-                                     dim=-1) - self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
+                                     dim=-1) - self.cfg.rewards.max_contact_force).clip(min=0.), dim=1) / \
+            self.sigma_values["feet_contact_forces"]

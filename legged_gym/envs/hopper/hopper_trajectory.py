@@ -35,6 +35,7 @@ import torch
 from typing import Dict
 from legged_gym.envs import LeggedRobotTrajectory
 from legged_gym.envs.hopper.flat_trajectory.hopper_trajectory_config import HopperRoughTrajectoryCfg
+from legged_gym.utils.helpers import torch_rand_vec_float
 from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate
 
 
@@ -432,12 +433,12 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
     def _reward_torque_limits(self):
         # penalize torques too close to the limit
-        return torch.sum(torch.abs(self.torques[:, self.wheel_joint_indices]), dim=1)
+        return torch.sum(torch.abs(self.torques[:, self.wheel_joint_indices]), dim=1) / self.sigma_values['torque_limit']
 
     def _reward_dof_acc(self):
         # Penalize dof accelerations
-        return torch.sum(torch.square((self.last_dof_vel[:, self.wheel_joint_indices] - self.dof_vel[:, self.wheel_joint_indices]) / self.dt), dim=1)
+        return torch.sum(torch.square((self.last_dof_vel[:, self.wheel_joint_indices] - self.dof_vel[:, self.wheel_joint_indices]) / self.dt), dim=1) / self.sigma_values['dof_acc']
 
     def _reward_unit_quat(self):
         act_norm = torch.linalg.norm(self.actions, dim=-1)
-        return torch.square(1 - act_norm)
+        return torch.square(1 - act_norm) / self.sigma_values['unit_quat']

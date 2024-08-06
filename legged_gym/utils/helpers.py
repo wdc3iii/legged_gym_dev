@@ -124,6 +124,12 @@ def class_to_dict(obj) -> dict:
     return result
 
 
+def torch_rand_float(lower, upper, shape, device):
+    return (upper - lower) * torch.rand(*shape, device=device) + lower
+
+def torch_rand_vec_float(lower, upper, shape, device):
+    return (upper - lower) * torch.rand(*shape, device=device) + lower
+
 def update_class_from_dict(obj, dict):
     for key, val in dict.items():
         attr = getattr(obj, key, None)

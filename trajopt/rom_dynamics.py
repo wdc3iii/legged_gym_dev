@@ -445,6 +445,10 @@ class TrajectoryGenerator:
 
             def uniform(low, high, size):
                 return torch_rand_vec_float(low, high, size, device=device)
+
+            def torch_rand_vec_float(lower, upper, shape, device):
+                return (upper - lower) * torch.rand(*shape, device=device) + lower
+
         else:
             raise ValueError(f'Unsupported backend: {device}')
         self.uniform = uniform
@@ -603,7 +607,7 @@ class SquareTrajectoryGenerator(TrajectoryGenerator):
             c5 = c4 + (1 - 2 * (0.5 * self.rom.v_max[0] * (c4 - c3) ** 2)) / (self.rom.z_max[2] / 2)
             c6 = c5 + self.rom.z_min[2] / self.rom.v_min[0]
             c7 = c6
-            c8 = c7 + self.rom.z_min[3] / 2 /self.rom.v_min[1]
+            c8 = c7 + self.rom.z_min[3] / 2 / self.rom.v_min[1]
             c9 = c8 + (1 - 2 * (0.5 * abs(self.rom.v_min[1]) * (c8 - c7) ** 2)) / (abs(self.rom.z_min[3]) / 2)
             c10 = c9 + self.rom.z_max[3] / 2 / self.rom.v_max[1]
             c11 = c10

@@ -32,7 +32,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=2):
     # Overwrite some params
     rl_cfg.headless = False
     rl_cfg.args.headless = False
-    rl_cfg.env_config.env.num_envs = 10
+    rl_cfg.env_config.env.num_envs = 1
     rl_cfg.env_config.env.episode_length_s = 20
     rl_cfg.env_config.trajectory_generator.cls = traj_cls
     rl_cfg.env_config.trajectory_generator.t_low = 21

@@ -168,12 +168,33 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             # dof_acc = -2.5e-7
 
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)
         soft_dof_pos_limit = 1.  # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.
         base_height_target = .55
         max_contact_force = 100.  # forces above this value are penalized
+
+        class sigma_values:
+            tracking_rom = 0.25  # tracking reward = exp(-error^2/sigma)
+            feet_air_time = 1.
+            stumble = 1.
+            stand_still = 1.
+            feet_contact_forces = 1.
+            tracking_lin_vel = 1.
+            tracking_ang_vel = 1.
+            torque_limits = 1.
+            dof_vel_limits = 1.
+            dof_pos_limits = 1.
+            termination = 1.
+            collision = 1.
+            action_rate = 1.
+            dof_acc = 1.
+            dof_vel = 1.
+            torques = 1.
+            base_height = 1.
+            orientation = 1.
+            ang_vel_xy = 1.
+            lin_vel_z = 1.
 
     class curriculum:
         use_curriculum = False
@@ -191,6 +212,29 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
         class rom:
             z = [1, 1, 1]
             v = [0.5, 0.75, 1]
+
+        class rewards:
+            tracking_rom = [1., .8, .6]
+            feet_air_time = [1., .8, .6]
+            stumble = [1., .8, .6]
+            stand_still = [1., .8, .6]
+            feet_contact_forces = [1., .8, .6]
+            tracking_lin_vel = [1., .8, .6]
+            tracking_ang_vel = [1., .8, .6]
+            torque_limits = [1., .8, .6]
+            dof_vel_limits = [1., .8, .6]
+            dof_pos_limits = [1., .8, .6]
+            termination = [1., .8, .6]
+            collision = [1., .8, .6]
+            action_rate = [1., .8, .6]
+            dof_acc = [1., .8, .6]
+            dof_vel = [1., .8, .6]
+            torques = [1., .8, .6]
+            base_height = [1., .8, .6]
+            orientation = [1., .8, .6]
+            ang_vel_xy = [1., .8, .6]
+            lin_vel_z = [1., .8, .6]
+
 
 class HopperRoughTrajectoryCfgPPO( LeggedRobotTrajectoryCfgPPO ):
     class policy(LeggedRobotTrajectoryCfgPPO.policy):

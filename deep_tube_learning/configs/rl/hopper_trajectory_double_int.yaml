@@ -73,6 +73,8 @@ env_config:
     rom:
       z: [ 1, 1, 1 ]
       v: [ 0.5, 0.75, 1 ]
+    rewards:
+      tracking_sigma: [1., .8, .6]
   normalization:
     obs_scales:
       trajectory: [ 1, 1, 1, 1 ]
