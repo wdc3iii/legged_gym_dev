@@ -66,9 +66,9 @@ class UniformWeightSamplerNoRamp:
         self.dim = dim
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim))
+        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
         new_weights[:, 1] = 0
-        return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
+        return new_weights / torch.sum(new_weights, axis=-1, keepdims=True)
 
 
 def quat2yaw(quat):
