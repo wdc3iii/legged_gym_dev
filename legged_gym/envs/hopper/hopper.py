@@ -52,8 +52,10 @@ class Hopper(LeggedRobot):
         self.max_torque_range = cfg.domain_rand.torque_speed_properties.max_torque_range
         self.max_speed_range = cfg.domain_rand.torque_speed_properties.max_speed_range
         self.max_slope_range = cfg.domain_rand.torque_speed_properties.slope_range
+        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), cfg.env.num_envs, 0).float()
 
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
+        self.zero_action = self.zero_action.to(self.device)
         self.foot_joint_index = torch.tensor([0], device=self.device)
         mask = torch.ones(self.num_dof, dtype=torch.bool)
         mask[self.foot_joint_index] = False
@@ -65,7 +67,7 @@ class Hopper(LeggedRobot):
         self.actuator_transform = Rotate(torch.tensor(self.cfg.asset.rot_actuator), device=self.device)
         self.torque_speed_bound_ratio = self.cfg.asset.torque_speed_bound_ratio
         self.foot_pos_des = torch.ones((self.num_envs, 1), device=self.device) * self.nominal_spring_setpoint
-        self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), self.num_envs, 0).float()
+
         self.default_dof_pos_noise_lower = torch.tensor(self.cfg.init_state.default_dof_pos_noise_lower,
                                                         device=self.device)
         self.default_dof_pos_noise_upper = torch.tensor(self.cfg.init_state.default_dof_pos_noise_upper,
@@ -237,13 +239,16 @@ class Hopper(LeggedRobot):
     def compute_observations(self):
         """ Computes observations: (z, quat, foot_pos, v, omega, foot_vel, wheel_vel, cmd, action)
         """
+        actions_normalized_quat = torch.clone(self.actions)
+        actions_normalized_quat /= torch.linalg.norm(actions_normalized_quat, dim=-1, keepdim=True)  # Normalize actions when feeding back to model
+        actions_normalized_quat[actions_normalized_quat[:, 0] < 0, :] *= -1                          # By convention, always have qw > 0
         self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,
                                   self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
                                   self.dof_vel[:, self.wheel_joint_indices] * self.obs_scales.dof_vel,
                                   self.commands[:, :3] * self.commands_scale,
-                                  self.actions
+                                  actions_normalized_quat
                                   ),dim=-1)
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
@@ -275,7 +280,7 @@ class Hopper(LeggedRobot):
             self.default_dof_vel_noise_lower, self.default_dof_vel_noise_upper,
             (len(env_ids), self.num_dof), device=self.device
         )
-
+        self.actions[env_ids, :] = torch.clone(self.zero_action[env_ids, :].detach())
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
@@ -372,6 +377,7 @@ class Hopper(LeggedRobot):
         """ Initialize torch tensors which will contain simulation states and processed_old quantities
         """
         super()._init_buffers()
+        self.actions = torch.clone(self.zero_action.to(self.device).detach())
         self.kd_spindown = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
         self.wheel_speed_limits = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
 
