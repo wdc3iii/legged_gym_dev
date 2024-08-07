@@ -28,7 +28,11 @@ env_config:
     soft_torque_limit: 1.
     base_height_target: .55
     max_contact_force: 100.  # forces above this value are penalized
-
+    reward_weighting:
+      position: 1.0
+    #      velocity: 0.5
+    #      orientation: 0.3
+    #      angular_velocity: 0.2
   rom:
     cls: 'SingleInt2D'
     z_min:
@@ -43,11 +47,6 @@ env_config:
     v_max:
       - ${vel_max}
       - ${vel_max}
-    reward_weighting:
-      position: 1.0
-#      velocity: 0.5
-#      orientation: 0.3
-#      angular_velocity: 0.2
   trajectory_generator:
     cls: 'TrajectoryGenerator'
     t_samp_cls: 'UniformSampleHoldDT'
@@ -60,8 +59,7 @@ env_config:
     seed: ${seed}
     prob_stationary: 0.01
   curriculum:
-    use_curriculum: True
-    use_sigma_curriculum: True
+    use_curriculum: False
     curriculum_steps: [2500, 5000, 7500]
     push:
       magnitude: [0.0, 0.1, 0.5, 1]  # multiplier
@@ -75,6 +73,8 @@ env_config:
     rom:
       z: [1, 1, 1, 1]
       v: [0.5, 0.75, 1, 1]
+    sigma:
+      tracking_rom: [1., .8, .6]
     rewards:
       tracking_rom: [1., .8, .6] # need to change up to 4 elements
       feet_air_time: [1., .8, .6]

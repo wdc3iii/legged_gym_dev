@@ -450,12 +450,12 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
     def _reward_torque_limits(self):
         # penalize torques too close to the limit
-        return torch.sum(torch.abs(self.torques[:, self.wheel_joint_indices]), dim=1) / self.sigma_values['torque_limit']
+        return torch.sum(torch.abs(self.torques[:, self.wheel_joint_indices]), dim=1)
 
     def _reward_dof_acc(self):
         # Penalize dof accelerations
-        return torch.sum(torch.square((self.last_dof_vel[:, self.wheel_joint_indices] - self.dof_vel[:, self.wheel_joint_indices]) / self.dt), dim=1) / self.sigma_values['dof_acc']
+        return torch.sum(torch.square((self.last_dof_vel[:, self.wheel_joint_indices] - self.dof_vel[:, self.wheel_joint_indices]) / self.dt), dim=1)
 
     def _reward_unit_quat(self):
         act_norm = torch.linalg.norm(self.actions, dim=-1)
-        return torch.square(1 - act_norm) / self.sigma_values['unit_quat']
+        return torch.square(1 - act_norm)

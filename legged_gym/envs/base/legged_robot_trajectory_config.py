@@ -86,12 +86,6 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         prob_stationary = .0001  # probability that the robot receives zero input from the rom
         stationary_duration = 1.
 
-        class reward_weighting:
-            position: 1.0
-            velocity: 0.5
-            orientation: 0.3
-            angular_velocity: 0.2
-
     class trajectory_generator:
         cls = 'TrajectoryGenerator'
         t_samp_cls = 'UniformSampleHoldDT'
@@ -178,6 +172,13 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         soft_torque_limit = 1.
         base_height_target = 1.
         max_contact_force = 100.  # forces above this value are penalized
+
+        class reward_weighting:
+            position = 1.0
+            velocity = 1.0
+            orientation = 0.3
+            angular_velocity = 0.2
+            v_perp = 0.4
 
     class normalization:
         class obs_scales:

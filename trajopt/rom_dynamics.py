@@ -34,6 +34,7 @@ class RomDynamics(ABC):
         self.z_max = z_max
         self.n_robots = n_robots
         self.vel_inds = None
+        self.device = device
 
         if backend == 'casadi':
             self.zero_mat = lambda r, c: ca.MX(r, c)
@@ -176,6 +177,9 @@ class RomDynamics(ABC):
         axs[1].set_xlabel('Time (s)')
         axs[1].set_ylabel('Input')
 
+    def get_weighting_vector(self, reward_weighting):
+        '''to generate the reward weighting used in trajectory tracking in legged_robot'''
+        raise NotImplementedError
 
 class SingleInt2D(RomDynamics):
     n = 2   # [x, y]
@@ -203,6 +207,10 @@ class SingleInt2D(RomDynamics):
         super().plot_ts(axs, xt, ut)
         axs[0].legend(['x', 'y'])
         axs[1].legend(['vx', 'vy'])
+
+    def get_weighting_vector(self, reward_weighting):
+        return torch.tensor([reward_weighting.position, reward_weighting.position], dtype=torch.float32,
+                            device=self.device)
 
 
 class DoubleInt2D(RomDynamics):
@@ -248,6 +256,11 @@ class DoubleInt2D(RomDynamics):
         axs[0].legend(['x', 'y', 'vx', 'vy'])
         axs[1].legend(['ax', 'ay'])
 
+    def get_weighting_vector(self, reward_weighting):
+        return torch.tensor([reward_weighting.position, reward_weighting.position,
+                             reward_weighting.velocity, reward_weighting.velocity], dtype=torch.float32,
+                            device=self.device)
+
 
 class Unicycle(RomDynamics):
     n = 3   # [x, y, theta]
@@ -289,6 +302,9 @@ class Unicycle(RomDynamics):
         axs[0].legend(['x', 'y', 'theta'])
         axs[1].legend(['v', 'omega'])
 
+    def get_weighting_vector(self, reward_weighting):
+        return torch.tensor([reward_weighting.position, reward_weighting.position,
+                             reward_weighting.orientation], dtype=torch.float32, device=self.device)
 
 class LateralUnicycle(Unicycle):
     n = 3   # [x, y, theta]
@@ -311,6 +327,12 @@ class LateralUnicycle(Unicycle):
         super().plot_ts(axs, xt, ut)
         axs[0].legend(['x', 'y', 'theta'])
         axs[1].legend(['v', 'v_perp', 'omega'])
+
+    def get_weighting_vector(self, reward_weighting):
+        return torch.tensor([reward_weighting.position, reward_weighting.position,
+                             reward_weighting.orientation, reward_weighting.velocity,
+                             reward_weighting.velocity, reward_weighting.angular_velocity], dtype=torch.float32,
+                            device=self.device)
 
 
 class ExtendedUnicycle(Unicycle):
@@ -367,6 +389,12 @@ class ExtendedUnicycle(Unicycle):
         axs[0].legend(['x', 'y', 'theta', 'v', 'omega'])
         axs[1].legend(['a', 'alpha'])
 
+    def get_weighting_vector(self, reward_weighting):
+        return torch.tensor([reward_weighting.position, reward_weighting.position,
+                             reward_weighting.orientation, reward_weighting.velocity,
+                             reward_weighting.angular_velocity], dtype=torch.float32,
+                            device=self.device)
+
 
 class ExtendedLateralUnicycle(ExtendedUnicycle):
     n = 6   # [x, y, theta, v, v_perp, omega]
@@ -405,6 +433,11 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
         axs[0].legend(['x', 'y', 'theta', 'v', 'v_perp', 'omega'])
         axs[1].legend(['a', 'a_perp', 'alpha'])
 
+    def get_weighting_vector(self, reward_weighting):
+        return torch.tensor([reward_weighting.position, reward_weighting.position,
+                             reward_weighting.orientation, reward_weighting.velocity,
+                             reward_weighting.velocity, reward_weighting.angular_velocity], dtype=torch.float32,
+                            device=self.device)
 
 class TrajectoryGenerator:
 
@@ -444,10 +477,7 @@ class TrajectoryGenerator:
             self.pi = torch.pi
 
             def uniform(low, high, size):
-                return torch_rand_vec_float(low, high, size, device=device)
-
-            def torch_rand_vec_float(lower, upper, shape, device):
-                return (upper - lower) * torch.rand(*shape, device=device) + lower
+                return (high - low) * torch.rand(*size, device=device) + low
 
         else:
             raise ValueError(f'Unsupported backend: {device}')

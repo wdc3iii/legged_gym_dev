@@ -200,6 +200,7 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
     class curriculum:
         use_curriculum = False
         curriculum_steps = [2500, 5000]
+
         class push:
             magnitude = [0.1, 0.5, 1]  # multiplier
             time = [3, 2, 1]  # multiplier
@@ -210,9 +211,13 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             t_high = [3, 2, 1]  # multiplier
             freq_low = [0.01, 0.1, 1]  # multiplier
             freq_high = [0.1, 0.5, 1]  # multiplier
+
         class rom:
             z = [1, 1, 1]
             v = [0.5, 0.75, 1]
+
+        class sigma:
+            tracking_rom = [1., .8, .6]
 
         class rewards:
             tracking_rom = [1., .8, .6]
