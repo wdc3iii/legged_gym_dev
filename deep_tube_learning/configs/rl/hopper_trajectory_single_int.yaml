@@ -112,4 +112,4 @@ train_config:
     run_name: ''
     experiment_name: ${experiment_name}
     load_run: -1
-    max_iterations: 20
+    max_iterations: 400
