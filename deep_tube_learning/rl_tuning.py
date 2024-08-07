@@ -92,6 +92,11 @@ def run_experiment(cfg, params, wandb_run):
     for key, value in params.items():
         OmegaConf.update(cfg, key, value, merge=True)
 
+        if key == 'env_config.trajectory_generator.N':
+            num_observations = 18 + value
+            OmegaConf.update(cfg, 'env_config.env.num_observations', num_observations, merge=True)
+
+
     logs_dir = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', base_config)
     temp_config_file = "temp_config.yaml"
     temp_config_dir = Path("configs") / "rl"
