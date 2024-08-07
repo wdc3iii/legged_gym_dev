@@ -36,7 +36,8 @@ from typing import Dict
 from legged_gym.envs import LeggedRobotTrajectory
 from legged_gym.envs.hopper.flat_trajectory.hopper_trajectory_config import HopperRoughTrajectoryCfg
 from legged_gym.utils.helpers import torch_rand_vec_float
-from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate
+from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate, \
+    euler_angles_to_matrix, matrix_to_quaternion
 
 
 class HopperTrajectory(LeggedRobotTrajectory):
@@ -324,7 +325,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
             self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
         if self.cfg.init_state.randomize_yaw:
             yaw = torch_rand_float(-torch.pi, torch.pi, (len(env_ids), 1), device=self.device)
-            quat_yaw =  matrix_to_quaternion(euler_angles_to_matrix(torch.concatenate([torch.zeros((len(env_ids), 2), device=self.device), yaw], dim=-1), "XYZ"))
+            quat_yaw = matrix_to_quaternion(euler_angles_to_matrix(torch.concatenate([torch.zeros((len(env_ids), 2), device=self.device), yaw], dim=-1), "XYZ"))
             q_wxyz = self.root_states[:, self.wxyz_quat_inds][env_ids, :]
             q_new_wxyz = quaternion_multiply(q_wxyz, quat_yaw)
             self.root_states[env_ids, 3:7] = q_new_wxyz[:, [1, 2, 3, 0]]

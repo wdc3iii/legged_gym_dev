@@ -252,6 +252,8 @@ def get_args():
         {"name": "--max_iterations", "type": int,
          "help": "Maximum number of training iterations. Overrides config file if provided."},
         {"name": "--config-name", "type": str,
+         "help": "hydra configuration file name. Overrides default file if provided."},
+        {"name": "-cn", "type": str,
          "help": "hydra configuration file name. Overrides default file if provided."}
     ]
     # parse arguments
