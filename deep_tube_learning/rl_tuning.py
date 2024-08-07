@@ -15,7 +15,26 @@ from train_rl import main as train_rl_main
 
 # Define the grid of hyperparameters to tune
 param_grid = {
-    'env_config.curriculum.rewards.tracking_rom': [[1.0, 0.8, 0.6], [1.2, 1.0, 0.8]],
+    'env_config.rewards.scales.termination': [-1000,
+                                              -500],
+
+    'env_config.rewards.scales.action_rate': [-0.1,
+                                              -0.01],
+
+    'env_config.curriculum.rewards.termination': [[1.0, 0.5, 0.2, 0.1],
+                                                  [1.5, 1.0, 0.9, 0.8]],
+
+    'env_config.curriculum.rewards.collision': [[1.0, 0.5, 0.2, 0.1],
+                                                [1.5, 1.0, 0.9, 0.8]],
+
+    'env_config.curriculum.rewards.torques': [[.5, 0.6, 0.8, 1.0],
+                                              [1.0, .8, 0.5, 0.2]],
+
+    'env_config.curriculum.rewards.action_rate': [[.5, 0.6, 0.8, 1.0],
+                                                  [1.0, .8, 0.5, 0.2]],
+
+    'env_config.curriculum.sigma.tracking_rom': [[1.0, 0.9, 0.8, 0.6],
+                                                 [1.0, 0.5, 0.2, 0.1]],  # we're tuning the rest for this one (how low can sigma get with good performance)
 }
 
 base_config = "hopper_traj_single_int"

@@ -86,7 +86,6 @@ class LeggedRobotTrajectory(BaseTask):
         if self.cfg.curriculum.use_curriculum:
             self.update_command_curriculum()
 
-
         self.time_until_next_push = torch_rand_float(self.cfg.domain_rand.time_between_pushes[0],
                                                      self.cfg.domain_rand.time_between_pushes[1],
                                                      (self.num_envs, 1),
@@ -544,7 +543,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.sigma_tracking_rom = self.cfg.curriculum.sigma.tracking_rom[ind]
 
         for key in list(self.reward_scales.keys()):  # mimicing logic from prepare reward function
-            self.reward_scales[key] = getattr(self.cfg.curriculum.rewards, key)[ind] * self.dt
+            self.reward_scales[key] = getattr(self.cfg.rewards.scales, key) * getattr(self.cfg.curriculum.rewards, key)[ind] * self.dt
 
         print('----- Updated Curriculum -----')
 
@@ -879,6 +878,7 @@ class LeggedRobotTrajectory(BaseTask):
 
         # nominal values (curriculum)
         self.curriculum_state = 0
+        self.sigma_tracking_rom = 1.0
         self.nominal_push_time = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
         self.nominal_max_push_vel = self.cfg.domain_rand.max_push_vel
 
