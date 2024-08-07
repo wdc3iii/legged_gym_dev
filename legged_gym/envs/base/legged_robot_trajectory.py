@@ -892,6 +892,10 @@ class LeggedRobotTrajectory(BaseTask):
         self.sigma_values = {attr: 1.0 for attr in dir(self.cfg.rewards.scales) if
                              not attr.startswith("__") and not callable(getattr(self.cfg.rewards.scales, attr))}
 
+    def destroy_sim(self):
+        self.gym.destroy_viewer(self.viewer)
+        self.gym.destroy_sim(self.sim)
+
     def _draw_debug_vis(self):
         """ Draws visualizations for debugging (slows down simulation a lot).
             Default behavior: draws height measurement points and trajectory points.

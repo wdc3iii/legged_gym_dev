@@ -65,6 +65,7 @@ def main(cfg):
         print('Exported policy as onnx file to: ', onnx_path)
     print(f"Finishing run {wandb.run.id}")
     print("Waiting for wandb to finish uploading...")
+    env.destroy_sim()
 
 
 if __name__ == "__main__":
