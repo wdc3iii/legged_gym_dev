@@ -169,6 +169,7 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             # action_rate = -0.1
             # torques = -0.00001
             # dof_acc = -2.5e-7
+        #     differential_error = 2.
 
         only_positive_rewards = False  # if true negative total rewards are clipped at zero (avoids early termination problems)
         soft_dof_pos_limit = 1.  # percentage of urdf limits, values above this limit are penalized
@@ -177,6 +178,9 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
         base_height_target = .55
         max_contact_force = 100.  # forces above this value are penalized
 
+        class differential_error:
+            pos_slope = 4
+            neg_slope = 1
         class sigma_values:
             tracking_rom = 0.25  # tracking reward = exp(-error^2/sigma)
             feet_air_time = 1.
@@ -242,6 +246,7 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             orientation = [1., .8, .6]
             ang_vel_xy = [1., .8, .6]
             lin_vel_z = [1., .8, .6]
+            differential_error = [1., .8, .6]
 
 
 class HopperRoughTrajectoryCfgPPO( LeggedRobotTrajectoryCfgPPO ):

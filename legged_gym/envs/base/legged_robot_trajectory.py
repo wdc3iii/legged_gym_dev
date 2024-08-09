@@ -45,7 +45,7 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
 from legged_gym.utils.terrain import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
-from legged_gym.utils.helpers import class_to_dict
+from legged_gym.utils.helpers import class_to_dict, torch_rand_vec_float
 from .legged_robot_trajectory_config import LeggedRobotTrajectoryCfg
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
                                   ExtendedLateralUnicycle, TrajectoryGenerator,ZeroTrajectoryGenerator,
@@ -232,6 +232,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.feet_air_time[env_ids] = 0.
         self.episode_length_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
+        self.prev_error[env_ids] = 0
         # fill extras
         self.extras["episode"] = {}
         for key in self.episode_sums.keys():
@@ -622,13 +623,15 @@ class LeggedRobotTrajectory(BaseTask):
         self.trajectory = torch.zeros(self.num_envs, self.traj_gen.N, self.rom.n, dtype=torch.float, device=self.device, requires_grad=False)
         self.trajectory_scale = torch.repeat_interleave(
             torch.tensor(self.cfg.normalization.obs_scales.trajectory, device=self.device, requires_grad=False)[None, :],
-            self.cfg.trajectory_generator.N,
+            self.cfg.trajectory_generator.N // self.cfg.trajectory_generator.DN,
             dim=0
         )
         self.feet_air_time = torch.zeros(self.num_envs, self.feet_indices.shape[0], dtype=torch.float,
                                          device=self.device, requires_grad=False)
         self.last_contacts = torch.zeros(self.num_envs, len(self.feet_indices), dtype=torch.bool, device=self.device,
                                          requires_grad=False)
+        self.prev_error = torch.zeros(self.num_envs, self.rom.n, dtype=torch.float, device=self.device,
+                                      requires_grad=False)
         self.base_lin_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity = quat_rotate_inverse(self.base_quat, self.gravity_vec)
@@ -1099,3 +1102,9 @@ class LeggedRobotTrajectory(BaseTask):
         # Penalize high contact forces
         return torch.sum((torch.norm(self.contact_forces[:, self.feet_indices, :],
                                      dim=-1) - self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
+
+    def _reward_differential_error(self):
+        current_error = self.trajectory[:, 0, :] - self.rom.proj_z(self.root_states)
+        differential_error = current_error - self.prev_error
+        reward = torch.min(-self.cfg.rewards.differential_error.neg_slope * differential_error, -self.cfg.rewards.differential_error.pos_slope * differential_error)
+        return torch.sum(reward, dim=1)

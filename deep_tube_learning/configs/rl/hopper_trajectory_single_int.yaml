@@ -22,6 +22,7 @@ env_config:
       dof_acc: -2.5e-7
       collision: -1.
       action_rate: -0.01
+      differential_error: 2.
     only_positive_rewards: False
     soft_dof_pos_limit: 1.
     soft_dof_vel_limit: 1.
@@ -30,6 +31,9 @@ env_config:
     max_contact_force: 100.
     reward_weighting:
       position: 1.0
+    differential_error:
+      pos_slope: 4
+      neg_slope: 1
   rom:
     cls: 'SingleInt2D'
     z_min:
@@ -48,20 +52,20 @@ env_config:
     cls: 'TrajectoryGenerator'
     t_samp_cls: 'UniformSampleHoldDT'
     weight_samp_cls: 'UniformWeightSamplerNoRamp'
-    N: 10
+    N: 50
     t_low: 1
     t_high: 2
     freq_low: 0.01
     freq_high: 2
     seed: ${seed}
     prob_stationary: 0.0001
-    DN: 1
+    DN: 5
   curriculum:
     use_curriculum: True
     curriculum_steps: [2500, 5000, 7500, 10000, 12500, 15000, 17500]
-    max_rom_distance: [0, 0.05, 0.4, 0.2, .7, .5, .4, .5]
+    max_rom_distance: [0, 0.05, 0.1, 0.2, .3, .4, .5, .6]
     push:
-      magnitude: [0.0, 0.1, 0.1, 0.2, .1, .2, .5, .8] ## needs to go up to 1
+      magnitude: [0.0, 0., 0., 0., 0., 0., 0., 0.] ## needs to go up to 1
       time: [4, 3, 2, 1, 1, 1, 1, 1]
     trajectory_generator:
       weight_sampler: ['UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp']
@@ -85,6 +89,7 @@ env_config:
       orientation: [1., 1., 1., 1., 1., 1., 1., 1.]
       ang_vel_xy: [1., 1., 1., 1., 1., 1., 1., 1.]
       unit_quat: [1., 1., 1., 1., 1., 1., 1., 1.]
+      differential_error: [1., 1., 1., 1., 1., 1., 1., 1.]
   normalization:
     obs_scales:
       trajectory: [1, 1]

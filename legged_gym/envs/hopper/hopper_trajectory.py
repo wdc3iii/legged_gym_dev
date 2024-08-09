@@ -135,6 +135,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         # prepare quantities
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
+        self.prev_error[:] = self.trajectory[:, 0, :] - self.rom.proj_z(self.root_states)
 
         self._post_physics_step_callback()
 

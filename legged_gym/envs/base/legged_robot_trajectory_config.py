@@ -174,6 +174,10 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         base_height_target = 1.
         max_contact_force = 100.  # forces above this value are penalized
 
+        class differential_error:
+            neg_slope = 1.
+            pos_slope = 4.
+
         class reward_weighting:
             position = 1.0
             velocity = 1.0
