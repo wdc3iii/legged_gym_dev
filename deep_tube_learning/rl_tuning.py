@@ -15,32 +15,36 @@ from train_rl import main as train_rl_main
 
 # Define the grid of hyperparameters to tune
 param_grid = {
-    'env_config.rewards.scales.termination': [-1000,
-                                              -500],
+    # 'env_config.trajectory_generator.N': [1, 2, 4, 6, 8, 10]
+    'env_config.curriculum.max_rom_distance': [[0.0, 0.05, 0.1, 0.15],
+                                               [0.0, 0.1, 0.2, 0.3],
+                                               [0.0, 0.2, 0.4, 0.6]]
+    # 'env_config.rewards.scales.termination': [-1000,
+    #                                           -500],
 
-    'env_config.rewards.scales.action_rate': [-0.1,
-                                              -0.01],
-
-    'env_config.curriculum.rewards.termination': [[1.0, 0.5, 0.2, 0.1],
-                                                  [1.5, 1.0, 0.9, 0.8]],
-
-    'env_config.curriculum.rewards.collision': [[1.0, 0.5, 0.2, 0.1],
-                                                [1.5, 1.0, 0.9, 0.8]],
-
-    'env_config.curriculum.rewards.torques': [[.5, 0.6, 0.8, 1.0],
-                                              [1.0, .8, 0.5, 0.2]],
-
-    'env_config.curriculum.rewards.action_rate': [[.5, 0.6, 0.8, 1.0],
-                                                  [1.0, .8, 0.5, 0.2]],
-
-    'env_config.curriculum.sigma.tracking_rom': [[1.0, 0.9, 0.8, 0.6],
-                                                 [1.0, 0.5, 0.2, 0.1]],  # we're tuning the rest for this one (how low can sigma get with good performance)
+    # 'env_config.rewards.scales.action_rate': [-0.1,
+    #                                           -0.01],
+    #
+    # 'env_config.curriculum.rewards.termination': [[1.0, 0.5, 0.2, 0.1],
+    #                                               [1.5, 1.0, 0.9, 0.8]],
+    #
+    # 'env_config.curriculum.rewards.collision': [[1.0, 0.5, 0.2, 0.1],
+    #                                             [1.5, 1.0, 0.9, 0.8]],
+    #
+    # 'env_config.curriculum.rewards.torques': [[.5, 0.6, 0.8, 1.0],
+    #                                           [1.0, .8, 0.5, 0.2]],
+    #
+    # 'env_config.curriculum.rewards.action_rate': [[.5, 0.6, 0.8, 1.0],
+    #                                               [1.0, .8, 0.5, 0.2]],
+    #
+    # 'env_config.curriculum.sigma.tracking_rom': [[1.0, 0.9, 0.8, 0.6],
+    #                                              [1.0, 0.5, 0.2, 0.1]],  # we're tuning the rest for this one (how low can sigma get with good performance)
 }
 
 base_config = "hopper_traj_single_int"
 metric_name = 'Episode/rew_tracking_rom'  # the metric we are tuning to optimize
 last_num_values = 5  # the number of values at the end of the run to average over for the metric value
-log_file_path = "experiment_log.json"
+log_file_path = "experiment_log2.json"
 
 
 def get_new_log_dir(old_dirs):
@@ -93,7 +97,7 @@ def run_experiment(cfg, params, wandb_run):
         OmegaConf.update(cfg, key, value, merge=True)
 
         if key == 'env_config.trajectory_generator.N':
-            num_observations = 18 + value
+            num_observations = 18 + value * 2
             OmegaConf.update(cfg, 'env_config.env.num_observations', num_observations, merge=True)
 
 

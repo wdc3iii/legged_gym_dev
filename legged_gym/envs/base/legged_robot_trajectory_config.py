@@ -96,6 +96,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         freq_low = 0.01
         freq_high = 2
         seed = 42
+        DN=1
 
     class init_state:
         pos = [0.0, 0.0, 1.]  # x,y,z [m]

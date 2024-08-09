@@ -442,7 +442,7 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 class TrajectoryGenerator:
 
     def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42,
-                 backend='numpy', device='cuda', prob_stationary=.01):
+                 backend='numpy', device='cuda', prob_stationary=.01, DN=1):
         self.rom = rom
         self.device = device
         if backend == 'numpy':
@@ -483,6 +483,7 @@ class TrajectoryGenerator:
             raise ValueError(f'Unsupported backend: {device}')
         self.uniform = uniform
         self.N = N
+        self.DN = DN
         self.weights = self.zeros((self.rom.n_robots, 4))
         self.t_final = self.zeros((self.rom.n_robots,))
         self.t = self.zeros((self.rom.n_robots,))
@@ -499,7 +500,7 @@ class TrajectoryGenerator:
         self.freq_low = freq_low
         self.freq_high = freq_high
         self.weight_sampler = weight_sampler
-        self.trajectory = self.zeros((self.rom.n_robots, self.N, self.rom.n))
+        self.trajectory = self.zeros((self.rom.n_robots, self.N // self.DN, self.rom.n))
         self.v = self.zeros((self.rom.n_robots, self.rom.m))
         self.prob_stationary = prob_stationary
         self.stationary_inds = self.zeros((self.rom.n_robots,)).bool()
@@ -594,7 +595,7 @@ class TrajectoryGenerator:
         self.reset_idx(self.ones((self.rom.n_robots,), bool), z)
 
     def reset_idx(self, idx, z):
-        self.trajectory[idx, :, :] = self.zeros((len(idx), self.N, self.rom.n))
+        self.trajectory[idx, :, :] = self.zeros((len(idx), self.N // self.DN, self.rom.n))
         self.trajectory[idx, -1, :] = z[idx, :]
         self.resample(idx, z)
         self.t[idx] = 0

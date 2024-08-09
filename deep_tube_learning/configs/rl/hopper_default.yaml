@@ -6,6 +6,9 @@ task: 'hopper'
 experiment_name: 'hopper'
 headless: True
 
+vel_max: 0.2
+vel_min: -0.2
+
 env_config:
   env:
     num_envs: 4096
@@ -61,7 +64,7 @@ env_config:
     foot_pos_des: 0.021
     action_scale: 1
     decimation: 4
-    control_type: "orientation"
+    control_type: "orientation_spindown"
     zero_action: [1.0, 0.0, 0.0, 0.0]
   asset:
     spring_stiffness: 7000
@@ -105,6 +108,8 @@ env_config:
     push_robots: True
     max_push_vel: [0.25, 0.25, 0.25, 0.75, 0.75, 0.75]  # [vx, vy, vz, wx, wy, wz]
     time_between_pushes: [2., 10.] # min max time (sec) between pushes of the robot. randomly selected in this range
+    randomize_rom_distance: True
+    max_rom_distance:
     rigid_shape_properties:
       randomize_restitution: True
       restitution_range: [0.0, 1.0]

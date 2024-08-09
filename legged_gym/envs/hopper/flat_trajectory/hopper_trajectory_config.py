@@ -123,6 +123,8 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
         push_robots = True
         push_interval_s = 15
         max_push_vel_xy = 1.
+        randomize_rom_distance = False
+        max_rom_dist = None
 
         class rigid_shape_properties:
             randomize_restitution = False

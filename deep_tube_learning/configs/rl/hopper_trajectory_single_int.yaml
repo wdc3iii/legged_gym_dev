@@ -16,7 +16,7 @@ env_config:
       termination: -500.0
       tracking_rom: 6.0
       ang_vel_xy: -0.01
-      orientation: -1.0
+      orientation: -80.0
       torques: -0.000001
       dof_vel: -0.
       dof_acc: -2.5e-7
@@ -54,38 +54,42 @@ env_config:
     freq_low: 0.01
     freq_high: 2
     seed: ${seed}
-    prob_stationary: 0.01
+    prob_stationary: 0.0001
+    DN: 1
   curriculum:
     use_curriculum: True
-    curriculum_steps: [2500, 5000, 7500]
+    curriculum_steps: [2500, 5000, 7500, 10000, 12500, 15000, 17500]
+    max_rom_distance: [0, 0.05, 0.4, 0.2, .7, .5, .4, .5]
     push:
-      magnitude: [0.0, 0.1, 0.5, 1]
-      time: [4, 3, 2, 1]
+      magnitude: [0.0, 0.1, 0.1, 0.2, .1, .2, .5, .8] ## needs to go up to 1
+      time: [4, 3, 2, 1, 1, 1, 1, 1]
     trajectory_generator:
-      weight_sampler: ['UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp']
-      t_low: [3, 2, 1, 1]
-      t_high: [3, 2, 1, 1]
-      freq_low: [0.01, 0.1, 1, 1]
-      freq_high: [0.1, 0.5, 1, 1]
+      weight_sampler: ['UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp']
+      t_low: [3, 2, 1, 1, 1, 1, 1, 1]
+      t_high: [3, 2, 1, 1, 1, 1, 1, 1]
+      freq_low: [0.01, 0.1, 1, 1, 1, 1, 1, 1]
+      freq_high: [0.1, 0.5, 1, 1, 1, 1, 1, 1]
     rom:
-      z: [1, 1, 1, 1]
-      v: [0.5, 0.75, 1, 1]
+      z: [1, 1, 1, 1, 1, 1, 1, 1]
+      v: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, .5, .5]
     sigma:
-      tracking_rom: [1., .8, .6, .4]
+      tracking_rom: [1., 1., 1., 1., 1., 1., .1, .1]
     rewards:
-      tracking_rom: [1., 1., 1., 1.]
-      termination: [1., 1., 1., 1.]
-      collision: [1., 1., 1., 1.]
-      action_rate: [1., 1., 1., 1.]
-      dof_acc: [1., 1., 1., 1.]
-      dof_vel: [1., 1., 1., 1.]
-      torques: [1., 1., 1., 1.]
-      orientation: [1., 1., 1., 1.]
-      ang_vel_xy: [1., 1., 1., 1.]
-      unit_quat: [1., 1., 1., 1.]
+      tracking_rom: [1., 1., 1., 1., 1., 1., 1., 1.]
+      termination: [1., 1., 1., 1., 1., 1., 1., 1.]
+      collision: [1., 1., 1., 1., 1., 1., 1., 1.]
+      action_rate: [1., 1., 1., 1., 1., 1., 1., 1.]
+      dof_acc: [1., 1., 1., 1., 1., 1., 1., 1.]
+      dof_vel: [1., 1., 1., 1., 1., 1., 1., 1.]
+      torques: [1., 1., 1., 1., 1., 1., 1., 1.]
+      orientation: [1., 1., 1., 1., 1., 1., 1., 1.]
+      ang_vel_xy: [1., 1., 1., 1., 1., 1., 1., 1.]
+      unit_quat: [1., 1., 1., 1., 1., 1., 1., 1.]
   normalization:
     obs_scales:
       trajectory: [1, 1]
+  domain_rand:
+    max_rom_dist: [1.0, 1.0]
 
 train_config:
   policy:
@@ -98,4 +102,4 @@ train_config:
     run_name: ''
     experiment_name: ${experiment_name}
     load_run: -1
-    max_iterations: 400
+    max_iterations: 1000

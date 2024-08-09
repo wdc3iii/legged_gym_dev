@@ -24,7 +24,7 @@ def get_state(base, joint_pos, joint_vel):
 
 def evaluate(traj_cls, push_robots, curriculum_state=3):
     steps = 1000
-    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/5y4goa2v"
+    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/j7xnzrae"
     model_name = f'{exp_name}_model:best{curriculum_state}'
     api = wandb.Api()
     rl_cfg, state_dict = wandb_model_load(api, model_name)
@@ -54,6 +54,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=3):
     rl_cfg.env_config.domain_rand.spring_properties.randomize_setpoint = False
     rl_cfg.env_config.domain_rand.pd_gain_properties.randomize_p_gain = False
     rl_cfg.env_config.domain_rand.pd_gain_properties.randomize_d_gain = False
+    rl_cfg.env_config.domain_rand.randomize_rom_distance = False
     rl_cfg.env_config.domain_rand.torque_speed_properties.randomize_max_torque = False
     rl_cfg.env_config.domain_rand.torque_speed_properties.randomize_max_speed = False
     rl_cfg.env_config.domain_rand.torque_speed_properties.randomize_slope = False

@@ -120,7 +120,8 @@ class LeggedRobotTrajectory(BaseTask):
             seed=traj_cfg.seed,
             backend='torch',
             device=self.device,
-            prob_stationary=self.cfg.trajectory_generator.prob_stationary
+            prob_stationary=self.cfg.trajectory_generator.prob_stationary,
+            DN=self.cfg.trajectory_generator.DN,
         )
 
     def step(self, actions):
@@ -240,14 +241,15 @@ class LeggedRobotTrajectory(BaseTask):
         # log additional curriculum info
         if self.cfg.terrain.curriculum:
             self.extras["episode"]["terrain_level"] = torch.mean(self.terrain_levels.float())
-        # if self.cfg.commands.curriculum:
-        #     self.extras["episode"]["max_command_x"] = self.command_ranges["lin_vel_x"][1]
         # send timeout info to the algorithm
         if self.cfg.env.send_timeouts:
             self.extras["time_outs"] = self.time_out_buf
 
     def reset_traj(self, env_ids):
-        self.traj_gen.reset_idx(env_ids, self.rom.proj_z(self.root_states))
+        p_zx = self.rom.proj_z(self.root_states)
+        if self.cfg.domain_rand.randomize_rom_distance:
+            p_zx += torch_rand_vec_float(-self.max_rom_distance, self.max_rom_distance, p_zx.shape, device=self.device)
+        self.traj_gen.reset_idx(env_ids, p_zx)
 
     def compute_reward(self):
         """ Compute rewards
@@ -523,6 +525,8 @@ class LeggedRobotTrajectory(BaseTask):
         # Pushes
         self.max_push_vel = [v * self.cfg.curriculum.push.magnitude[ind] for v in self.nominal_max_push_vel]
         self.push_time = self.nominal_push_time * self.cfg.curriculum.push.time[ind]
+        # Rom distance
+        self.max_rom_distance = torch.tensor(self.nominal_max_rom_distance, device=self.device) * self.cfg.curriculum.max_rom_distance[ind]
         # RoM bounds
         self.rom.z_max = torch.tensor([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_max], device=self.device)
         self.rom.z_min = torch.tensor([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_min], device=self.device)
@@ -875,6 +879,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.nominal_rom_z_min = self.cfg.rom.z_min
         self.nominal_rom_v_max = self.cfg.rom.v_max
         self.nominal_rom_v_min = self.cfg.rom.v_min
+        self.nominal_max_rom_distance = self.cfg.domain_rand.max_rom_dist
 
         # nominal values (curriculum)
         self.curriculum_state = 0
