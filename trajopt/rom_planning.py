@@ -3,15 +3,15 @@ import numpy as np
 import casadi as ca
 import matplotlib.pyplot as plt
 
-from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
+from trajopt.planning_rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
                                   ExtendedUnicycle, ExtendedLateralUnicycle)
 
-# model = "SingleInt2D"
+model = "SingleInt2D"
 # model = "DoubleInt2D"
 # model = "Unicycle"
 # model = "LateralUnicycle"
 # model = "ExtendedUnicycle"
-model = "ExtendedLateralUnicycle"
+# model = "ExtendedLateralUnicycle"
 
 start = np.array([-5, -5, 0])
 goal = np.array([8, 3, np.pi / 2])
@@ -131,9 +131,9 @@ def generate_trajectory(plan_model, z0, zf, N, Q, R, Qf=None):
     params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
     v_init = np.zeros((N, plan_model.m))
-    # z_init = np.repeat(xf[:, None], N + 1, 1)
-    # z_init = np.repeat(x0[:, None], N + 1, 1)
-    z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
+    z_init = np.repeat(zf[:, None], N + 1, 1)
+    # z_init = np.repeat(zf[:, None], N + 1, 1)
+    # z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
 
     x_init = np.vstack([
         np.reshape(z_init, ((N + 1) * plan_model.n, 1)),
@@ -176,7 +176,7 @@ if __name__ == "__main__":
         planning_model = SingleInt2D(dt, -z_max, z_max, -v_max, v_max)
 
         Q = 10 * np.eye(2)
-        R = 0.1 * np.eye(2)
+        R = 1 * np.eye(2)
         z0 = start[:2]
         zf = goal[:2]
 

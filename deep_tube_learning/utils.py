@@ -1,14 +1,20 @@
 import os
 import wandb
+import torch
 import statistics
 import numpy as np
 from pathlib import Path
-from isaacgym.torch_utils import *
-import torch
-from omegaconf import OmegaConf, DictConfig, ListConfig
 from abc import ABC, abstractmethod
+from omegaconf import OmegaConf, DictConfig, ListConfig
 from scipy.spatial.transform import Rotation
-import matplotlib.pyplot as plt
+
+
+def torch_rand_float(lower, upper, shape, device):
+    return (upper - lower) * torch.rand(*shape, device=device) + lower
+
+
+def torch_rand_vec_float(lower, upper, shape, device):
+    return (upper - lower) * torch.rand(*shape, device=device) + lower
 
 
 class AbstractSampleHoldDT(ABC):
@@ -49,24 +55,26 @@ class UniformWeightSampler:
 
 class UniformWeightSamplerNoExtreme:
 
-    def __init__(self, dim=4, seed=42):
+    def __init__(self, dim=4, seed=42, device='cuda'):
         self.rng = np.random.RandomState(seed)
         self.dim = dim
+        self.device = device
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
+        new_weights = torch.rand(size=(num_samples, self.dim), device=self.device)
         new_weights[:, 2] = 0
         return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
 
 
 class UniformWeightSamplerNoRamp:
 
-    def __init__(self, dim=4, seed=42):
+    def __init__(self, dim=4, seed=42, device='cuda'):
         self.rng = np.random.RandomState(seed)
         self.dim = dim
+        self.device = device
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
+        new_weights = torch.rand(size=(num_samples, self.dim), device=self.device)
         new_weights[:, 1] = 0
         return new_weights / torch.sum(new_weights, axis=-1, keepdims=True)
 

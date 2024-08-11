@@ -25,13 +25,6 @@ def construct_dataset(data_folder):
         done_e[-1, :] = True
         pz_x_e = epoch_data['pz_x']
 
-        # Place the 'robots' axis first, 'time' axis second
-        # TODO: change this so that z is dataset x time x state, where dataset = robots x epochs
-        z_e = np.swapaxes(z_e, 0, 1)
-        v_e = np.swapaxes(v_e, 0, 1)
-        pz_x_e = np.swapaxes(pz_x_e, 0, 1)
-        done_e = np.swapaxes(done_e, 0, 1)
-
         # Concatenate with other data
         if z is None:
             z = z_e
@@ -68,8 +61,8 @@ def construct_dataset(data_folder):
 def get_slice(data, i, dN, m):
     dc = data.copy()
     slc = np.flip(np.arange(dc.shape[-2] - (i * dN) - 1, -1, step=-dN))
-    start = data[:, 0, :].reshape((data.shape[0], 1, data.shape[2]))
-    start[:, :, :-m] = 0
+    start = dc[:, 0, :].reshape((dc.shape[0], 1, dc.shape[2])).copy()
+    start[:, :, -m:] = 0
     return np.concatenate((np.repeat(start, dc.shape[-2] - len(slc), axis=-2), dc[:, slc, :]), axis=-2)
 
 
@@ -131,7 +124,7 @@ class TubeDataset(Dataset):
 class ScalarTubeDataset(TubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment, N=1, dN=1):
+    def from_wandb(cls, wandb_experiment, N=1, dN=1, recursive=False):
         dataset = get_dataset(wandb_experiment)
 
         z = dataset['z'][:, :-1, :]
@@ -140,9 +133,15 @@ class ScalarTubeDataset(TubeDataset):
         # Compute error terms
         w = np.linalg.norm(pz_x - z, axis=-1)
         w_p1 = np.linalg.norm(dataset['pz_x_p1'] - dataset['z_p1'], axis=-1)
-        data = np.concatenate((w[:, :, None], z, dataset['v']), axis=-1)
+        z_no_pos = z[:, :, 2:]
+        if recursive:
+            data = np.concatenate((w[:, :, None], z_no_pos, dataset['v']), axis=-1)
+            data = sliding_window(data, N, dN, dataset['v'].shape[-1])
+        else:
+            zv = np.concatenate((z_no_pos, dataset['v']), axis=-1)
+            zv_slide = sliding_window(zv, N, dN, dataset['v'].shape[-1])
+            data = np.concatenate((w[:, :, None], zv_slide), axis=-1)
 
-        data = sliding_window(data, N, dN, dataset['v'].shape[-1])
         shp = data.shape
         data = data.reshape((shp[0] * shp[1], shp[2]))
         done = dataset['done'].reshape((shp[0] * shp[1],))

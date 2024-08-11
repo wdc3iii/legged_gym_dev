@@ -22,9 +22,9 @@ from trajopt.rom_dynamics import ZeroTrajectoryGenerator, CircleTrajectoryGenera
 def get_state(base, joint_pos, joint_vel):
     return torch.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), dim=1)
 
-def evaluate(traj_cls, push_robots, curriculum_state=3):
+def evaluate(traj_cls, push_robots, curriculum_state=7):
     steps = 1000
-    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/j7xnzrae"
+    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/z2943ryi"
     model_name = f'{exp_name}_model:best{curriculum_state}'
     api = wandb.Api()
     rl_cfg, state_dict = wandb_model_load(api, model_name)
@@ -120,7 +120,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=3):
 
 
 if __name__ == "__main__":
-    # evaluate('ZeroTrajectoryGenerator', True)
-    evaluate('SquareTrajectoryGenerator', False)
+    evaluate('ZeroTrajectoryGenerator', True)
+    # evaluate('SquareTrajectoryGenerator', False)
     # evaluate('CircleTrajectoryGenerator', False)
 
