@@ -121,6 +121,51 @@ class TubeDataset(Dataset):
         return type(self)(data1, target1, self.input_dim, self.output_dim), type(self)(data2, target2, self.input_dim, self.output_dim)
 
 
+class HorizonTubeDataset(Dataset):
+
+    def __init__(self, w, z, v, H, input_dim, output_dim):
+        self.w = w
+        self.z = z
+        self.v = v
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.H = H
+
+    def __len__(self):
+        return self.w.shape[0]
+
+    def __getitem__(self, idx):
+        ind = torch.randint(self.w.shape[1] - self.H - 1, (1,))
+        # select rnd index
+        w0 = self.w[idx, ind]
+        z0 = self.z[idx, ind, :].squeeze()
+        w_1H = self.w[idx, ind + 1:ind + self.H + 1]
+        v_0Hm1 = self.v[idx, ind: ind + self.H]
+        return torch.concatenate((w0, z0, v_0Hm1.reshape((-1,)))), w_1H
+
+    def update(self):
+        pass
+
+    def random_split(self, split_proportion):
+        """
+        Splits the dataset into two random contiguous pieces
+        :param split_proportion:
+        :return:
+        """
+        split_len = int(len(self) * split_proportion)
+        idx = np.random.randint(len(self) - split_len)
+
+        w = self.w[idx:split_len + idx]
+        v = self.v[idx:split_len + idx]
+        z = self.z[idx:split_len + idx]
+        w2 = torch.vstack((self.w[:idx], self.w[split_len + idx:]))
+        v2 = torch.vstack((self.v[:idx], self.v[split_len + idx:]))
+        z2 = torch.vstack((self.z[:idx], self.z[split_len + idx:]))
+
+        return (type(self)(w, z, v, self.H, self.input_dim, self.output_dim),
+                type(self)(w2, z2, v2, self.H, self.input_dim, self.output_dim))
+
+
 class ScalarTubeDataset(TubeDataset):
 
     @classmethod
@@ -158,6 +203,34 @@ class ScalarTubeDataset(TubeDataset):
 
     def __init__(self, data, target, input_dim, output_dim):
         super(ScalarTubeDataset, self).__init__(data, target, input_dim, output_dim)
+
+
+class ScalarHorizonTubeDataset(HorizonTubeDataset):
+
+    @classmethod
+    def from_wandb(cls, wandb_experiment, H=10):
+        dataset = get_dataset(wandb_experiment)
+
+        z = dataset['z'][:, :-1, :]
+        pz_x = dataset['pz_x'][:, :-1, :]
+        v = dataset['v']
+
+        # Compute error terms
+        w = np.linalg.norm(pz_x - z, axis=-1)
+        z_no_pos = z[:, :, 2:]
+
+        input_dim = 1 + z_no_pos.shape[-1] + H * v.shape[-1]
+        output_dim = 1
+
+        return cls(torch.from_numpy(w).float(),
+                   torch.from_numpy(z_no_pos).float(),
+                   torch.from_numpy(v).float(),
+                   H,
+                   input_dim,
+                   output_dim)
+
+    def __init__(self, w, z, v, H, input_dim, output_dim):
+        super(ScalarHorizonTubeDataset, self).__init__(w, z, v, H, input_dim, output_dim)
 
 
 class VectorTubeDataset(TubeDataset):

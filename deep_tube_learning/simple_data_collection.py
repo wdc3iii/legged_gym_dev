@@ -11,14 +11,14 @@ from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, TrajectoryGenerator
 import torch
 
 
-def main(num_robots, epochs):
+def main(num_robots, epochs, max_rom_dist=1.):
     dt = 0.1
     ep_length = 200
     Kp = 10
     Kd = 10
     save_debugging_data = False
     upload_to_wandb = False
-    max_rom_distance = torch.tensor([1., 1.])
+    max_rom_distance = torch.tensor([max_rom_dist, max_rom_dist])
 
     device = torch.device('cpu')
 

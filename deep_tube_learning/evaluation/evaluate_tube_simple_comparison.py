@@ -5,7 +5,6 @@ from hydra.utils import instantiate
 from deep_tube_learning.utils import wandb_model_load
 from deep_tube_learning.simple_data_collection import main
 from deep_tube_learning.datasets import sliding_window
-from trajopt.rom_dynamics import SingleInt2D
 import torch
 
 
@@ -19,13 +18,9 @@ def eval_model():
 
     api = wandb.Api()
     cfg_dicts = [wandb_model_load(api, model_name) for model_name in model_names]
-    # model_cfg, state_dict = wandb_model_load(api, model_name)
-    # N = model_cfg.dataset.N if 'N' in model_cfg.dataset.keys() else 1
-    # dN = model_cfg.dataset.dN if 'dN' in model_cfg.dataset.keys() else 1
-    # recursive = model_cfg.dataset.recursive
 
     n_robots = 2
-    epoch_data = main(n_robots, 1)
+    epoch_data = main(n_robots, 1, max_rom_dist=0.)
 
     z = epoch_data['z'][:, :-1, :]
     pz_x = epoch_data['pz_x'][:, :-1, :]
@@ -91,6 +86,7 @@ def eval_model():
             plt.axhline(0, color='black', linewidth=0.5)
             plt.legend()
             plt.title("Single Tube Bounds")
+            plt.savefig("_SingeTubeBounds.png")
             plt.show()
 
             plt.figure()
@@ -101,6 +97,7 @@ def eval_model():
             plt.legend()
             plt.title("Horizon Tube Bounds")
             plt.ylim([0, 2])
+            plt.savefig("_HorizonTubeBounds.png")
             plt.show()
         print(f"Total Success Rate: {succ_rate_total / n_robots}")
 

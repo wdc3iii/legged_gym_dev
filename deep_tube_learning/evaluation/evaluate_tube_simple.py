@@ -23,7 +23,7 @@ def eval_model():
     recursive = model_cfg.dataset.recursive
 
     n_robots = 2
-    epoch_data = main(n_robots, 1)
+    epoch_data = main(n_robots, 1, max_rom_dist=0.)
 
     z = epoch_data['z'][:, :-1, :]
     pz_x = epoch_data['pz_x'][:, :-1, :]
@@ -114,6 +114,7 @@ def eval_model():
             plt.plot(w[ii], 'b', label='Normed Error')
             plt.axhline(0, color='black', linewidth=0.5)
             plt.legend()
+            plt.savefig('SingleTubeBound.png')
             plt.title("Single Tube Bounds")
             plt.show()
 
@@ -132,6 +133,7 @@ def eval_model():
             plt.title("Horizon Tube Bounds")
             plt.ylim([0, 2])
             plt.legend()
+            plt.savefig('HorizonTubeBound.png')
             plt.show()
 
             fig, ax = plt.subplots()
