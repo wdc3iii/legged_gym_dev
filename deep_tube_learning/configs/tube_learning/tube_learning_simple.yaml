@@ -6,11 +6,11 @@ experiment_name: "deep_tube_learning"
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarTubeDataset.from_wandb
-  wandb_experiment: "simple_1rdub312"
+  wandb_experiment: "simple_th5vjt7z"
   N: 10
-
+  recursive: True
 loss:
-  _target_: deep_tube_learning.losses.ScalarTubeLoss
+  _target_: deep_tube_learning.losses.ScalarHorizonTubeLoss
   alpha: 0.9
 
 lr_scheduler:

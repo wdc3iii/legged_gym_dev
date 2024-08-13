@@ -4,15 +4,15 @@ import casadi as ca
 import l4casadi as l4c
 import matplotlib.pyplot as plt
 
-from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
+from trajopt.planning_rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
                                   ExtendedUnicycle, ExtendedLateralUnicycle)
 
-# model = "SingleInt2D"
+model = "SingleInt2D"
 # model = "DoubleInt2D"
 # model = "Unicycle"
 # model = "LateralUnicycle"
 # model = "ExtendedUnicycle"
-model = "ExtendedLateralUnicycle"
+# model = "ExtendedLateralUnicycle"
 
 start = np.array([-5, -5, 0])
 goal = np.array([8, 3, np.pi / 2])
@@ -37,11 +37,6 @@ obs = {
 #     'c': np.zeros((0, 2)),
 #     'r': np.zeros((0,))
 # }
-
-
-# TODO: error dynamics + tube solver
-def trajopt_error_tube_solver(pm, N, Q, R, Nobs, Qf=None):
-    raise NotImplementedError
 
 
 def add_obs(pm, k, z, w, p_obs_c, p_obs_r, tube_dim, Nobs, g_lb, g_ub):
@@ -115,39 +110,21 @@ def trajopt_tube_solver(pm, tube_dyn_model, tube_dim, w_max, N, Q, R, Nobs, Qf=N
         g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((tube_dim,))).T)
 
         # obstacle constraints
-        # TODO: check outer ellipse approximation for vector tube based obstacle constraints
-        # for i in range(Nobs):
-        #     if tube_dim == 1:
-        #         # Simply increase distance from center by tube dimension
-        #         g = ca.horzcat(g, ca.sum2((z[k, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[k, :]) ** 2)
-        #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
-        #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
-        #     elif tube_dim == pm.n:
-        #         ellipse = (z[k, 0] - p_obs_c[i, 0]) ** 2 / (2 * (w[k, 0] + p_obs_r[i])**2) + \
-        #                   (z[k, 1] - p_obs_c[i, 1]) ** 2 / (2 * (w[k, 0] + p_obs_r[i])**2)
-        #         g = ca.horzcat(g, ellipse - 1)
-        #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
-        #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
-        #     else:
-        #         raise ValueError(f"Tube Dimension {tube_dim} not supported for obstacles")
+        for i in range(Nobs):
+            if tube_dim == 1:
+                # Simply increase distance from center by tube dimension
+                g = ca.horzcat(g, ca.sum2((z[k, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[k, :]) ** 2)
+                g_lb = ca.horzcat(g_lb, ca.DM([0]))
+                g_ub = ca.horzcat(g_ub, ca.DM.inf())
         g, g_lb, g_ub = add_obs(pm, k, z, w, p_obs_c, p_obs_r, tube_dim, Nobs, g_lb, g_ub)
 
     # Terminal cost/constraints
     obj += (z[N, :] - p_zf) @ Qf @ (z[N, :] - p_zf).T
-    # for i in range(Nobs):
-    #     if tube_dim == 1:
-    #         # Simply increase distance from center by tube dimension
-    #         g = ca.horzcat(g, ca.sum2((z[N, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[N, :]) ** 2)
-    #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
-    #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
-    #     elif tube_dim == pm.n:
-    #         ellipse = (z[N, 0] - p_obs_c[i, 0]) ** 2 / (2 * (w[N, 0] + p_obs_r[i]) ** 2) + \
-    #                   (z[N, 1] - p_obs_c[i, 1]) ** 2 / (2 * (w[N, 0] + p_obs_r[i]) ** 2)
-    #         g = ca.horzcat(g, ellipse - 1)
-    #         g_lb = ca.horzcat(g_lb, ca.DM([0]))
-    #         g_ub = ca.horzcat(g_ub, ca.DM.inf())
-    #     else:
-    #         raise ValueError(f"Tube Dimension {tube_dim} not supported for obstacles")
+    for i in range(Nobs):
+        # Simply increase distance from center by tube dimension
+        g = ca.horzcat(g, ca.sum2((z[N, :2] - p_obs_c[i, :]) ** 2) - (p_obs_r[i, :] + w[N, :]) ** 2)
+        g_lb = ca.horzcat(g_lb, ca.DM([0]))
+        g_ub = ca.horzcat(g_ub, ca.DM.inf())
     g, g_lb, g_ub = add_obs(pm, N, z, w, p_obs_c, p_obs_r, tube_dim, Nobs, g_lb, g_ub)
 
     # Initial condition
@@ -207,8 +184,8 @@ def generate_trajectory(plan_model, z0, zf, tube_dyn_model, tube_dim, w_max, N, 
     params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
     v_init = np.zeros((N, plan_model.m))
-    # z_init = np.repeat(xf[:, None], N + 1, 1)
-    # z_init = np.repeat(x0[:, None], N + 1, 1)
+    # z_init = np.repeat(zf[:, None], N + 1, 1)
+    # z_init = np.repeat(z0[:, None], N + 1, 1)
     z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
     w_init = np.zeros((N + 1, tube_dim))
 

@@ -1,4 +1,5 @@
 import os
+from deep_tube_learning.datasets import TubeDataset
 
 import hydra
 import torch
@@ -10,7 +11,6 @@ from pathlib import Path
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
 from torch.utils.data import DataLoader
-from deep_tube_learning.datasets import TubeDataset
 
 
 class CheckPointManager:
@@ -145,16 +145,17 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    # Define parameter sweeps (example overrides, adjust accordingly)
-    overrides = [
-        "batch_size=32",
-        "batch_size=64",
-        "batch_size=2048",
-        "lr_scheduler.gamma=0.001",
-        "lr_scheduler.gamma=0.01",
-    ]
-
-    # Run multirun programmatically
-    with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "tube_learning")):
-        hydra.core.global_hydra.GlobalHydra.instance().clear()
-        hydra.multirun.main(overrides)
+    # # Define parameter sweeps (example overrides, adjust accordingly)
+    # overrides = [
+    #     "batch_size=32",
+    #     "batch_size=64",
+    #     "batch_size=2048",
+    #     "lr_scheduler.gamma=0.001",
+    #     "lr_scheduler.gamma=0.01",
+    # ]
+    #
+    # # Run multirun programmatically
+    # with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "tube_learning")):
+    #     hydra.core.global_hydra.GlobalHydra.instance().clear()
+    #     hydra.multirun.main(overrides)
+    main()

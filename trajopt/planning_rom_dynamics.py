@@ -1,11 +1,22 @@
-import torch
 import numpy as np
 import casadi as ca
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
-from deep_tube_learning.utils import yaw2rot, torch_rand_float, torch_rand_vec_float
 import matplotlib.cm as cm
+import torch
+
+
+def yaw2rot(yaw):
+    cy = np.cos(yaw)
+    sy = np.sin(yaw)
+    y2r = np.zeros((yaw.shape[0], 2, 2))
+    y2r[:, 0, 0] = cy
+    y2r[:, 0, 1] = sy
+    y2r[:, 1, 0] = -sy
+    y2r[:, 1, 1] = cy
+    return y2r
+
 
 class RomDynamics(ABC):
     """
@@ -500,7 +511,6 @@ class TrajectoryGenerator:
         self.freq_high = freq_high
         self.weight_sampler = weight_sampler
         self.trajectory = self.zeros((self.rom.n_robots, self.N * self.dN, self.rom.n))
-        self.v_trajectory = self.zeros((self.rom.n_robots, self.N * self.dN - 1, self.rom.m))
         self.v = self.zeros((self.rom.n_robots, self.rom.m))
         self.prob_stationary = prob_stationary
         self.stationary_inds = self.zeros((self.rom.n_robots,)).bool()
@@ -576,10 +586,8 @@ class TrajectoryGenerator:
         z_next = self.rom.f(self.trajectory[:, -1, :], self.v)
         mask = self.stationary_inds[:, None] & self.rom.vel_inds
         z_next[mask] = 0
-        self.trajectory[:, :-1, :] = self.trajectory[:, 1:, :].clone()
+        self.trajectory[:, :-1, :] = self.trajectory[:, 1:, :]
         self.trajectory[:, -1, :] = z_next
-        self.v_trajectory[:, :-1, :] = self.v_trajectory[:, 1:, :].clone()
-        self.v_trajectory[:, -1, :] = self.v
         self.t += self.rom.dt
 
     def step_idx(self, idx):
@@ -591,8 +599,6 @@ class TrajectoryGenerator:
         z_next[mask[idx, :]] = 0
         self.trajectory[idx, :-1, :] = self.trajectory[idx, 1:, :]
         self.trajectory[idx, -1, :] = z_next
-        self.v_trajectory[idx, :-1, :] = self.v_trajectory[idx, 1:, :]
-        self.v_trajectory[idx, -1, :] = self.v
         self.t[idx] += self.rom.dt
 
     def reset(self, z):
@@ -600,11 +606,9 @@ class TrajectoryGenerator:
 
     def reset_idx(self, idx, z):
         self.trajectory[idx, :, :] = self.zeros((len(idx), self.N * self.dN, self.rom.n))
-        self.v_trajectory[idx, :, :] = self.zeros((len(idx), self.N * self.dN - 1, self.rom.m))
         self.trajectory[idx, -1, :] = z[idx, :]
-        self.t[idx] = 0
-        self.t_final[idx] = 0
         self.resample(idx, z)
+        self.t[idx] = 0
 
         for t in range(self.N * self.dN - 1):
             self.step_idx(idx)

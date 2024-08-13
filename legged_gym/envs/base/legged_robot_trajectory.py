@@ -74,6 +74,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.init_done = False
         self._parse_cfg(self.cfg)
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
+        self.max_rom_distance = torch.tensor(self.nominal_max_rom_distance, device=self.device)
 
         if not self.headless:
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
@@ -120,8 +121,8 @@ class LeggedRobotTrajectory(BaseTask):
             seed=traj_cfg.seed,
             backend='torch',
             device=self.device,
-            prob_stationary=self.cfg.trajectory_generator.prob_stationary,
-            DN=self.cfg.trajectory_generator.DN,
+            prob_stationary=traj_cfg.prob_stationary,
+            dN=traj_cfg.dN,
         )
 
     def step(self, actions):
@@ -407,7 +408,7 @@ class LeggedRobotTrajectory(BaseTask):
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
         """
         self.traj_gen.step()
-        self.trajectory = torch.clone(self.traj_gen.trajectory.detach())
+        self.trajectory = torch.clone(self.traj_gen.get_trajectory().detach())
 
         if self.cfg.terrain.measure_heights:
             self.measured_heights = self._get_heights()
@@ -545,7 +546,7 @@ class LeggedRobotTrajectory(BaseTask):
         weight_samp = globals()[traj_cfg.weight_samp_cls]()
         self.traj_gen.weight_sampler = weight_samp
 
-        self.sigma_tracking_rom = self.cfg.curriculum.sigma.tracking_rom[ind]
+        self.tracking_sigma = self.nominal_tracking_sigma * self.cfg.curriculum.sigma.tracking_rom[ind]
 
         for key in list(self.reward_scales.keys()):  # mimicing logic from prepare reward function
             self.reward_scales[key] = getattr(self.cfg.rewards.scales, key) * getattr(self.cfg.curriculum.rewards, key)[ind] * self.dt
@@ -886,7 +887,8 @@ class LeggedRobotTrajectory(BaseTask):
 
         # nominal values (curriculum)
         self.curriculum_state = 0
-        self.sigma_tracking_rom = 1.0
+        self.nominal_tracking_sigma = self.cfg.rewards.tracking_sigma
+        self.tracking_sigma = self.nominal_tracking_sigma
         self.nominal_push_time = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
         self.nominal_max_push_vel = self.cfg.domain_rand.max_push_vel
 
@@ -1053,16 +1055,6 @@ class LeggedRobotTrajectory(BaseTask):
         return torch.sum(
             (torch.abs(self.torques) - self.torque_limits * self.cfg.rewards.soft_torque_limit).clip(min=0.), dim=1)
 
-    # def _reward_tracking_lin_vel(self):
-    #     # Tracking of linear velocity commands (xy axes)
-    #     lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
-    #     return torch.exp(-lin_vel_error / self.sigma_values["tracking_lin_vel"])
-
-    # def _reward_tracking_ang_vel(self):
-    #     # Tracking of angular velocity commands (yaw)
-    #     ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
-    #     return torch.exp(-ang_vel_error / self.sigma_values["tracking_ang_vel"])
-
     def _reward_tracking_rom(self):
         """
         Computes a reward based on tracking error with different weights for each component of the trajectory.
@@ -1072,7 +1064,7 @@ class LeggedRobotTrajectory(BaseTask):
         pz_x = self.rom.proj_z(self.root_states)
         tracking_error = torch.square(pz_x - desired_state)
         err = torch.inner(tracking_error, self.reward_weighting)
-        return torch.exp(-err / self.sigma_tracking_rom)
+        return torch.exp(-err / self.tracking_sigma)
 
     def _reward_feet_air_time(self):
         # Reward long steps

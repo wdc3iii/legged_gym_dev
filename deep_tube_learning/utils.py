@@ -1,14 +1,20 @@
 import os
 import wandb
+import torch
 import statistics
 import numpy as np
 from pathlib import Path
-from isaacgym.torch_utils import *
-import torch
-from omegaconf import OmegaConf, DictConfig, ListConfig
 from abc import ABC, abstractmethod
+from omegaconf import OmegaConf, DictConfig, ListConfig
 from scipy.spatial.transform import Rotation
-import matplotlib.pyplot as plt
+
+
+def torch_rand_float(lower, upper, shape, device):
+    return (upper - lower) * torch.rand(*shape, device=device) + lower
+
+
+def torch_rand_vec_float(lower, upper, shape, device):
+    return (upper - lower) * torch.rand(*shape, device=device) + lower
 
 
 class AbstractSampleHoldDT(ABC):
@@ -49,24 +55,26 @@ class UniformWeightSampler:
 
 class UniformWeightSamplerNoExtreme:
 
-    def __init__(self, dim=4, seed=42):
+    def __init__(self, dim=4, seed=42, device='cuda'):
         self.rng = np.random.RandomState(seed)
         self.dim = dim
+        self.device = device
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
+        new_weights = torch.rand(size=(num_samples, self.dim), device=self.device)
         new_weights[:, 2] = 0
         return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
 
 
 class UniformWeightSamplerNoRamp:
 
-    def __init__(self, dim=4, seed=42):
+    def __init__(self, dim=4, seed=42, device='cuda'):
         self.rng = np.random.RandomState(seed)
         self.dim = dim
+        self.device = device
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
+        new_weights = torch.rand(size=(num_samples, self.dim), device=self.device)
         new_weights[:, 1] = 0
         return new_weights / torch.sum(new_weights, axis=-1, keepdims=True)
 
@@ -138,6 +146,35 @@ def evaluate_scalar_tube(test_dataset, loss_fn, device):
 
             fw = model(data)
             test_loss = loss_fn(fw, w, data)
+
+            correct_mask = fw > w
+            differences = (w[correct_mask] - fw[correct_mask]).abs()
+
+            metrics[f'Test Loss (alpha={loss_fn.alpha:.1f})'] = test_loss
+            metrics[f'Proportion Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = correct_mask.float().mean()
+            metrics[f'Mean Error when Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = differences.mean()
+
+        return metrics
+
+    return eval_model
+
+def evaluate_scalar_tube_oneshot(test_dataset, loss_fn, device):
+
+    def eval_model(model):
+        model.eval()
+        metrics = {}
+
+        with torch.no_grad():
+            tmp_data, tmp_w = test_dataset[0]
+            datas = torch.zeros((len(test_dataset), *tmp_data.shape), device=device)
+            w = torch.zeros(((len(test_dataset), *tmp_w.shape)), device=device)
+            for ii in range(len(test_dataset)):
+                d, t = test_dataset[ii]
+                datas[ii] = d.to(device)
+                w[ii] = t.to(device)
+
+            fw = model(datas)
+            test_loss = loss_fn(fw, w, datas)
 
             correct_mask = fw > w
             differences = (w[correct_mask] - fw[correct_mask]).abs()

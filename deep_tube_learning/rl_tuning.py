@@ -44,7 +44,7 @@ param_grid = {
 base_config = "hopper_traj_single_int"
 metric_name = 'Episode/rew_tracking_rom'  # the metric we are tuning to optimize
 last_num_values = 5  # the number of values at the end of the run to average over for the metric value
-log_file_path = "experiment_log2.json"
+log_file_path = "evaluation/data/experiment_log2.json"
 
 
 def get_new_log_dir(old_dirs):
