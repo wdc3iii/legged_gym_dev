@@ -14,11 +14,15 @@ goal = np.array([4, 3])
 vel_max = 1    # m/x
 pos_max = 10   # m
 dt = 0.1
-N = 50
+
+# obs = {
+#     'c': np.array([[2, 3.5, 1, 3], [1.5, 0.5, 3, 3]]),
+#     'r': np.array([0.1, 0.05, 0.05, 0.03])
+# }
 
 obs = {
-    'c': np.array([[2, 3.5, 1, 3], [1.5, 0.5, 3, 3]]),
-    'r': np.array([1, 0.5, 0.5, 0.3])
+    'c': np.array([[2], [1.5]]),
+    'r': np.array([1.])
 }
 
 
@@ -82,9 +86,20 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, R, Nobs, Qf=None, d
 
     # Tube dynamics
     tube_input = ca.horzcat(w[0, :], z[0, 2:], ca.reshape(v, 1, v.numel()))
-    g = ca.horzcat(g, fw(tube_input.T).T - w[1:, :].T)
+
+    def fw_tmp(input):
+        v = ca.reshape(input[1:], -1, 2)
+        w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
+        # w = 0.1 * ca.DM(np.ones(w.shape))
+        return w
+
+    g = ca.horzcat(g, fw_tmp(tube_input.T).T - w[1:, :].T)
+    # g = ca.horzcat(g, fw(tube_input.T).T - w[1:, :].T)
     g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((H,))).T)
     g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((H,))).T)
+    # delta = .75
+    # g_lb = ca.horzcat(g_lb, ca.DM(-delta * np.ones((H,))).T)
+    # g_ub = ca.horzcat(g_ub, ca.DM(delta * np.ones((H,))).T)
 
     # Terminal cost/constraints
     obj += (z[N, :] - p_zf) @ Qf @ (z[N, :] - p_zf).T
@@ -121,8 +136,8 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, R, Nobs, Qf=None, d
     nlp_opts = {
         "ipopt.linear_solver": "mumps",
         "ipopt.sb": "yes",
-        "ipopt.max_iter": 100000,
-        "ipopt.tol": 1e-4,
+        "ipopt.max_iter": 10000,
+        "ipopt.tol": 1e-2,
         # "ipopt.print_level": 5,
         "print_time": True,
     }
@@ -198,7 +213,8 @@ if __name__ == "__main__":
     device = 'cuda'
     w_max = 1
 
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"  # 256x256
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"  # 256x256, H=50
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yfofrrk1"  #32x32, H=5
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
@@ -211,4 +227,4 @@ if __name__ == "__main__":
     tube_oneshot_model.to(device)
     tube_oneshot_model.eval()
 
-    generate_trajectory(planning_model, z0, zf, tube_oneshot_model, w_max, N, Q, R, device=device)
+    generate_trajectory(planning_model, z0, zf, tube_oneshot_model, w_max, H, Q, R, device=device)
