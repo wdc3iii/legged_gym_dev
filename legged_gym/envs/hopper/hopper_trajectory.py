@@ -135,7 +135,6 @@ class HopperTrajectory(LeggedRobotTrajectory):
         # prepare quantities
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        self.prev_error[:] = self.trajectory[:, 0, :] - self.rom.proj_z(self.root_states)
 
         self._post_physics_step_callback()
 
@@ -165,6 +164,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
+        self.prev_error[:] = torch.square(self.trajectory[:, 0, :] - self.rom.proj_z(self.root_states))
 
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()

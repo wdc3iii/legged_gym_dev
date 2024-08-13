@@ -19,10 +19,11 @@ env_config:
       orientation: -80.0
       torques: -0.000001
       dof_vel: -0.
-      dof_acc: -2.5e-7
+      dof_acc: -2.5e-8 # changed from ...-7
+      unit_quat: -0.01 # changed from -.1
       collision: -1.
       action_rate: -0.01
-      differential_error: 2.
+      differential_error: 10.
     only_positive_rewards: False
     soft_dof_pos_limit: 1.
     soft_dof_vel_limit: 1.
@@ -32,8 +33,8 @@ env_config:
     reward_weighting:
       position: 1.0
     differential_error:
-      pos_slope: 4
-      neg_slope: 1
+      pos_slope: -4
+      neg_slope: -1
   rom:
     cls: 'SingleInt2D'
     z_min:
@@ -63,9 +64,10 @@ env_config:
   curriculum:
     use_curriculum: True
     curriculum_steps: [2500, 5000, 7500, 10000, 12500, 15000, 17500]
-    max_rom_distance: [0, 0.05, 0.1, 0.2, .3, .4, .5, .6]
+    max_rom_distance: [0, 0.0, 0.0, .0, .0, .1, .1, .1]
+#    max_rom_distance: [0., 0., 0., 0., 0., 0., 0., 0.]
     push:
-      magnitude: [0.0, 0., 0., 0., 0., 0., 0., 0.] ## needs to go up to 1
+      magnitude: [0.0, 0.3, 0.6, 1.0, 1.0, 1.0, 1.0, 1.0] ## needs to go up to 1
       time: [4, 3, 2, 1, 1, 1, 1, 1]
     trajectory_generator:
       weight_sampler: ['UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp', 'UniformWeightSamplerNoRamp']

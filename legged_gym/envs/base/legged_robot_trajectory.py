@@ -232,7 +232,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.feet_air_time[env_ids] = 0.
         self.episode_length_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
-        self.prev_error[env_ids] = 0
+        self.prev_error[env_ids] = torch.square(self.trajectory[env_ids, 0, :] - self.rom.proj_z(self.root_states)[env_ids])
         # fill extras
         self.extras["episode"] = {}
         for key in self.episode_sums.keys():
@@ -1104,7 +1104,13 @@ class LeggedRobotTrajectory(BaseTask):
                                      dim=-1) - self.cfg.rewards.max_contact_force).clip(min=0.), dim=1)
 
     def _reward_differential_error(self):
-        current_error = self.trajectory[:, 0, :] - self.rom.proj_z(self.root_states)
-        differential_error = current_error - self.prev_error
-        reward = torch.min(-self.cfg.rewards.differential_error.neg_slope * differential_error, -self.cfg.rewards.differential_error.pos_slope * differential_error)
-        return torch.sum(reward, dim=1)
+        desired_state = self.trajectory[:, 0, :]
+        pz_x = self.rom.proj_z(self.root_states)
+        tracking_error = torch.square(pz_x - desired_state)
+        err = torch.norm(tracking_error, dim=-1)
+        differential_error = err - torch.norm(self.prev_error, dim=-1)
+
+        mult = (differential_error < 0) * self.cfg.rewards.differential_error.neg_slope + \
+               (differential_error >= 0) * self.cfg.rewards.differential_error.pos_slope
+
+        return mult * differential_error

@@ -17,15 +17,15 @@ import matplotlib.pyplot as plt
 from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_hydra, quat2yaw, yaw2rot, wrap_angles,
                                       wandb_model_load, update_hydra_cfg)
 from trajopt.rom_dynamics import ZeroTrajectoryGenerator, CircleTrajectoryGenerator, SquareTrajectoryGenerator
-
+from legged_gym.policy_models.raibert import RaibertHeuristic
 
 def get_state(base, joint_pos, joint_vel):
     return torch.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), dim=1)
 
-def evaluate(traj_cls, push_robots, curriculum_state=3):
+def evaluate(traj_cls, push_robots, curriculum_state=2):
     steps = 1000
-    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/j7xnzrae"
-    model_name = f'{exp_name}_model:best{curriculum_state}'
+    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/rbpre3rx"
+    model_name = f'{exp_name}_model:best{curriculum_state}'                         # even if using rayburn heuristic, load in a RL model for env settings
     api = wandb.Api()
     rl_cfg, state_dict = wandb_model_load(api, model_name)
 
@@ -71,7 +71,12 @@ def evaluate(traj_cls, push_robots, curriculum_state=3):
     # load in the model
     ppo_runner.alg.actor_critic.load_state_dict(state_dict['model_state_dict'])
     ppo_runner.alg.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
-    policy = ppo_runner.get_inference_policy(device=env.device)
+
+    if rl_cfg.policy_model.policy_to_use == 'rl':
+        policy = ppo_runner.get_inference_policy(device=env.device)
+    elif rl_cfg.policy_model.policy_to_use == 'rh':
+        raibert = RaibertHeuristic(rl_cfg)
+        policy = raibert.get_inference_policy(device=env.device)
 
     obs = env.get_observations()
     x_n = env.dof_pos.shape[1] + env.dof_vel.shape[1] + env.root_states.shape[1]
@@ -120,7 +125,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=3):
 
 
 if __name__ == "__main__":
-    # evaluate('ZeroTrajectoryGenerator', True)
-    evaluate('SquareTrajectoryGenerator', False)
+    evaluate('ZeroTrajectoryGenerator', True)
+    # evaluate('SquareTrajectoryGenerator', False)
     # evaluate('CircleTrajectoryGenerator', False)
 

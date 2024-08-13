@@ -597,8 +597,9 @@ class TrajectoryGenerator:
     def reset_idx(self, idx, z):
         self.trajectory[idx, :, :] = self.zeros((len(idx), self.N // self.DN, self.rom.n))
         self.trajectory[idx, -1, :] = z[idx, :]
-        self.resample(idx, z)
         self.t[idx] = 0
+        self.t_final[idx] = 0
+        self.resample(idx, z)
 
         for t in range(self.N - 1):
             self.step_idx(idx)
