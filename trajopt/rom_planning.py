@@ -13,24 +13,24 @@ model = "SingleInt2D"
 # model = "ExtendedUnicycle"
 # model = "ExtendedLateralUnicycle"
 
-start = np.array([-5, -5, 0])
-goal = np.array([8, 3, np.pi / 2])
+start = np.array([0, 0, 0])
+goal = np.array([4, 3, np.pi / 2])
 
 acc_max = 2    # m/s^2
 alpha_max = 4  # rad/s^2
 vel_max = 1    # m/x
 omega_max = 2  # rad/sec
 pos_max = 10   # m
-dt = 0.25
-N = 75
+dt = 0.1
+N = 50
 
 # obs = {
 #     'c': np.array([[-2, 4, 1, 0], [-3, 5, -4, 0]]),
 #     'r': np.array([1, 1, 0.2, 3])
 # }
 obs = {
-    'c': np.array([[0, 2, 6, 4], [0, -4.5, 1, 3.2]]),
-    'r': np.array([3, 1, 1, 1.5])
+    'c': np.array([[2, 3.5, 1, 3], [1.5, 0.5, 3, 3]]),
+    'r': np.array([1, 0.5, 0.5, 0.3])
 }
 # obs = {
 #     'c': np.zeros((0, 2)),

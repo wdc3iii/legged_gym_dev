@@ -158,6 +158,35 @@ def evaluate_scalar_tube(test_dataset, loss_fn, device):
 
     return eval_model
 
+def evaluate_scalar_tube_oneshot(test_dataset, loss_fn, device):
+
+    def eval_model(model):
+        model.eval()
+        metrics = {}
+
+        with torch.no_grad():
+            tmp_data, tmp_w = test_dataset[0]
+            datas = torch.zeros((len(test_dataset), *tmp_data.shape), device=device)
+            w = torch.zeros(((len(test_dataset), *tmp_w.shape)), device=device)
+            for ii in range(len(test_dataset)):
+                d, t = test_dataset[ii]
+                datas[ii] = d.to(device)
+                w[ii] = t.to(device)
+
+            fw = model(datas)
+            test_loss = loss_fn(fw, w, datas)
+
+            correct_mask = fw > w
+            differences = (w[correct_mask] - fw[correct_mask]).abs()
+
+            metrics[f'Test Loss (alpha={loss_fn.alpha:.1f})'] = test_loss
+            metrics[f'Proportion Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = correct_mask.float().mean()
+            metrics[f'Mean Error when Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = differences.mean()
+
+        return metrics
+
+    return eval_model
+
 
 def evaluate_error_dynamics(test_dataset, loss_fn, device):
 

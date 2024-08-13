@@ -137,6 +137,9 @@ class HorizonTubeDataset(Dataset):
     def __getitem__(self, idx):
         ind = torch.randint(self.w.shape[1] - self.H - 1, (1,))
         # select rnd index
+        return self._get_item_helper(idx, ind)
+
+    def _get_item_helper(self, idx, ind):
         w0 = self.w[idx, ind]
         z0 = self.z[idx, ind, :].squeeze()
         w_1H = self.w[idx, ind + 1:ind + self.H + 1]
@@ -220,7 +223,7 @@ class ScalarHorizonTubeDataset(HorizonTubeDataset):
         z_no_pos = z[:, :, 2:]
 
         input_dim = 1 + z_no_pos.shape[-1] + H * v.shape[-1]
-        output_dim = 1
+        output_dim = H
 
         return cls(torch.from_numpy(w).float(),
                    torch.from_numpy(z_no_pos).float(),

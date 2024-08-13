@@ -96,7 +96,7 @@ def main():
             print("Env Done!")
 
     data = pd.DataFrame(trajectory, columns=cols)
-    savemat('sim2sim.mat', {col: data[col].values for col in data.columns})
+    savemat('data/sim2sim.mat', {col: data[col].values for col in data.columns})
 
 
 if __name__ == "__main__":
