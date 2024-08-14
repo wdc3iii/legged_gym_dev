@@ -211,24 +211,25 @@ class HopperTrajectory(LeggedRobotTrajectory):
         else:
             orient_inds = torch.arange(self.num_envs)
 
-        if orient_inds.shape[0] > 0:
-            if "orientation" in control_type:
-                quat_des = actions_scaled[orient_inds, :] / torch.linalg.norm(actions_scaled[orient_inds, :], dim=-1, keepdim=True)
+        if orient_inds.shape != torch.Size([]):
+            if orient_inds.shape[0] > 0:
+                if "orientation" in control_type:
+                    quat_des = actions_scaled[orient_inds, :] / torch.linalg.norm(actions_scaled[orient_inds, :], dim=-1, keepdim=True)
 
-                quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
-                err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
-                log_err = so3_log_map(quaternion_to_matrix(err))
-                local_tau = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * log_err - d_gains[orient_inds[:, None], self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
+                    quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
+                    err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
+                    log_err = so3_log_map(quaternion_to_matrix(err))
+                    local_tau = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * log_err - d_gains[orient_inds[:, None], self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
 
-                tau = self.actuator_transform.transform_points(local_tau)
-                self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
-            elif "V" in control_type:
-                self.torques[orient_inds, self.wheel_joint_indices] = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
-                                                      - d_gains[orient_inds[:, None], self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
-            elif "T" in control_type:
-                self.torques[orient_inds, self.wheel_joint_indices] = actions_scaled[orient_inds, self.wheel_joint_indices]
-            else:
-                raise NameError(f"Unknown controller type: {control_type}")
+                    tau = self.actuator_transform.transform_points(local_tau)
+                    self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
+                elif "V" in control_type:
+                    self.torques[orient_inds, self.wheel_joint_indices] = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
+                                                          - d_gains[orient_inds[:, None], self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
+                elif "T" in control_type:
+                    self.torques[orient_inds, self.wheel_joint_indices] = actions_scaled[orient_inds, self.wheel_joint_indices]
+                else:
+                    raise NameError(f"Unknown controller type: {control_type}")
 
         ts_ratio = self.torque_speed_bound_ratio * self.torque_speed_bound_ratio_random
         t_bound = self.torque_limits * self.torque_limit_random
@@ -249,6 +250,9 @@ class HopperTrajectory(LeggedRobotTrajectory):
         # Adjust trajectory positions relative to current position
         mod_traj = torch.clone(self.trajectory)
         mod_traj[:, :, :2] -= self.rom.proj_z(self.root_states)[:, None, :2]
+        #
+        # if self.base_quat[3] > 0:
+        #     print('pos')
 
         self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,

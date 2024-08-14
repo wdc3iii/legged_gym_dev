@@ -592,7 +592,7 @@ class TrajectoryGenerator:
         self.trajectory[idx, :-1, :] = self.trajectory[idx, 1:, :]
         self.trajectory[idx, -1, :] = z_next
         self.v_trajectory[idx, :-1, :] = self.v_trajectory[idx, 1:, :]
-        self.v_trajectory[idx, -1, :] = self.v
+        self.v_trajectory[idx, -1, :] = self.v[idx]
         self.t[idx] += self.rom.dt
 
     def reset(self, z):

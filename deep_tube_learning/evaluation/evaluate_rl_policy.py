@@ -6,6 +6,7 @@ import os
 import hydra
 import wandb
 import torch
+from isaacgym.torch_utils import *
 import pickle
 import numpy as np
 import pandas as pd
@@ -18,13 +19,13 @@ from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_h
                                       wandb_model_load, update_hydra_cfg)
 from trajopt.rom_dynamics import ZeroTrajectoryGenerator, CircleTrajectoryGenerator, SquareTrajectoryGenerator
 from legged_gym.policy_models.raibert import RaibertHeuristic
-
+from trajopt.rom_dynamics import SingleInt2D
 def get_state(base, joint_pos, joint_vel):
     return torch.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), dim=1)
 
-def evaluate(traj_cls, push_robots, curriculum_state=2):
+def evaluate(traj_cls, push_robots, curriculum_state=0):
     steps = 1000
-    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/rbpre3rx"
+    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/9drfq0m7"
     model_name = f'{exp_name}_model:best{curriculum_state}'                         # even if using rayburn heuristic, load in a RL model for env settings
     api = wandb.Api()
     rl_cfg, state_dict = wandb_model_load(api, model_name)
@@ -97,10 +98,31 @@ def evaluate(traj_cls, push_robots, curriculum_state=2):
     pz_x[0, :, :] = env.rom.proj_z(base)
 
     env.traj_gen.reset(env.rom.proj_z(env.root_states))
-    for t in range(steps):
+    actions_list = []
+    quaternion_list = []
+    wheel_torques = []
+    # minus 1 because we're computing differences between position to get velocity looking forward
+    for t in range(steps - 1):
+        wheel_torques.append(env.dof_vel[0, 1:4].cpu().detach().numpy())
         # Step environment
+        # have to modify obs if using Raibert Heuristic
+        if rl_cfg.policy_model.policy_to_use == 'rh':
+            if isinstance(env.traj_gen.rom, SingleInt2D):
+                current_velocity = quat_rotate_inverse(env.root_states[:, 3:7], env.root_states[:, 7:10])[:, :2]
+                current_position = env.root_states[:, :2]
+
+                desired_position = env.traj_gen.trajectory[:, 0]
+                desired_velocity = env.traj_gen.trajectory[:, 1, :] - env.traj_gen.trajectory[:, 0, :]
+
+                positional_error = desired_position - current_position
+                velocity_error = desired_velocity - current_velocity
+                quaternion = env.root_states[:, 3:7]  # w,x,y,z
+                obs = torch.cat((positional_error, velocity_error, quaternion), dim=1)
         actions = policy(obs.detach())
         obs, _, _, done, _ = env.step(actions.detach())
+
+        actions_list.append(actions[0].cpu().numpy())
+        quaternion_list.append(env.root_states[0, 3:7].cpu().numpy())
 
         # Save Data
         base = env.root_states
@@ -112,6 +134,34 @@ def evaluate(traj_cls, push_robots, curriculum_state=2):
 
     z = z.cpu().numpy()
     pz_x = pz_x.cpu().numpy()
+
+    wheel_torques = np.array(wheel_torques)
+    time_steps = np.arange(wheel_torques.shape[0])
+
+    plt.figure(figsize=(10, 6))
+    for i in range(3):
+        plt.plot(time_steps, wheel_torques[:, i], label=f'Wheel {i + 1} Torque')
+
+    plt.title('Wheel Torques Over Time')
+    plt.xlabel('Time Steps')
+    plt.ylabel('Torque')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    actions_array = np.array(actions_list)
+    quaternion_array = np.array(quaternion_list)
+
+    # Plot each pair of elements from actions and quaternions
+    for i in range(min(actions_array.shape[1], quaternion_array.shape[1])):
+        plt.figure()
+        plt.plot(actions_array[:, i], label=f'Action {i}')
+        plt.plot(quaternion_array[:, i], label=f'Quaternion {i}', linestyle='--')
+        plt.title(f'Action and Quaternion Element {i} for the First Robot')
+        plt.xlabel('Steps')
+        plt.ylabel('Value')
+        plt.legend()
+        plt.show()
 
     # Plot the trajectories after the loop
     fig, ax = plt.subplots()

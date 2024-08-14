@@ -5,25 +5,21 @@ from scipy.spatial.transform import Rotation as R
 class RaibertHeuristic:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.K_p = .1 # cfg.policy_model.rh.K_p  # Proportional gain for position
-        self.K_v = .3 # cfg.policy_model.rh.K_v  # Proportional gain for velocity
-        self.clip_value_pos = 1.  # cfg.policy_model.rh.clip_value_pos  # Clipping value for position errors
-        self.clip_value_vel = 1.  # cfg.policy_model.rh.clip_value_vel  # Clipping value for velocity errors
-        self.clip_value_total = 1.  # cfg.policy_model.rh.clip_value_total  # Clipping value for total combination of errors
+        self.K_p = -.1  # Proportional gain for position
+        self.K_v = -.3  # Proportional gain for velocity
+        self.clip_value_pos = 1.  # Clipping value for position errors
+        self.clip_value_vel = 1.  # Clipping value for velocity errors
+        self.clip_value_total = 1.  # Clipping value for total combination of errors
 
     def get_inference_policy(self, device):
         def policy(obs):
-            base_lin_vel = obs[:, :3]
+            pos_error_x = obs[:, 0]
+            pos_error_y = obs[:, 1]
+            vel_error_x = obs[:, 2]
+            vel_error_y = obs[:, 3]
 
-            traj_pos_x = obs[:, 9]
-            traj_pos_y = obs[:, 10]
-            traj_vel_x = obs[:, 11]
-            traj_vel_y = obs[:, 12]
-            vel_error_x = traj_vel_x - base_lin_vel[:, 0]
-            vel_error_y = traj_vel_y - base_lin_vel[:, 1]
-
-            pitch_pos_scaled = -self.K_p * traj_pos_x
-            roll_pos_scaled = -self.K_p * traj_pos_y
+            pitch_pos_scaled = -self.K_p * pos_error_x
+            roll_pos_scaled = -self.K_p * pos_error_y
             vel_x_scaled = -self.K_v * vel_error_x
             vel_y_scaled = -self.K_v * vel_error_y
 
@@ -37,15 +33,17 @@ class RaibertHeuristic:
             omega_pitch = torch.clamp(omega_pitch, -self.clip_value_total, self.clip_value_total)
             omega_roll = torch.clamp(omega_roll, -self.clip_value_total, self.clip_value_total)
 
-            omega_quat = self.omega_to_quat(omega_pitch, omega_roll, device)
+            current_yaw = self.quat_to_yaw(obs[:, 4:8])
+
+            omega_quat = self.omega_to_quat(omega_pitch, omega_roll, current_yaw)
 
             return omega_quat
 
         return policy
 
-    def omega_to_quat(self, omega_pitch, omega_roll, device):
-        cy = torch.ones_like(omega_roll)
-        sy = torch.zeros_like(omega_roll)
+    def omega_to_quat(self, omega_pitch, omega_roll, omega_yaw):
+        cy = torch.cos(omega_yaw * 0.5)
+        sy = torch.sin(omega_yaw * 0.5)
         cp = torch.cos(omega_pitch * 0.5)
         sp = torch.sin(omega_pitch * 0.5)
         cr = torch.cos(omega_roll * 0.5)
@@ -55,6 +53,14 @@ class RaibertHeuristic:
         x = sr * cp * cy - cr * sp * sy
         y = cr * sp * cy + sr * cp * sy
         z = cr * cp * sy - sr * sp * cy
+                                                                            # TODO: Figure this out
+        return torch.stack((w, x, y, z), dim=-1)                    # when in this config, wich quat_to_yaw being in x,y,z,w order, it doesnt spin but torque curves are wrong
+        # return torch.stack((x, y, z, w), dim=-1)                          # when in this config, torque curves are correct, but it spins out and almost turns upside down
 
-        return torch.stack((x, y, z, w), dim=-1)
-
+    @staticmethod
+    def quat_to_yaw(quat):
+        x, y, z, w = quat[..., 0], quat[..., 1], quat[..., 2], quat[..., 3]
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        yaw = torch.atan2(siny_cosp, cosy_cosp)
+        return yaw
