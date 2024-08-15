@@ -5,18 +5,18 @@ from scipy.spatial.transform import Rotation as R
 class RaibertHeuristic:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.K_p = -.1  # Proportional gain for position
-        self.K_v = -.3  # Proportional gain for velocity
-        self.clip_value_pos = 1.  # Clipping value for position errors
+        self.K_p = -.3  # Proportional gain for position
+        self.K_v = -.9  # Proportional gain for velocity
+        self.clip_value_pos = 0.1  # Clipping value for position errors
         self.clip_value_vel = 1.  # Clipping value for velocity errors
         self.clip_value_total = 1.  # Clipping value for total combination of errors
 
     def get_inference_policy(self, device):
         def policy(obs):
             pos_error_x = obs[:, 0]
-            pos_error_y = obs[:, 1]
+            pos_error_y = -obs[:, 1]
             vel_error_x = obs[:, 2]
-            vel_error_y = obs[:, 3]
+            vel_error_y = -obs[:, 3]
 
             pitch_pos_scaled = -self.K_p * pos_error_x
             roll_pos_scaled = -self.K_p * pos_error_y

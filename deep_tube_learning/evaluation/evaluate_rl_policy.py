@@ -61,6 +61,9 @@ def evaluate(traj_cls, push_robots, curriculum_state=0):
     rl_cfg.env_config.domain_rand.torque_speed_properties.randomize_slope = False
     rl_cfg.env_config.curriculum.use_curriculum = False
 
+    rl_cfg.policy_model.rh.K_p = 0.5
+    rl_cfg.policy_model.rh.K_v = 1.5
+
     args = get_args()
     args = update_args_from_hydra(rl_cfg, args)
     env_cfg, train_cfg = task_registry.get_cfgs(rl_cfg.task)
@@ -153,24 +156,26 @@ def evaluate(traj_cls, push_robots, curriculum_state=0):
     quaternion_array = np.array(quaternion_list)
 
     # Plot each pair of elements from actions and quaternions
-    for i in range(min(actions_array.shape[1], quaternion_array.shape[1])):
-        plt.figure()
-        plt.plot(actions_array[:, i], label=f'Action {i}')
-        plt.plot(quaternion_array[:, i], label=f'Quaternion {i}', linestyle='--')
-        plt.title(f'Action and Quaternion Element {i} for the First Robot')
-        plt.xlabel('Steps')
-        plt.ylabel('Value')
-        plt.legend()
-        plt.show()
+    # for i in range(min(actions_array.shape[1], quaternion_array.shape[1])):
+    plt.figure()
+    plt.plot(quaternion_array)
+    plt.gca().set_prop_cycle(None)
+    plt.plot(actions_array[:, [1, 2, 3, 0]], linestyle='--')
+    plt.title(f'Action and Quaternion Element {i} for the First Robot')
+    plt.legend(['qx', 'qy', 'qz', 'qw', 'qdx', 'qdy', 'qdz', 'qdw'])
+    plt.xlabel('Steps')
+    plt.ylabel('Value')
+    plt.show()
 
     # Plot the trajectories after the loop
     fig, ax = plt.subplots()
-    env.rom.plot_spacial(ax, z[:, 0, :], '.-k')
-    env.rom.plot_spacial(ax, pz_x[:, 0, :], '.-b')
+    env.rom.plot_spacial(ax, pz_x[2:-2, 0, :], '.-b')
+    env.rom.plot_spacial(ax, z[2:-2, 0, :], '.-k')
+
     plt.show()
     fig, ax = plt.subplots()
-    env.rom.plot_spacial(ax, pz_x[:, 1, :], '.-b')
-    env.rom.plot_spacial(ax, z[:, 1, :], '.-k')
+    env.rom.plot_spacial(ax, z[2:-2, 1, :], '.-k')
+    env.rom.plot_spacial(ax, pz_x[2:-2, 1, :], '.-b')
     plt.show()
 
 
