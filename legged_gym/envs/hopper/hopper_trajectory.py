@@ -39,6 +39,8 @@ from legged_gym.utils.helpers import torch_rand_vec_float
 from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate, \
     euler_angles_to_matrix, matrix_to_quaternion
 
+from trajopt.rom_dynamics import SingleInt2D
+
 
 class HopperTrajectory(LeggedRobotTrajectory):
 
@@ -464,3 +466,20 @@ class HopperTrajectory(LeggedRobotTrajectory):
     def _reward_unit_quat(self):
         act_norm = torch.linalg.norm(self.actions, dim=-1)
         return torch.square(1 - act_norm)
+
+    def _reward_raibert(self):
+        rl_actions = self.actions
+
+        if isinstance(self.traj_gen.rom, SingleInt2D):
+            current_velocity = quat_rotate_inverse(self.root_states[:, 3:7], self.root_states[:, 7:10])[:, :2]
+            current_position = self.root_states[:, :2]
+
+            desired_position = self.traj_gen.trajectory[:, 0]
+            desired_velocity = self.traj_gen.trajectory[:, 1, :] - self.traj_gen.trajectory[:, 0, :]
+
+            positional_error = desired_position - current_position
+            velocity_error = desired_velocity - current_velocity
+            quaternion = self.root_states[:, 3:7]  # w,x,y,z
+            rh_obs = torch.cat((positional_error, velocity_error, quaternion), dim=1)
+        rh_actions = self.rh_policy(rh_obs.detach())
+        return torch.sum(torch.square(rl_actions - rh_actions), dim=1)

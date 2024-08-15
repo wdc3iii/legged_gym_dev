@@ -24,6 +24,7 @@ env_config:
       collision: -1.
       action_rate: -0.01
       differential_error: 10.
+      raibert: .1
     only_positive_rewards: False
     tracking_sigma: 0.25
     soft_dof_pos_limit: 1.
@@ -65,7 +66,7 @@ env_config:
   curriculum:
     use_curriculum: True
     curriculum_steps: [2500, 5000, 7500, 10000, 12500, 15000, 17500]
-    max_rom_distance: [0, 0.0, 0.0, .0, .0, .1, .1, .1]
+    max_rom_distance: [0, 0.1, 0.3, .5, .8, 1., 1., 1.]
 #    max_rom_distance: [0., 0., 0., 0., 0., 0., 0., 0.]
     push:
       magnitude: [0.0, 0.3, 0.6, 1.0, 1.0, 1.0, 1.0, 1.0] ## needs to go up to 1
@@ -93,11 +94,20 @@ env_config:
       ang_vel_xy: [1., 1., 1., 1., 1., 1., 1., 1.]
       unit_quat: [1., 1., 1., 1., 1., 1., 1., 1.]
       differential_error: [1., 1., 1., 1., 1., 1., 1., 1.]
+      raibert: [1., 1., 1., 1., 1., .8, .5, .2]
   normalization:
     obs_scales:
       trajectory: [1, 1]
   domain_rand:
     max_rom_dist: [1.0, 1.0]
+  policy_model:
+    policy_to_use: 'rh'  # 'rl' for Reinforcement Learning, 'rh' for Raibert
+    rh:
+      K_p: -0.3
+      K_v: -0.9
+      clip_value_pos: 0.1
+      clip_value_vel: 1.0
+      clip_value_total: 1.0
 
 train_config:
   policy:
@@ -110,4 +120,4 @@ train_config:
     run_name: ''
     experiment_name: ${experiment_name}
     load_run: -1
-    max_iterations: 20000
+    max_iterations: 1000

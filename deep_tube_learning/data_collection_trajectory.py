@@ -71,7 +71,7 @@ def data_creation_main(cfg):
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
     if rl_cfg.policy_model.policy_to_use == 'rl':
         policy = ppo_runner.get_inference_policy(device=env.device)
-    elif rl_cfg.policy_model.policy_to_use == 'rh':
+    elif rl_cfg.env_config.policy_model.policy_to_use == 'rh':
         raibert = RaibertHeuristic(rl_cfg)
         policy = raibert.get_inference_policy(device=env.device)
 

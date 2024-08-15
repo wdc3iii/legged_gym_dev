@@ -78,7 +78,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=0):
 
     if rl_cfg.policy_model.policy_to_use == 'rl':
         policy = ppo_runner.get_inference_policy(device=env.device)
-    elif rl_cfg.policy_model.policy_to_use == 'rh':
+    elif rl_cfg.env_config.policy_model.policy_to_use == 'rh':
         raibert = RaibertHeuristic(rl_cfg)
         policy = raibert.get_inference_policy(device=env.device)
 

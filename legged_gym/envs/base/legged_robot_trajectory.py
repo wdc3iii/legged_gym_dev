@@ -51,6 +51,7 @@ from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUni
                                   ExtendedLateralUnicycle, TrajectoryGenerator,ZeroTrajectoryGenerator,
                                   CircleTrajectoryGenerator, SquareTrajectoryGenerator)
 from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, UniformWeightSamplerNoRamp
+from ...policy_models.raibert import RaibertHeuristic
 
 
 class LeggedRobotTrajectory(BaseTask):
@@ -80,6 +81,9 @@ class LeggedRobotTrajectory(BaseTask):
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
         self._init_rom()
         self._init_trajectory_generator()
+        if self.cfg.policy_model.policy_to_use =='rh':
+            raibert = RaibertHeuristic(self.cfg)
+            self.rh_policy = raibert.get_inference_policy(device=self.device)
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True

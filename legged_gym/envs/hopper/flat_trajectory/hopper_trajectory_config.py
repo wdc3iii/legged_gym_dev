@@ -247,7 +247,15 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             ang_vel_xy = [1., .8, .6]
             lin_vel_z = [1., .8, .6]
             differential_error = [1., .8, .6]
-
+            raibert = [1., 1., 1.]
+    class policy_model:
+        policy_to_use = 'rh'
+        class rh:
+            K_p = -.3
+            K_v = -.9
+            clip_value_pos = .1
+            clip_value_vel = 1.
+            clip_value_total = 1.
 
 class HopperRoughTrajectoryCfgPPO( LeggedRobotTrajectoryCfgPPO ):
     class policy(LeggedRobotTrajectoryCfgPPO.policy):
