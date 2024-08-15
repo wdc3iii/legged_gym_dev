@@ -180,7 +180,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=0):
 
 
 if __name__ == "__main__":
-    evaluate('ZeroTrajectoryGenerator', True)
-    # evaluate('SquareTrajectoryGenerator', False)
+    # evaluate('ZeroTrajectoryGenerator', True)
+    evaluate('SquareTrajectoryGenerator', False)
     # evaluate('CircleTrajectoryGenerator', False)
 

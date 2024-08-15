@@ -6,15 +6,18 @@ import os
 import hydra
 import wandb
 import pickle
+import torch
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
-
+from isaacgym.torch_utils import *
 from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_hydra, quat2yaw, yaw2rot, wrap_angles,
                                       wandb_model_load, update_hydra_cfg)
+from legged_gym.policy_models.raibert import RaibertHeuristic
+from trajopt.rom_dynamics import SingleInt2D
 
 
 def get_state(base, joint_pos, joint_vel):
@@ -66,7 +69,11 @@ def data_creation_main(cfg):
 
     train_cfg.runner.resume = True
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
-    policy = ppo_runner.get_inference_policy(device=env.device)
+    if rl_cfg.policy_model.policy_to_use == 'rl':
+        policy = ppo_runner.get_inference_policy(device=env.device)
+    elif rl_cfg.policy_model.policy_to_use == 'rh':
+        raibert = RaibertHeuristic(rl_cfg)
+        policy = raibert.get_inference_policy(device=env.device)
 
     obs = env.get_observations()
     x_n = env.dof_pos.shape[1] + env.dof_vel.shape[1] + env.root_states.shape[1]
@@ -122,6 +129,19 @@ def data_creation_main(cfg):
             err_local_all[t, :, :] = err_local.copy()
 
             # Step environment
+            # have to modify obs if using Raibert Heuristic
+            if rl_cfg.policy_model.policy_to_use == 'rh':
+                if isinstance(env.traj_gen.rom, SingleInt2D):
+                    current_velocity = quat_rotate_inverse(env.root_states[:, 3:7], env.root_states[:, 7:10])[:, :2]
+                    current_position = env.root_states[:, :2]
+
+                    desired_position = env.traj_gen.trajectory[:, 0]
+                    desired_velocity = env.traj_gen.trajectory[:, 1, :] - env.traj_gen.trajectory[:, 0, :]
+
+                    positional_error = desired_position - current_position
+                    velocity_error = desired_velocity - current_velocity
+                    quaternion = env.root_states[:, 3:7]  # w,x,y,z
+                    obs = torch.cat((positional_error, velocity_error, quaternion), dim=1)
             actions = policy(obs.detach())
             obs, _, _, dones, _ = env.step(actions.detach())
 

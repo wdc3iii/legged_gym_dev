@@ -1,15 +1,13 @@
 import torch
-from scipy.spatial.transform import Rotation as R
-
 
 class RaibertHeuristic:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.K_p = -.3  # Proportional gain for position
-        self.K_v = -.9  # Proportional gain for velocity
-        self.clip_value_pos = 0.1  # Clipping value for position errors
-        self.clip_value_vel = 1.  # Clipping value for velocity errors
-        self.clip_value_total = 1.  # Clipping value for total combination of errors
+        self.K_p = self.cfg.policy_model.rh.K_p
+        self.K_v = self.cfg.policy_model.rh.K_v
+        self.clip_value_pos = self.cfg.policy_model.rh.clip_value_pos
+        self.clip_value_vel = self.cfg.policy_model.rh.clip_value_vel
+        self.clip_value_total = self.cfg.policy_model.rh.clip_value_total
 
     def get_inference_policy(self, device):
         def policy(obs):
@@ -53,9 +51,7 @@ class RaibertHeuristic:
         x = sr * cp * cy - cr * sp * sy
         y = cr * sp * cy + sr * cp * sy
         z = cr * cp * sy - sr * sp * cy
-                                                                            # TODO: Figure this out
-        return torch.stack((w, x, y, z), dim=-1)                    # when in this config, wich quat_to_yaw being in x,y,z,w order, it doesnt spin but torque curves are wrong
-        # return torch.stack((x, y, z, w), dim=-1)                          # when in this config, torque curves are correct, but it spins out and almost turns upside down
+        return torch.stack((w, x, y, z), dim=-1)
 
     @staticmethod
     def quat_to_yaw(quat):
