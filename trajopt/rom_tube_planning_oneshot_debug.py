@@ -1,6 +1,7 @@
 import time
 import csv
 import numpy as np
+import pandas as pd
 import casadi as ca
 import l4casadi as l4c
 import matplotlib.pyplot as plt
@@ -91,14 +92,13 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
     def fw_tmp(input):
         v = ca.reshape(input[1:], -1, 2)
         w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
-        # w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
         # w = 0.1 * ca.DM(np.ones(w.shape))
         return w
 
     def fw_tmp_rolling(input):
         v = ca.reshape(input[1:], -1, 2)
         w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
-        # w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
+        # w = 0.1 * ca.DM(np.ones(w.shape))
         window_size = 10
 
         # Initialize a list to store the rolling averages
@@ -106,22 +106,8 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
 
         return ca.vertcat(*rolling_avg)
 
-    def fw_tmp_dense(input):
-        v = ca.reshape(input[1:], -1, 2)
-        diff = v[1:, :] - v[:-1, :]
-        d = 0.5 * (diff[:, 0] ** 2 + diff[:, 1] ** 2)
-        w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
-        # w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
-        window_size = 10
-
-        # Initialize a list to store the rolling averages
-        rolling_avg = [ca.sum1(w[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(w.numel())]
-
-        return ca.vertcat(*rolling_avg) * 0.8 + 2 * ca.sum1(d) / d.numel()
-
     # g = ca.horzcat(g, fw_tmp(tube_input.T).T - w[1:, :].T)
-    # g = ca.horzcat(g, fw_tmp_rolling(tube_input.T).T - w[1:, :].T)
-    g = ca.horzcat(g, fw_tmp_dense(tube_input.T).T - w[1:, :].T)
+    g = ca.horzcat(g, fw_tmp_rolling(tube_input.T).T - w[1:, :].T)
     # g = ca.horzcat(g, fw(tube_input.T).T - w[1:, :].T)
     g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((H,))).T)
     g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((H,))).T)
@@ -165,7 +151,7 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
         "ipopt.linear_solver": "mumps",
         "ipopt.sb": "yes",
         "ipopt.max_iter": 10000,
-        "ipopt.tol": 1e-2,
+        "ipopt.tol": 1e-4,
         # "ipopt.print_level": 5,
         "print_time": True,
     }
@@ -174,13 +160,13 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
 
     solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx}
 
-    return solver, nlp_dict
+    return solver, nlp_dict, nlp_opts
 
 
 def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw, R, Qf=None, device='cpu'):
     Nobs = len(obs['r'])
 
-    nlp, nlp_dict = trajopt_tube_solver(plan_model, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Qf, device=device)
+    solver, nlp_dict, nlp_opts = trajopt_tube_solver(plan_model, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Qf, device=device)
 
     params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
@@ -196,43 +182,65 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
         np.reshape(w_init, ((N + 1) * 1, 1))
     ])
 
+
+    cols = ["iter"]
+    for t in range(N + 1):
+        cols.extend([f"z_x{t}", f"z_y{t}"])
+    for t in range(N):
+        cols.extend([f"v_x{t}", f"v_y{t}"])
+    for t in range(N + 1):
+        cols.append(f"w{t}")
+    for t in range(solver["lbg"].numel()):
+        cols.append(f"g{t}")
+    for t in range(solver["lbg"].numel()):
+        cols.append(f"lbg{t}")
+    for t in range(solver["lbg"].numel()):
+        cols.append(f"ubg{t}")
+    for t in range(solver["lbx"].numel()):
+        cols.append(f"lbx{t}")
+    for t in range(solver["lbx"].numel()):
+        cols.append(f"ubx{t}")
+
+    df = pd.DataFrame(columns=cols)
     tic = time.perf_counter_ns()
-    sol = nlp["solver"](x0=x_init, p=params, lbg=nlp["lbg"], ubg=nlp["ubg"], lbx=nlp["lbx"], ubx=nlp["ubx"])
-    toc = time.perf_counter_ns()
-    print(f"Solve Time: {(toc - tic) / 1e6}ms")
+    for it in range(60):
+        nlp_opts["ipopt.max_iter"] = it
+        nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
-    # extract solution
-    z_ind = (N + 1) * plan_model.n
-    v_ind = N * plan_model.m
-    z_sol = np.array(sol["x"][:z_ind, :].reshape((N + 1, plan_model.n)))
-    v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
-    w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
+        solver["solver"] = nlp_solver
+        sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"], ubx=solver["ubx"])
+        toc = time.perf_counter_ns()
+        print(f"Solve Time: {(toc - tic) / 1e6}ms")
 
-    fig, axs = plt.subplots(2,1)
-    plan_model.plot_ts(axs, z_sol, v_sol)
-    plt.show()
+        # extract solution
+        z_ind = (N + 1) * plan_model.n
+        v_ind = N * plan_model.m
+        z_sol = np.array(sol["x"][:z_ind, :].reshape((N + 1, plan_model.n)))
+        v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
+        w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
 
-    fig, ax = plt.subplots()
-    for i in range(Nobs):
-        xc = obs['c'][0, i]
-        yc = obs['c'][1, i]
-        circ = plt.Circle((xc, yc), obs['r'][i], color='r', alpha=0.5)
-        ax.add_patch(circ)
-    plt.plot(z0[0], z0[1], 'rx')
-    plt.plot(zf[0], zf[1], 'go')
+        g = np.array(solver["solver"].get_function("nlp_g")(sol['x'], params)).T
+        ubg = np.array(solver["ubg"]).T
+        lbg = np.array(solver["lbg"]).T
 
-    plan_model.plot_tube(ax, z_sol, w_sol)
-    plan_model.plot_spacial(ax, z_sol)
-    plt.axis("square")
-    plt.show()
+        lbx = np.array(solver["lbx"]).T
+        ubx = np.array(solver["ubx"]).T
 
-    g = nlp["solver"].get_function("nlp_g")(sol['x'], params)
-    g = np.array(g).T
-    ubg = np.array(nlp["ubg"]).T
-    lbg = np.array(nlp["lbg"]).T
-    g_violation = np.maximum(np.maximum(g - ubg, 0), np.maximum(lbg - g, 0))
-    plt.plot(g_violation)
-    plt.show()
+        new_row = np.concatenate((
+            np.array([it]),
+            z_sol.reshape((-1,)),
+            v_sol.reshape((-1,)),
+            w_sol.squeeze(),
+            g.squeeze(),
+            lbg.squeeze(),
+            ubg.squeeze(),
+            lbx.squeeze(),
+            ubx.squeeze()
+        ), axis=-1)
+        new_row_df = pd.DataFrame([new_row], columns=df.columns)
+        df = pd.concat([df, new_row_df], ignore_index=True)
+
+    df.to_csv("debug_trajopt_results.csv", index=False)
     print("Complete")
 
 

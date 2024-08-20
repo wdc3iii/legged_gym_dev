@@ -124,6 +124,12 @@ def wandb_model_load(api, artifact_name):
     state_dict = torch.load(str(Path(dir_name) / "model.pth"))
     return config, state_dict
 
+def wandb_model_load_cpu(api, artifact_name):
+    config, artifact = wandb_load_artifact(api, artifact_name)
+
+    dir_name = artifact.download(root=Path("/tmp/wandb_downloads"))
+    state_dict = torch.load(str(Path(dir_name) / "model.pth"), map_location=torch.device('cpu'))
+    return config, state_dict
 
 def wandb_load_artifact(api, artifact_name):
     artifact = api.artifact(artifact_name)

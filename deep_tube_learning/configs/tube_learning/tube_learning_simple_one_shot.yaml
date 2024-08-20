@@ -23,7 +23,7 @@ model:
   num_units: 32
   num_layers: 2
   activation:
-    _target_: torch.nn.ReLU
+    _target_: torch.nn.Softplus
 
 model_evaluation:
   _target_: deep_tube_learning.utils.evaluate_scalar_tube_oneshot
