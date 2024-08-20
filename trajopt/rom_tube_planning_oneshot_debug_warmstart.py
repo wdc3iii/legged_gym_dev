@@ -9,10 +9,11 @@ import wandb
 from hydra.utils import instantiate
 from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
+from trajopt.rom_planning import trajopt_solver as trajopt_solver_no_tube
+
 
 start = np.array([0, 0])
-# goal = np.array([4, 3])
-goal = np.array([4, 0])
+goal = np.array([4, 3])
 
 vel_max = 1    # m/x
 pos_max = 10   # m
@@ -23,13 +24,8 @@ dt = 0.1
 #     'r': np.array([0.1, 0.05, 0.05, 0.03])
 # }
 
-# obs = {
-#     'c': np.array([[2, 0.], [1.5, 3]]),
-#     'r': np.array([1., 1])
-# }
-
 obs = {
-    'c': np.array([[2, 2], [1.5, -1.5]]),
+    'c': np.array([[2, 0.], [1.5, 3]]),
     'r': np.array([1., 1])
 }
 
@@ -104,18 +100,19 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
 
     def fw_tmp_rolling(input):
         v = ca.reshape(input[1:], -1, 2)
-        w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
-        # w = 0.1 * ca.DM(np.ones(w.shape))
+        # w = 0.5 * (v[:, 0] ** 2 + v[:, 1] ** 2)
+        w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
         window_size = 10
 
         # Initialize a list to store the rolling averages
-        rolling_avg = [ca.sum1(w[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(w.numel())]
+        rolling_avg = [ca.sum1(w[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in
+                       range(w.numel())]
 
         return ca.vertcat(*rolling_avg)
 
-    # g = ca.horzcat(g, fw_tmp(tube_input.T).T - w[1:, :].T)
+    g = ca.horzcat(g, fw_tmp(tube_input.T).T - w[1:, :].T)
     # g = ca.horzcat(g, fw_tmp_rolling(tube_input.T).T - w[1:, :].T)
-    g = ca.horzcat(g, fw(tube_input.T).T - w[1:, :].T)
+    # g = ca.horzcat(g, fw(tube_input.T).T - w[1:, :].T)
     g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((H,))).T)
     g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((H,))).T)
     # delta = .75
@@ -155,7 +152,7 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
         "p": p_nlp
     }
     nlp_opts = {
-        # "ipopt.linear_solver": "mumps",
+        "ipopt.linear_solver": "mumps",
         "ipopt.sb": "yes",
         "ipopt.max_iter": 10000,
         "ipopt.tol": 1e-4,
@@ -174,20 +171,71 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
     Nobs = len(obs['r'])
 
     solver, nlp_dict, nlp_opts = trajopt_tube_solver(plan_model, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Qf, device=device)
+    nlp_no_tube = trajopt_solver_no_tube(plan_model, N, Q, R, Nobs)
 
     params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
     v_init = np.zeros((N, plan_model.m))
     # z_init = np.repeat(zf[:, None], N + 1, 1)
     # z_init = np.repeat(z0[:, None], N + 1, 1)
-    z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
+    z_init = np.outer(np.linspace(0, 1, N + 1), (zf - z0)) + z0
     w_init = np.zeros((N + 1, 1))
 
     x_init = np.vstack([
         np.reshape(z_init, ((N + 1) * plan_model.n, 1), order='F'),
-        np.reshape(v_init, (N * plan_model.m, 1), order='F'),
-        np.reshape(w_init, ((N + 1) * 1, 1), order='F')
+        np.reshape(v_init, (N * plan_model.m, 1), order='F')
     ])
+
+    sol_no_tube = nlp_no_tube["solver"](x0=x_init, p=params, lbg=nlp_no_tube["lbg"], ubg=nlp_no_tube["ubg"],
+                                        lbx=nlp_no_tube["lbx"], ubx=nlp_no_tube["ubx"])
+    z_ind = (N + 1) * plan_model.n
+    v_ind = N * plan_model.m
+    z_init = np.array(sol_no_tube["x"][:z_ind, :].reshape((N + 1, plan_model.n)))
+    v_init = np.array(sol_no_tube["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
+    x_init = np.vstack([
+        np.reshape(z_init, ((N + 1) * plan_model.n, 1), order='F'),
+        np.reshape(v_init, (N * plan_model.m, 1), order='F'),
+        np.reshape(w_init, (N + 1, 1), order='F')
+    ])
+
+
+    # now the Tube
+    nlp_opts["ipopt.max_iter"] = 1000
+    nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
+
+    solver["solver"] = nlp_solver
+    tic = time.perf_counter_ns()
+    sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"], ubx=solver["ubx"])
+    toc = time.perf_counter_ns()
+    print(f"Solve Time: {(toc - tic) / 1e6}ms")
+
+    # extract solution
+    z_ind = (N + 1) * plan_model.n
+    v_ind = N * plan_model.m
+    z_sol = np.array(sol["x"][:z_ind, :].reshape((N + 1, plan_model.n)))
+    v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
+    w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
+
+    fig, axs = plt.subplots(2, 1)
+    plan_model.plot_ts(axs, z_sol, v_sol)
+    plt.show()
+
+    fig, ax = plt.subplots()
+    for i in range(Nobs):
+        xc = obs['c'][0, i]
+        yc = obs['c'][1, i]
+        circ = plt.Circle((xc, yc), obs['r'][i], color='r', alpha=0.5)
+        ax.add_patch(circ)
+    plt.plot(z0[0], z0[1], 'rx')
+    plt.plot(zf[0], zf[1], 'go')
+
+    plan_model.plot_tube(ax, z_sol, w_sol)
+    plan_model.plot_spacial(ax, z_init, 'k')
+    plan_model.plot_spacial(ax, z_sol)
+    plt.axis("square")
+    plt.show()
+
+    print("Now saving iterations")
 
 
     cols = ["iter"]
@@ -210,7 +258,7 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
 
     df = pd.DataFrame(columns=cols)
     tic = time.perf_counter_ns()
-    for it in range(0, 401, 10):
+    for it in range(0, 1000, 10):
         nlp_opts["ipopt.max_iter"] = it
         nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
@@ -226,6 +274,7 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
         v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
         w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
 
+        # TODO: Debug warm start
         g = np.array(solver["solver"].get_function("nlp_g")(sol['x'], params)).T
         ubg = np.array(solver["ubg"]).T
         lbg = np.array(solver["lbg"]).T

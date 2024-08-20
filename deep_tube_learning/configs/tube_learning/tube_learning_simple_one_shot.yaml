@@ -8,7 +8,7 @@ experiment_name: "deep_tube_learning"
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
   wandb_experiment: "simple_th5vjt7z"
-  H: 5
+  H: 50
 loss:
   _target_: deep_tube_learning.losses.VectorTubeLoss
   alpha: 0.9
@@ -20,7 +20,7 @@ lr_scheduler:
 model:
   _target_: deep_tube_learning.models.MLP
   _partial_: true
-  num_units: 32
+  num_units: 128
   num_layers: 2
   activation:
     _target_: torch.nn.Softplus

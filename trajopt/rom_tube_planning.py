@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from trajopt.planning_rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
                                   ExtendedUnicycle, ExtendedLateralUnicycle)
-
+from trajopt.rom_planning import trajopt_solver as trajopt_solver_no_tube
 model = "SingleInt2D"
 # model = "DoubleInt2D"
 # model = "Unicycle"

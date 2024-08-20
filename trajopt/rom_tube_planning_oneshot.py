@@ -10,7 +10,8 @@ from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
 
 start = np.array([0, 0])
-goal = np.array([4, 3])
+# goal = np.array([4, 3])
+goal = np.array([4, 0])
 
 vel_max = 1    # m/x
 pos_max = 10   # m
@@ -21,8 +22,13 @@ dt = 0.1
 #     'r': np.array([0.1, 0.05, 0.05, 0.03])
 # }
 
+# obs = {
+#     'c': np.array([[2, 0.], [1.5, 3]]),
+#     'r': np.array([1., 1])
+# }
+
 obs = {
-    'c': np.array([[2, 0.], [1.5, 3]]),
+    'c': np.array([[2, 2], [1.5, -1.5]]),
     'r': np.array([1., 1])
 }
 
@@ -119,12 +125,15 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
 
         return ca.vertcat(*rolling_avg) * 0.8 + 2 * ca.sum1(d) / d.numel()
 
-    # g = ca.horzcat(g, fw_tmp(tube_input.T).T - w[1:, :].T)
+    tube_const = fw_tmp(tube_input.T).T - w[1:, :].T
+    g = ca.horzcat(g, tube_const)
     # g = ca.horzcat(g, fw_tmp_rolling(tube_input.T).T - w[1:, :].T)
-    g = ca.horzcat(g, fw_tmp_dense(tube_input.T).T - w[1:, :].T)
+    # g = ca.horzcat(g, fw_tmp_dense(tube_input.T).T - w[1:, :].T)
     # g = ca.horzcat(g, fw(tube_input.T).T - w[1:, :].T)
     g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((H,))).T)
     g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((H,))).T)
+
+    # obj += ca.sum2(tube_const**2) * 10000
     # delta = .75
     # g_lb = ca.horzcat(g_lb, ca.DM(-delta * np.ones((H,))).T)
     # g_ub = ca.horzcat(g_ub, ca.DM(delta * np.ones((H,))).T)
@@ -162,9 +171,9 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
         "p": p_nlp
     }
     nlp_opts = {
-        "ipopt.linear_solver": "mumps",
+        # "ipopt.linear_solver": "mumps",
         "ipopt.sb": "yes",
-        "ipopt.max_iter": 10000,
+        "ipopt.max_iter": 2000,
         "ipopt.tol": 1e-2,
         # "ipopt.print_level": 5,
         "print_time": True,
@@ -185,15 +194,15 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
     params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
     v_init = np.zeros((N, plan_model.m))
-    # z_init = np.repeat(zf[:, None], N + 1, 1)
+    z_init = np.repeat(zf[:, None], N + 1, 1)
     # z_init = np.repeat(z0[:, None], N + 1, 1)
-    z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
+    # z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
     w_init = np.zeros((N + 1, 1))
 
     x_init = np.vstack([
-        np.reshape(z_init, ((N + 1) * plan_model.n, 1)),
-        np.reshape(v_init, (N * plan_model.m, 1)),
-        np.reshape(w_init, ((N + 1) * 1, 1))
+        np.reshape(z_init, ((N + 1) * plan_model.n, 1), order='F'),
+        np.reshape(v_init, (N * plan_model.m, 1), order='F'),
+        np.reshape(w_init, ((N + 1) * 1, 1), order='F')
     ])
 
     tic = time.perf_counter_ns()
@@ -249,8 +258,9 @@ if __name__ == "__main__":
     device = 'cpu'
     w_max = 1
 
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"  # 256x256, H=50
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yfofrrk1"  #32x32, H=5
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"  # 256x256, H=50
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yfofrrk1"  # 32x32, H=5
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"  # 128x128 softplus
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()

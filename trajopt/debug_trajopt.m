@@ -1,6 +1,7 @@
-tbl = readtable("debug_trajopt_results_L2_dense10.csv");
+tbl = readtable("debug_trajopt_results.csv");
 
 iters = tbl.iter;
+n_obs = 2;
 
 z = tbl{:, 2:103};
 zx = z(:, 1:2:end);
@@ -14,11 +15,17 @@ v = cat(3, vx, vy);
 
 w = tbl{:, 204:254};
 
-g = tbl{:, 255:456};
-glb = tbl{1, 457:658};
-gub = tbl{1, 659:860};
-xlb = tbl{1, 861:1113};
-xub = tbl{1, 1114:end};
+cols = tbl.Properties.VariableNames;
+g_cols = find(cellfun(@(x) contains(x, 'g_'), cols));
+glb_cols = find(cellfun(@(x) contains(x, 'lbg'), cols));
+gub_cols = find(cellfun(@(x) contains(x, 'ubg'), cols));
+xlb_cols = find(cellfun(@(x) contains(x, 'lbx'), cols));
+xub_cols = find(cellfun(@(x) contains(x, 'ubx'), cols));
+g = tbl{:, g_cols};
+glb = tbl{1, glb_cols};
+gub = tbl{1, gub_cols};
+xlb = tbl{1, xlb_cols};
+xub = tbl{1, xub_cols};
 
 % Compute violations
 g_violation = max(max(g - gub, 0), max(glb - g, 0));
@@ -30,15 +37,17 @@ g_tube = [];
 for i = 1:size(v, 2)
     g_dynamics = [g_dynamics idx idx+1];
     idx = idx + 2;
-    g_obstacle = [g_obstacle idx];
-    idx = idx + 1;
+    g_obstacle = [g_obstacle idx:idx + n_obs - 1];
+    idx = idx + n_obs;
 end
 
 g_tube = [idx:idx + size(w, 2) - 2];
 idx = idx + size(w, 2) - 1;
-g_obstacle = [g_obstacle idx];
-idx = idx + 1;
+g_obstacle = [g_obstacle idx:idx + n_obs - 1];
+idx = idx + n_obs;
 g_ic = [idx];
+
+assert(idx == size(g, 2), 'constraints indexed incorrectly')
 
 %% Visualize
 fh = figure(1);
@@ -47,8 +56,10 @@ subplot(2,2,1)
 hold on;
 plot(0, 0, 'go')
 plot(4, 3, 'rx')
-obs_x = [2, 0];
-obs_y = [1.5, 3];
+obs_x = [2, 2];
+obs_y = [1.5, -1.5];
+% obs_x = [2, 0];
+% obs_y = [1,5, 2];
 obs_r = [1, 1];
 for ii = 1:size(obs_r, 2)
     r = obs_r(ii); x = obs_x(ii); y = obs_y(ii) ;
@@ -102,7 +113,7 @@ while (1)
         end
         z_line.XData = z(it, :, 1);
         z_line.YData = z(it, :, 2);
-        title(["Iteration: " it])
+        title(["Iteration: " iters(it)])
         gv_dyn_line.YData = g_violation(it, g_dynamics);
         gv_obs_line.YData = g_violation(it, g_obstacle);
         gv_tub_line.YData = g_violation(it, g_tube);
@@ -112,6 +123,6 @@ while (1)
         input_x_line.YData = squeeze(v(it, :, 1));
         input_y_line.YData = squeeze(v(it, :, 2));
         drawnow
+        pause
     end
-    pause(1)
 end

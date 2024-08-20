@@ -12,8 +12,9 @@ import torch
 def eval_model():
     # Experiment whose model to evaluate
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l0oh8o1b"  # 32x32
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"   # 128x128
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"   # 256x256
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"   # 128x128
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"   # 256x256
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"    # 128x128 Softplus
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
@@ -56,7 +57,7 @@ def eval_model():
             fw = np.concatenate([w[ii, [0]], fw], axis=-1)
 
             plt.figure()
-            err = np.squeeze(fw) - w[ii, :51]
+            err = np.squeeze(fw) - w[ii, :H+1]
             succ_rate = np.mean(err >= 0)
             succ_rate_total += succ_rate
             print(succ_rate)
@@ -68,7 +69,7 @@ def eval_model():
 
             plt.figure()
             plt.plot(fw, 'k', label='Tube Error')
-            plt.plot(w[ii, :51], 'b', label='Normed Error')
+            plt.plot(w[ii, :H+1], 'b', label='Normed Error')
             plt.axhline(0, color='black', linewidth=0.5)
             plt.title("OneShot Tube Bounds")
             plt.legend()
@@ -76,9 +77,9 @@ def eval_model():
             plt.show()
 
             fig, ax = plt.subplots()
-            SingleInt2D.plot_tube(ax, z[ii, :51], fw[:, None])
-            SingleInt2D.plot_spacial(ax, z[ii, :51], 'k.-')
-            SingleInt2D.plot_spacial(ax, pz_x[ii, :51], 'b.-')
+            SingleInt2D.plot_tube(ax, z[ii, :H+1], fw[:, None])
+            SingleInt2D.plot_spacial(ax, z[ii, :H+1], 'k.-')
+            SingleInt2D.plot_spacial(ax, pz_x[ii, :H+1], 'b.-')
             plt.axis("square")
             plt.title("OneShot Tube")
             plt.show()
