@@ -12,6 +12,8 @@ class CasadiRomDynamics(ABC):
     """
     n: int  # Dimension of state
     m: int  # Dimension of input
+    state_names: list
+    input_names: list
 
     def __init__(self, dt, z_min, z_max, v_min, v_max):
         """
@@ -29,6 +31,8 @@ class CasadiRomDynamics(ABC):
         self.v_max = v_max
         self.z_min = z_min
         self.z_max = z_max
+        self.state_names = []
+        self.input_names = []
 
     @abstractmethod
     def f(self, z, v):
@@ -108,6 +112,8 @@ class CasadiSingleInt2D(CasadiRomDynamics):
         self.A = ca.DM([[1.0, 0], [0, 1.0]])
         self.B = ca.DM([[dt, 0], [0, dt]])
         self.vel_inds = ca.DM([False, False])
+        self.state_names = ['x', 'y']
+        self.input_name = ['v_x', 'v_y']
 
     def f(self, x, u):
         return self.A @ x + self.B @ u

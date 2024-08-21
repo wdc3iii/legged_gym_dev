@@ -4,12 +4,15 @@ import matplotlib.pyplot as plt
 
 
 problem_dict = {
-    "gap": {"start": np.array([0, 0]), "goal": np.array([4, 3]), "obs": {'c': np.array([[2, 0.], [1.5, 3]]),
-                                                                         'r': np.array([1., 1])}},
-    "right": {"start": np.array([0, 0]), "goal": np.array([4, 0]), "obs": {'c': np.array([[2, 2.], [1.5, -1.5]]),
-                                                                           'r': np.array([1., 1])}},
-    "right_wide": {"start": np.array([0, 0]), "goal": np.array([4, 0]), "obs": {'c': np.array([[2, 2.], [2.5, -2.5]]),
-                                                                                'r': np.array([1., 1])}}
+    "gap": {"start": np.array([0, 0]), "goal": np.array([3., 3]),
+            "obs": {'c': np.array([[2, 0.], [1.5, 3]]), 'r': np.array([1., 1])},
+            "vel_max": 1, "pos_max": 10, "dt": 0.1},
+    "right": {"start": np.array([0, 0]), "goal": np.array([4, 0]),
+              "obs": {'c': np.array([[2, 2.], [1.25, -1.25]]), 'r': np.array([1., 1])},
+              "vel_max": 1, "pos_max": 10, "dt": 0.1},
+    "right_wide": {"start": np.array([0, 0]), "goal": np.array([4, 0]),
+                   "obs": {'c': np.array([[2, 2.], [2.5, -2.5]]), 'r': np.array([1., 1])},
+                   "vel_max": 1, "pos_max": 10, "dt": 0.1}
 }
 
 
@@ -88,7 +91,7 @@ def obstacle_constraints(z, obs_c, obs_r, w=None):
 
 def initial_condition_equality_constraint(z, z0):
     dist = z[0, :2] - z0
-    return ca.dot(dist, dist), ca.DM(1, 1), ca.DM(1, 1)
+    return dist, ca.DM(*dist.shape), ca.DM(*dist.shape)
 
 
 def setup_trajopt_solver(pm, N, Nobs):
@@ -133,6 +136,14 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000):
     g_lb = ca.horzcat(g_lb_dyn, g_lb_obs, g_lb_ic)
     g_ub = ca.horzcat(g_ub_dyn, g_ub_obs, g_ub_ic)
 
+    g_dyn_cols = []
+    for k in range(N):
+        g_dyn_cols.extend(["dyn_" + st + f"_k" for st in pm.state_names])
+    g_obs_cols = []
+    for i in range(Nobs):
+        g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
+    g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names]
+
     # Generate solver
     x_nlp = ca.vertcat(
         ca.reshape(z, (N + 1) * pm.n, 1),
@@ -164,7 +175,7 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000):
 
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
-    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx}
+    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols}
 
     return solver, nlp_dict, nlp_opts
 
@@ -190,6 +201,15 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
     g = ca.horzcat(g_dyn, g_obs, g_ic, g_tube)
     g_lb = ca.horzcat(g_lb_dyn, g_lb_obs, g_lb_ic, g_lb_tube)
     g_ub = ca.horzcat(g_ub_dyn, g_ub_obs, g_ub_ic, g_ub_tube)
+
+    g_dyn_cols = []
+    for k in range(N):
+        g_dyn_cols.extend(["dyn_" + st + f"_k" for st in pm.state_names])
+    g_obs_cols = []
+    for i in range(Nobs):
+        g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
+    g_tube_dyn = [f"tube_{k}" for k in range(N)]
+    g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names] + g_tube_dyn
 
     # Generate solver
     x_nlp = ca.vertcat(
@@ -225,7 +245,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
 
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
-    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx}
+    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols}
 
     return solver, nlp_dict, nlp_opts
 
@@ -274,3 +294,152 @@ def plot_problem(ax, obs, z0, zf):
         ax.add_patch(circ)
     plt.plot(z0[0], z0[1], 'rx')
     plt.plot(zf[0], zf[1], 'go')
+
+
+def compute_constraint_violation(solver, g):
+    g = np.array(g).T
+    ubg = np.array(solver["ubg"]).T
+    lbg = np.array(solver["lbg"]).T
+    viol = np.maximum(np.maximum(g - ubg, 0), np.maximum(lbg - g, 0))
+    return viol
+
+
+def segment_constraint_violation(g_viol, g_col):
+    g_dyn_viol = g_viol[[j for j, s in enumerate(g_col) if "dyn" in s]]
+    g_seg = {"Dynamics": g_dyn_viol}
+    i = 0
+    while i >= 0:
+        idx = [j for j, s in enumerate(g_col) if f"obs_{i}" in s]
+        if idx:
+            g_obs_viol = g_viol[idx]
+            g_seg[f"Obstacle {i}"] = g_obs_viol
+            i += 1
+        else:
+            i = -1
+    ic_viol = g_viol[[j for j, s in enumerate(g_col) if "ic" in s]]
+    g_seg["Initial Condition"] = ic_viol
+
+    tube_idx = [j for j, s in enumerate(g_col) if "tube" in s]
+    if tube_idx:
+        g_seg["Tube Dynamics"] = g_viol[tube_idx]
+
+    return g_seg
+
+
+def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None, R=None, nominal_ws='interpolate'):
+    if warm_start == 'start':
+        v_init = np.zeros((N, planning_model.m))
+        z_init = np.repeat(start[None, :], N + 1, 0)
+    elif warm_start == 'goal':
+        v_init = np.zeros((N, planning_model.m))
+        z_init = np.repeat(goal[None, :], N + 1, 0)
+    elif warm_start == 'interpolate':
+        z_init = np.outer(np.linspace(0, 1, N + 1), (goal - start)) + start
+        v_init = np.diff(z_init, axis=0) / planning_model.dt
+    elif warm_start == 'nominal':
+        assert obs is not None and Q is not None and R is not None
+        sol, solver = solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start=nominal_ws)
+        z_init, v_init = extract_solution(sol, N, planning_model.n, planning_model.m)
+    else:
+        raise ValueError(f'Warm start {warm_start} not implemented. Must be ic, goal, interpolate, or nominal')
+
+    return z_init, v_init
+
+
+def get_tube_warm_start(w_init, N):
+
+    return np.ones((N + 1, 1)) * w_init
+
+
+def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start'):
+    solver, nlp_dict, nlp_opts = trajopt_solver(planning_model, N, Q, R, len(obs["r"]))
+
+    z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model)
+
+    params = init_params(start, goal, obs)
+    x_init = init_decision_var(z_init, v_init)
+
+    sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
+                           ubx=solver["ubx"])
+    return sol, solver
+
+
+def solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None, warm_start='start', nominal_ws='interpolate', tube_ws=0):
+    solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=1000)
+
+    z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
+    w_init = get_tube_warm_start(tube_ws, N)
+
+    params = init_params(start, goal, obs)
+    x_init = init_decision_var(z_init, v_init, w=w_init)
+
+    sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
+                           ubx=solver["ubx"])
+    return sol, solver
+
+
+def get_l1_tube_dynamics(scaling):
+
+    def l1_tube_dyn(z, v, w):
+        fw = scaling * ca.sum2(ca.fabs(v))
+        g = (fw - w[1:]).T
+        g_lb = ca.DM(*g.shape)
+        g_ub = ca.DM(*g.shape)
+
+        return g, g_lb, g_ub
+
+    return l1_tube_dyn
+
+
+def get_l2_tube_dynamics(scaling):
+
+    def l2_tube_dyn(z, v, w):
+        fw = scaling * ca.sum2(v ** 2)
+        g = (fw - w[1:]).T
+        g_lb = ca.DM(*g.shape)
+        g_ub = ca.DM(*g.shape)
+
+        return g, g_lb, g_ub
+
+    return l2_tube_dyn
+
+
+def get_rolling_l1_tube_dynamics(scaling, window_size):
+
+    def l1_tube_dyn(z, v, w):
+        l1 = scaling * ca.sum2(ca.fabs(v))
+        fw = [ca.sum1(l1[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(l1.numel())]
+        g = ca.horzcat(*fw) - w[1:].T
+        g_lb = ca.DM(*g.shape)
+        g_ub = ca.DM(*g.shape)
+
+        return g, g_lb, g_ub
+
+    return l1_tube_dyn
+
+
+def get_rolling_l2_tube_dynamics(scaling, window_size):
+
+    def l2_tube_dyn(z, v, w):
+        l2 = scaling * ca.sum2(v ** 2)
+        fw = [ca.sum1(l2[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(l2.numel())]
+        g = ca.horzcat(*fw) - w[1:].T
+        g_lb = ca.DM(*g.shape)
+        g_ub = ca.DM(*g.shape)
+
+        return g, g_lb, g_ub
+
+    return l2_tube_dyn
+
+
+def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10):
+    if tube_dyn == 'l1':
+        return get_l1_tube_dynamics(scaling)
+    elif tube_dyn == 'l2':
+        return get_l2_tube_dynamics(scaling)
+    elif tube_dyn == 'l1_rolling':
+        return get_rolling_l1_tube_dynamics(scaling, window_size)
+    elif tube_dyn == 'l2_rolling':
+        return get_rolling_l2_tube_dynamics(scaling, window_size)
+    else:
+        raise ValueError(f'Tube dynamics {tube_dyn} not implemented')
