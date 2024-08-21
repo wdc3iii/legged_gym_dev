@@ -57,7 +57,7 @@ hold on;
 plot(0, 0, 'go')
 plot(4, 3, 'rx')
 obs_x = [2, 2];
-obs_y = [1.5, -1.5];
+obs_y = [2.5, -2.5];
 % obs_x = [2, 0];
 % obs_y = [1,5, 2];
 obs_r = [1, 1];
@@ -80,9 +80,9 @@ end
 z_line = plot(z(1, :, 1), z(1, :, 2), 'k', LineWidth=2);
 xlabel('x')
 ylabel('y')
-xlim([-1, 5])
-ylim([-1, 5])
-axis square
+% xlim([-1, 5])
+% ylim([-1, 5])
+axis equal
 subplot(2,2,2)
 hold on
 gv_dyn_line = plot(g_violation(1, g_dynamics), '.-');

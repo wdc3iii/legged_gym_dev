@@ -1,13 +1,15 @@
 import time
-import csv
 import numpy as np
+import pandas as pd
 import casadi as ca
 import l4casadi as l4c
 import matplotlib.pyplot as plt
 import wandb
 from hydra.utils import instantiate
-from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
+from deep_tube_learning.utils import wandb_model_load_cpu
 from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
+from trajopt.old.rom_planning import trajopt_solver as trajopt_solver_no_tube
+
 
 start = np.array([0, 0])
 # goal = np.array([4, 3])
@@ -28,7 +30,7 @@ dt = 0.1
 # }
 
 obs = {
-    'c': np.array([[2, 2], [1.5, -1.5]]),
+    'c': np.array([[2, 2], [2.5, -2.5]]),
     'r': np.array([1., 1])
 }
 
@@ -96,44 +98,28 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
 
     def fw_tmp(input):
         v = ca.reshape(input[1:], -1, 2)
-        w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
-        # w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
+        # w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
+        w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
         # w = 0.1 * ca.DM(np.ones(w.shape))
         return w
 
     def fw_tmp_rolling(input):
         v = ca.reshape(input[1:], -1, 2)
-        w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
-        # w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
+        # w = 0.5 * (v[:, 0] ** 2 + v[:, 1] ** 2)
+        w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
         window_size = 10
 
         # Initialize a list to store the rolling averages
-        rolling_avg = [ca.sum1(w[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(w.numel())]
+        rolling_avg = [ca.sum1(w[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in
+                       range(w.numel())]
 
         return ca.vertcat(*rolling_avg)
 
-    def fw_tmp_dense(input):
-        v = ca.reshape(input[1:], -1, 2)
-        diff = v[1:, :] - v[:-1, :]
-        d = 0.5 * (diff[:, 0] ** 2 + diff[:, 1] ** 2)
-        w = 0.5 * (v[:, 0]**2 + v[:, 1]**2)
-        # w = 0.5 * (ca.fabs(v[:, 0]) + ca.fabs(v[:, 1]))
-        window_size = 10
-
-        # Initialize a list to store the rolling averages
-        rolling_avg = [ca.sum1(w[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(w.numel())]
-
-        return ca.vertcat(*rolling_avg) * 0.8 + 2 * ca.sum1(d) / d.numel()
-
-    tube_const = fw_tmp(tube_input.T).T - w[1:, :].T
-    g = ca.horzcat(g, tube_const)
+    g = ca.horzcat(g, fw_tmp(tube_input.T).T - w[1:, :].T)
     # g = ca.horzcat(g, fw_tmp_rolling(tube_input.T).T - w[1:, :].T)
-    # g = ca.horzcat(g, fw_tmp_dense(tube_input.T).T - w[1:, :].T)
     # g = ca.horzcat(g, fw(tube_input.T).T - w[1:, :].T)
     g_lb = ca.horzcat(g_lb, ca.DM(np.zeros((H,))).T)
     g_ub = ca.horzcat(g_ub, ca.DM(np.zeros((H,))).T)
-
-    # obj += ca.sum2(tube_const**2) * 10000
     # delta = .75
     # g_lb = ca.horzcat(g_lb, ca.DM(-delta * np.ones((H,))).T)
     # g_ub = ca.horzcat(g_ub, ca.DM(delta * np.ones((H,))).T)
@@ -171,10 +157,10 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
         "p": p_nlp
     }
     nlp_opts = {
-        # "ipopt.linear_solver": "mumps",
+        "ipopt.linear_solver": "mumps",
         "ipopt.sb": "yes",
-        "ipopt.max_iter": 2000,
-        "ipopt.tol": 1e-2,
+        "ipopt.max_iter": 10000,
+        "ipopt.tol": 1e-4,
         # "ipopt.print_level": 5,
         "print_time": True,
     }
@@ -183,30 +169,48 @@ def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Non
 
     solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx}
 
-    return solver, nlp_dict
+    return solver, nlp_dict, nlp_opts
 
 
 def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw, R, Qf=None, device='cpu'):
     Nobs = len(obs['r'])
 
-    nlp, nlp_dict = trajopt_tube_solver(plan_model, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Qf, device=device)
+    solver, nlp_dict, nlp_opts = trajopt_tube_solver(plan_model, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=Qf, device=device)
+    nlp_no_tube = trajopt_solver_no_tube(plan_model, N, Q, R, Nobs)
 
     params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
 
     v_init = np.zeros((N, plan_model.m))
-    z_init = np.repeat(zf[:, None], N + 1, 1)
+    # z_init = np.repeat(zf[:, None], N + 1, 1)
     # z_init = np.repeat(z0[:, None], N + 1, 1)
-    # z_init = np.outer(np.linspace(0, 1, N+1), (zf - z0)) + z0
-    w_init = np.zeros((N + 1, 1))
+    z_init = np.outer(np.linspace(0, 1, N + 1), (zf - z0)) + z0
+    w_init = np.ones((N + 1, 1)) * 0.5
 
     x_init = np.vstack([
         np.reshape(z_init, ((N + 1) * plan_model.n, 1), order='F'),
-        np.reshape(v_init, (N * plan_model.m, 1), order='F'),
-        np.reshape(w_init, ((N + 1) * 1, 1), order='F')
+        np.reshape(v_init, (N * plan_model.m, 1), order='F')
     ])
 
+    sol_no_tube = nlp_no_tube["solver"](x0=x_init, p=params, lbg=nlp_no_tube["lbg"], ubg=nlp_no_tube["ubg"],
+                                        lbx=nlp_no_tube["lbx"], ubx=nlp_no_tube["ubx"])
+    z_ind = (N + 1) * plan_model.n
+    v_ind = N * plan_model.m
+    z_init = np.array(sol_no_tube["x"][:z_ind, :].reshape((N + 1, plan_model.n)))
+    v_init = np.array(sol_no_tube["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
+    x_init = np.vstack([
+        np.reshape(z_init, ((N + 1) * plan_model.n, 1), order='F'),
+        np.reshape(v_init, (N * plan_model.m, 1), order='F'),
+        np.reshape(w_init, (N + 1, 1), order='F')
+    ])
+
+
+    # now the Tube
+    nlp_opts["ipopt.max_iter"] = 1000
+    nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
+
+    solver["solver"] = nlp_solver
     tic = time.perf_counter_ns()
-    sol = nlp["solver"](x0=x_init, p=params, lbg=nlp["lbg"], ubg=nlp["ubg"], lbx=nlp["lbx"], ubx=nlp["ubx"])
+    sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"], ubx=solver["ubx"])
     toc = time.perf_counter_ns()
     print(f"Solve Time: {(toc - tic) / 1e6}ms")
 
@@ -217,7 +221,7 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
     v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
     w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
 
-    fig, axs = plt.subplots(2,1)
+    fig, axs = plt.subplots(2, 1)
     plan_model.plot_ts(axs, z_sol, v_sol)
     plt.show()
 
@@ -231,17 +235,73 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
     plt.plot(zf[0], zf[1], 'go')
 
     plan_model.plot_tube(ax, z_sol, w_sol)
+    plan_model.plot_spacial(ax, z_init, 'k')
     plan_model.plot_spacial(ax, z_sol)
     plt.axis("square")
     plt.show()
 
-    g = nlp["solver"].get_function("nlp_g")(sol['x'], params)
-    g = np.array(g).T
-    ubg = np.array(nlp["ubg"]).T
-    lbg = np.array(nlp["lbg"]).T
-    g_violation = np.maximum(np.maximum(g - ubg, 0), np.maximum(lbg - g, 0))
-    plt.plot(g_violation)
-    plt.show()
+    print("Now saving iterations")
+
+
+    cols = ["iter"]
+    for t in range(N + 1):
+        cols.extend([f"z_x{t}", f"z_y{t}"])
+    for t in range(N):
+        cols.extend([f"v_x{t}", f"v_y{t}"])
+    for t in range(N + 1):
+        cols.append(f"w{t}")
+    for t in range(solver["lbg"].numel()):
+        cols.append(f"g_{t}")
+    for t in range(solver["lbg"].numel()):
+        cols.append(f"lbg{t}")
+    for t in range(solver["lbg"].numel()):
+        cols.append(f"ubg{t}")
+    for t in range(solver["lbx"].numel()):
+        cols.append(f"lbx{t}")
+    for t in range(solver["lbx"].numel()):
+        cols.append(f"ubx{t}")
+
+    df = pd.DataFrame(columns=cols)
+    tic = time.perf_counter_ns()
+    for it in range(0, 101, 1):
+        nlp_opts["ipopt.max_iter"] = it
+        nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
+
+        solver["solver"] = nlp_solver
+        sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"], ubx=solver["ubx"])
+        toc = time.perf_counter_ns()
+        print(f"Solve Time: {(toc - tic) / 1e6}ms")
+
+        # extract solution
+        z_ind = (N + 1) * plan_model.n
+        v_ind = N * plan_model.m
+        z_sol = np.array(sol["x"][:z_ind, :].reshape((N + 1, plan_model.n)))
+        v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
+        w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
+
+        # TODO: Debug warm start
+        g = np.array(solver["solver"].get_function("nlp_g")(sol['x'], params)).T
+        ubg = np.array(solver["ubg"]).T
+        lbg = np.array(solver["lbg"]).T
+
+        lbx = np.array(solver["lbx"]).T
+        ubx = np.array(solver["ubx"]).T
+
+        new_row = np.concatenate((
+            np.array([it]),
+            z_sol.reshape((-1,)),
+            v_sol.reshape((-1,)),
+            w_sol.squeeze(),
+            g.squeeze(),
+            lbg.squeeze(),
+            ubg.squeeze(),
+            lbx.squeeze(),
+            ubx.squeeze()
+        ), axis=-1)
+        new_row_df = pd.DataFrame([new_row], columns=df.columns)
+        df = pd.concat([df, new_row_df], ignore_index=True)
+
+    df.to_csv("debug_trajopt_results.csv", index=False)
     print("Complete")
 
 
@@ -258,9 +318,9 @@ if __name__ == "__main__":
     device = 'cpu'
     w_max = 1
 
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"  # 256x256, H=50
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yfofrrk1"  # 32x32, H=5
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"  # 128x128 softplus
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"  # 256x256, H=50
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yfofrrk1"  #32x32, H=5
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"  # 128x128 softplus
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
