@@ -25,7 +25,7 @@ def get_state(base, joint_pos, joint_vel):
 
 def evaluate(traj_cls, push_robots, curriculum_state=0):
     steps = 1000
-    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/9drfq0m7"
+    exp_name = "coleonguard-Georgia Institute of Technology/RL_Training/z3cpmz9n"
     model_name = f'{exp_name}_model:best{curriculum_state}'                         # even if using rayburn heuristic, load in a RL model for env settings
     api = wandb.Api()
     rl_cfg, state_dict = wandb_model_load(api, model_name)
@@ -61,8 +61,8 @@ def evaluate(traj_cls, push_robots, curriculum_state=0):
     rl_cfg.env_config.domain_rand.torque_speed_properties.randomize_slope = False
     rl_cfg.env_config.curriculum.use_curriculum = False
 
-    rl_cfg.policy_model.rh.K_p = 0.5
-    rl_cfg.policy_model.rh.K_v = 1.5
+    rl_cfg.env_config.policy_model.rh.K_p = 0.5
+    rl_cfg.env_config.policy_model.rh.K_v = 1.5
 
     args = get_args()
     args = update_args_from_hydra(rl_cfg, args)
@@ -76,7 +76,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=0):
     ppo_runner.alg.actor_critic.load_state_dict(state_dict['model_state_dict'])
     ppo_runner.alg.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
 
-    if rl_cfg.policy_model.policy_to_use == 'rl':
+    if rl_cfg.env_config.policy_model.policy_to_use == 'rl':
         policy = ppo_runner.get_inference_policy(device=env.device)
     elif rl_cfg.env_config.policy_model.policy_to_use == 'rh':
         raibert = RaibertHeuristic(rl_cfg)
@@ -109,7 +109,7 @@ def evaluate(traj_cls, push_robots, curriculum_state=0):
         wheel_torques.append(env.dof_vel[0, 1:4].cpu().detach().numpy())
         # Step environment
         # have to modify obs if using Raibert Heuristic
-        if rl_cfg.policy_model.policy_to_use == 'rh':
+        if rl_cfg.env_config.policy_model.policy_to_use == 'rh':
             if isinstance(env.traj_gen.rom, SingleInt2D):
                 current_velocity = quat_rotate_inverse(env.root_states[:, 3:7], env.root_states[:, 7:10])[:, :2]
                 current_position = env.root_states[:, :2]
