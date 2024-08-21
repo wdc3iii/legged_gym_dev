@@ -19,7 +19,8 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     R = 0.1 * np.eye(2)
     N = 50
 
-    sol, solver = solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start=warm_start)
+    fn = f"data/nominal_{prob_str}_{warm_start}.csv"
+    sol, solver = solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start=warm_start, debug_filename=fn)
 
     z_sol, v_sol = extract_solution(sol, N, planning_model.n, planning_model.m)
 

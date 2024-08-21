@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import casadi as ca
 import matplotlib.pyplot as plt
 
@@ -118,7 +119,7 @@ def setup_trajopt_solver(pm, N, Nobs):
     return z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r
 
 
-def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000):
+def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
 
     if Qf is None:
@@ -138,17 +139,23 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000):
 
     g_dyn_cols = []
     for k in range(N):
-        g_dyn_cols.extend(["dyn_" + st + f"_k" for st in pm.state_names])
+        g_dyn_cols.extend(["dyn_" + st + f"_{k}" for st in pm.state_names])
     g_obs_cols = []
     for i in range(Nobs):
         g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
     g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names]
+    z_str = np.array(['z'] * ((N + 1) * pm.n)).reshape(z.shape)
+    v_str = np.array(['v'] * (N * pm.m)).reshape(v.shape)
 
     # Generate solver
     x_nlp = ca.vertcat(
         ca.reshape(z, (N + 1) * pm.n, 1),
         ca.reshape(v, N * pm.m, 1),
     )
+    x_cols = list(np.vstack((
+        np.reshape(z_str, ((N + 1) * pm.n, 1)),
+        np.reshape(v_str, (N * pm.m, 1))
+    )))
     lbx = ca.vertcat(
         ca.reshape(z_lb, (N + 1) * pm.n, 1),
         ca.reshape(v_lb, N * pm.m, 1),
@@ -158,6 +165,10 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000):
         ca.reshape(v_ub, N * pm.m, 1),
     )
     p_nlp = ca.vertcat(p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
+    obs_c_lst = []
+    obs_c_lst = [f'obs_{i}_x' for i in range(Nobs)] + [f'obs_{i}_y' for i in range(Nobs)]
+    p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + [f'obs_{i}_r' for i in
+                                                                                                   range(Nobs)]
     nlp_dict = {
         "x": x_nlp,
         "f": obj,
@@ -173,14 +184,17 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000):
         "print_time": True,
     }
 
+    if debug_filename is not None:
+        nlp_opts['iteration_callback'] = SolverCallback('iter_callback', debug_filename, x_cols, g_cols, p_cols, {})
+
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
-    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols}
+    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols}
 
     return solver, nlp_dict, nlp_opts
 
 
-def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, max_iter=1000):
+def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, max_iter=1000, debug_filename=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N + 1, 1)
     w_lb = ca.DM(N + 1, 1)
@@ -201,15 +215,30 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
     g = ca.horzcat(g_dyn, g_obs, g_ic, g_tube)
     g_lb = ca.horzcat(g_lb_dyn, g_lb_obs, g_lb_ic, g_lb_tube)
     g_ub = ca.horzcat(g_ub_dyn, g_ub_obs, g_ub_ic, g_ub_tube)
+    g = g.T
+    g_lb = g_lb.T
+    g_ub = g_ub.T
 
     g_dyn_cols = []
     for k in range(N):
-        g_dyn_cols.extend(["dyn_" + st + f"_k" for st in pm.state_names])
+        g_dyn_cols.extend(["dyn_" + st + f"_{k}" for st in pm.state_names])
     g_obs_cols = []
     for i in range(Nobs):
         g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
     g_tube_dyn = [f"tube_{k}" for k in range(N)]
     g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names] + g_tube_dyn
+
+    z_str = np.array(["z"] * ((N + 1) * pm.n), dtype='U8').reshape(z.shape)
+    v_str = np.array(["v"] * (N * pm.m), dtype='U8').reshape(v.shape)
+    w_str = np.array(["w"] * (N + 1), dtype='U8').reshape(w.shape)
+    for r in range(z_str.shape[0]):
+        for c in range(z_str.shape[1]):
+            z_str[r, c] = z_str[r, c] + f"_{r}_{c}"
+    for r in range(v_str.shape[0]):
+        for c in range(v_str.shape[1]):
+            v_str[r, c] = v_str[r, c] + f"_{r}_{c}"
+    for r in range(w_str.shape[0]):
+        w_str[r, 0] = w_str[r, 0] + f"_{r}"
 
     # Generate solver
     x_nlp = ca.vertcat(
@@ -217,6 +246,11 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
         ca.reshape(v, N * pm.m, 1),
         w
     )
+    x_cols = list(np.vstack((
+        np.reshape(z_str, ((N + 1) * pm.n, 1)),
+        np.reshape(v_str, (N * pm.m, 1)),
+        w_str
+    )).squeeze())
     lbx = ca.vertcat(
         ca.reshape(z_lb, (N + 1) * pm.n, 1),
         ca.reshape(v_lb, N * pm.m, 1),
@@ -228,6 +262,8 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
         w_ub
     )
     p_nlp = ca.vertcat(p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
+    obs_c_lst = [f'obs_{i}_x' for i in range(Nobs)] + [f'obs_{i}_y' for i in range(Nobs)]
+    p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + [f'obs_{i}_r' for i in range(Nobs)]
     nlp_dict = {
         "x": x_nlp,
         "f": obj,
@@ -243,9 +279,12 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
         "print_time": True,
     }
 
+    if debug_filename is not None:
+        nlp_opts['iteration_callback'] = SolverCallback('iter_callback', debug_filename, x_cols, g_cols, p_cols, {})
+
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
-    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols}
+    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols}
 
     return solver, nlp_dict, nlp_opts
 
@@ -297,9 +336,9 @@ def plot_problem(ax, obs, z0, zf):
 
 
 def compute_constraint_violation(solver, g):
-    g = np.array(g).T
-    ubg = np.array(solver["ubg"]).T
-    lbg = np.array(solver["lbg"]).T
+    g = np.array(g)
+    ubg = np.array(solver["ubg"])
+    lbg = np.array(solver["lbg"])
     viol = np.maximum(np.maximum(g - ubg, 0), np.maximum(lbg - g, 0))
     return viol
 
@@ -351,8 +390,8 @@ def get_tube_warm_start(w_init, N):
     return np.ones((N + 1, 1)) * w_init
 
 
-def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start'):
-    solver, nlp_dict, nlp_opts = trajopt_solver(planning_model, N, Q, R, len(obs["r"]))
+def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start', debug_filename=None):
+    solver, nlp_dict, nlp_opts = trajopt_solver(planning_model, N, Q, R, len(obs["r"]), debug_filename=debug_filename)
 
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model)
 
@@ -361,11 +400,14 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start')
 
     sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
                            ubx=solver["ubx"])
+
+    if 'iteration_callback' in nlp_opts.keys():
+        nlp_opts['iteration_callback'].write_data(solver, params)
     return sol, solver
 
 
-def solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None, warm_start='start', nominal_ws='interpolate', tube_ws=0):
-    solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=1000)
+def solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None, warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None):
+    solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=1000, debug_filename=debug_filename)
 
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
     w_init = get_tube_warm_start(tube_ws, N)
@@ -375,6 +417,9 @@ def solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_m
 
     sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
                            ubx=solver["ubx"])
+
+    if 'iteration_callback' in nlp_opts.keys():
+        nlp_opts['iteration_callback'].write_data(solver, params)
     return sol, solver
 
 
@@ -443,3 +488,75 @@ def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10):
         return get_rolling_l2_tube_dynamics(scaling, window_size)
     else:
         raise ValueError(f'Tube dynamics {tube_dyn} not implemented')
+
+
+class SolverCallback(ca.Callback):
+
+    def __init__(self, name, debug_filename, x_cols, g_cols, p_cols, opts):
+        ca.Callback.__init__(self)
+
+        self.filename = debug_filename
+        self.cols = ["iter"] + x_cols + g_cols
+        self.g_cols = g_cols
+        self.x_cols = x_cols
+        self.p_cols = p_cols
+        self.df = pd.DataFrame(columns=self.cols)
+        self.it = 0
+
+        self.nx = len(x_cols)
+        self.ng = len(g_cols)
+        self.np = len(p_cols)
+
+        # Initialize internal objects
+        self.construct(name, opts)
+
+    def get_n_in(self):
+        return ca.nlpsol_n_out()
+
+    def get_n_out(self):
+        return 1
+
+    def get_name_in(self, i):
+        return ca.nlpsol_out(i)
+
+    def get_name_out(self, i):
+        return "ret"
+
+    def get_sparsity_in(self, i):
+        n = ca.nlpsol_out(i)
+        if n == 'f':
+            return ca.Sparsity.scalar()
+        elif n in ('x', 'lam_x'):
+            return ca.Sparsity.dense(self.nx)
+        elif n in ('g', 'lam_g'):
+            return ca.Sparsity.dense(self.ng)
+        else:
+            return ca.Sparsity(0, 0)
+
+    def eval(self, arg):
+        # Create dictionary
+        darg = {}
+        for (i, s) in enumerate(ca.nlpsol_out()):
+            darg[s] = arg[i]
+
+        x = darg['x']
+        g = darg['g']
+
+        new_row_df = pd.DataFrame([np.concatenate((np.array([[self.it]]), np.array(x), np.array(g)), axis=0).squeeze()], columns=self.cols)
+        self.df = pd.concat([self.df, new_row_df], ignore_index=True)
+
+        self.it += 1
+
+        return [0]
+
+    def write_data(self, solver, params):
+        new_cols = ["lb_" + s for s in self.g_cols] + ["ub_" + s for s in self.g_cols] + ["lb_" + s for s in self.x_cols] + ["ub_" + s for s in self.x_cols]
+        new_df = pd.DataFrame(np.zeros((self.df.shape[0], len(new_cols))), columns=new_cols)
+        self.df = pd.concat([self.df, new_df], axis=1)
+        self.df.loc[0, ["lb_" + s for s in self.g_cols]] = np.array(solver["lbg"]).squeeze()
+        self.df.loc[0, ["ub_" + s for s in self.g_cols]] = np.array(solver["ubg"]).squeeze()
+        self.df.loc[0, ["lb_" + s for s in self.x_cols]] = np.array(solver["lbx"]).squeeze()
+        self.df.loc[0, ["ub_" + s for s in self.x_cols]] = np.array(solver["ubx"]).squeeze()
+        self.df.loc[0, self.p_cols] = params.squeeze()
+
+        self.df.to_csv(self.filename, index=False)

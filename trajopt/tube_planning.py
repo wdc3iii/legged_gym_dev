@@ -2,8 +2,8 @@ from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
 from trajopt.tube_trajopt import *
 
 # prob_str = 'right'
-prob_str = 'right_wide'
-# prob_str = 'gap'
+# prob_str = 'right_wide'
+prob_str = 'gap'
 
 # warm_start = 'start'
 # warm_start = 'goal'
@@ -13,8 +13,8 @@ warm_start = 'nominal'
 tube_ws = 0
 # tube_ws = 0.5
 
-# tube_dyn = 'l1'
-tube_dyn = "l2"
+tube_dyn = 'l1'
+# tube_dyn = "l2"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
 # tube_dyn = "NN"
@@ -32,7 +32,10 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     w_max = 1
 
     tube_dynamics = get_tube_dynamics(tube_dyn)
-    sol, solver = solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, warm_start=warm_start, tube_ws=tube_ws)
+
+    tube_ws_str = str(tube_ws).replace('.', '_')
+    fn = f"data/tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}.csv"
+    sol, solver = solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, warm_start=warm_start, tube_ws=tube_ws, debug_filename=fn)
 
     z_sol, v_sol, w_sol = extract_solution(sol, N, planning_model.n, planning_model.m)
 
