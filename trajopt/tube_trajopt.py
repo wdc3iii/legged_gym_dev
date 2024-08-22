@@ -207,6 +207,8 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
 
     # Define NLP
     obj = quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(v, R) + quadratic_objective(z[-1, :], Qf, goal=p_zf)+ quadratic_objective(w, Qw)
+    # TODO: Debuggin
+    # obj = obj / 1000
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c, p_obs_r, w=w)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
@@ -272,19 +274,31 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
     }
     nlp_opts = {
         "ipopt.linear_solver": "mumps",
+        # "ipopt.linear_solver": "ma27",  # Library loading failure
         "ipopt.sb": "yes",
         "ipopt.max_iter": max_iter,
         "ipopt.tol": 1e-4,
-        # "ipopt.print_level": 5,
         "print_time": True,
+        # "ipopt.print_level": 5,
+        # "ipopt.output_file": "data/ipopt_output.txt",
+        # "ipopt.file_print_level": 8,
+        "ipopt.jacobian_approximation": "exact",  # "exact" (default) or "finite-difference-values"
+        "ipopt.gradient_approximation": "exact",  # "exact" (default) or "finite-difference-values"
+        "ipopt.max_wall_time": 0.1,
+        # "ipopt.constr_viol_tol": 1e-1,
+        "ipopt.hessian_approximation": "limited-memory"  # Seems to help get constraint violation down, now only dual infeasibility remains
     }
 
     if debug_filename is not None:
         nlp_opts['iteration_callback'] = SolverCallback('iter_callback', debug_filename, x_cols, g_cols, p_cols, {})
 
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
+    # nlp_solver = ca.nlpsol(
+    #     "trajectory_generator", "sqpmethod", nlp_dict,
+    #     dict(qpsol='qrqp', qpsol_options=dict(print_iter=True, error_on_fail=False, max_iter=max_iter), print_time=True)
+    # )  # Much worse
 
-    solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols}
+    solver = {"solver": nlp_solver, "callback": nlp_opts['iteration_callback'], "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols}
 
     return solver, nlp_dict, nlp_opts
 
@@ -406,8 +420,8 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start',
     return sol, solver
 
 
-def solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None, warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None):
-    solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=1000, debug_filename=debug_filename)
+def solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None, warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000):
+    solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=max_iter, debug_filename=debug_filename)
 
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
     w_init = get_tube_warm_start(tube_ws, N)

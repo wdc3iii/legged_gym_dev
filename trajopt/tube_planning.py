@@ -1,17 +1,17 @@
 from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
 from trajopt.tube_trajopt import *
 
-# prob_str = 'right'
+prob_str = 'right'
 # prob_str = 'right_wide'
-prob_str = 'gap'
+# prob_str = 'gap'
 
 # warm_start = 'start'
 # warm_start = 'goal'
 # warm_start = 'interpolate'
 warm_start = 'nominal'
 
-tube_ws = 0
-# tube_ws = 0.5
+# tube_ws = 0
+tube_ws = 0.5
 
 tube_dyn = 'l1'
 # tube_dyn = "l2"
