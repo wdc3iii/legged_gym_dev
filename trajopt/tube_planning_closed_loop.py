@@ -14,11 +14,12 @@ warm_start = 'nominal'
 # tube_ws = 0
 tube_ws = 0.5
 
-tube_dyn = 'l1'
+# tube_dyn = 'l1'
 # tube_dyn = "l2"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
-# tube_dyn = "NN"
+tube_dyn = "NN_oneshot"
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"
 
 H = 75
 
@@ -35,11 +36,14 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     N = 50
     w_max = 1
 
-    tube_dynamics = get_tube_dynamics(tube_dyn)
+    tube_dynamics = get_tube_dynamics(tube_dyn, nn_path=nn_path)
 
     tube_ws_str = str(tube_ws).replace('.', '_')
     fn = f"data/tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}.csv"
-    sol, solver = solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, warm_start=warm_start, tube_ws=tube_ws, debug_filename=fn, max_iter=200)
+    sol, solver = solve_tube(
+        start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max,
+        warm_start=warm_start, tube_ws=tube_ws, debug_filename=fn, max_iter=200
+    )
 
     z_k = np.zeros((H + 1, planning_model.n)) * np.nan
     v_k = np.zeros((H, planning_model.m)) * np.nan

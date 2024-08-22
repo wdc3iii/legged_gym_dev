@@ -25,10 +25,11 @@ warm_start = 'nominal'
 tube_ws = 0.5
 
 # tube_dyn = 'l1'
-tube_dyn = "l2"
+# tube_dyn = "l2"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
-# tube_dyn = "NN"
+tube_dyn = "NN_oneshot"
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"
 
 Kp = 10
 Kd = 10
@@ -63,19 +64,18 @@ def eval_model():
     double_v_max = torch.tensor([2., 2.])
     double_int = DoubleInt2D(dt, -double_z_max, double_z_max, -double_v_max, double_v_max, n_robots=1, backend='numpy')
 
-    tube_dynamics = get_tube_dynamics(tube_dyn)
+    tube_dynamics = get_tube_dynamics(tube_dyn, nn_path=nn_path)
 
     tube_ws_str = str(tube_ws).replace('.', '_')
     fn = f"data/tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}.csv"
     sol, solver = solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, warm_start=warm_start,
-                             tube_ws=tube_ws, debug_filename=fn)
+                             tube_ws=tube_ws, debug_filename=fn, max_iter=1000)
 
     z_sol, v_sol, w_sol = extract_solution(sol, N, planning_model.n, planning_model.m)
 
     x = np.zeros((1, z_sol.shape[0], double_int.n))
     u = np.zeros((1, v_sol.shape[0], double_int.m))
     pz_x = np.zeros_like(z_sol)
-
 
     for t in range(v_sol.shape[0]):
         # Decide fom action
@@ -104,7 +104,6 @@ def eval_model():
     print(f"alpha: {model_cfg.loss.alpha}")
 
     with torch.no_grad():
-        # TODO construct data
         fw = model(torch.from_numpy(data).float().to(device)).cpu().detach().numpy()
         fw = np.concatenate([w[0, None, None], fw], axis=-1).squeeze()
 

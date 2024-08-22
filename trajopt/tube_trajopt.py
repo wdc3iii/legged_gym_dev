@@ -1,7 +1,11 @@
+import wandb
 import numpy as np
 import pandas as pd
 import casadi as ca
+import l4casadi as l4c
 import matplotlib.pyplot as plt
+from hydra.utils import instantiate
+from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 
 
 problem_dict = {
@@ -206,9 +210,8 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
     Qf = ca.DM(Qf)
 
     # Define NLP
-    obj = quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(v, R) + quadratic_objective(z[-1, :], Qf, goal=p_zf)+ quadratic_objective(w, Qw)
-    # TODO: Debuggin
-    # obj = obj / 1000
+    obj = quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(v, R) + \
+          quadratic_objective(z[-1, :], Qf, goal=p_zf) + quadratic_objective(w, Qw)
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c, p_obs_r, w=w)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
@@ -221,38 +224,13 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
     g_lb = g_lb.T
     g_ub = g_ub.T
 
-    g_dyn_cols = []
-    for k in range(N):
-        g_dyn_cols.extend(["dyn_" + st + f"_{k}" for st in pm.state_names])
-    g_obs_cols = []
-    for i in range(Nobs):
-        g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
-    g_tube_dyn = [f"tube_{k}" for k in range(N)]
-    g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names] + g_tube_dyn
-
-    z_str = np.array(["z"] * ((N + 1) * pm.n), dtype='U8').reshape(z.shape)
-    v_str = np.array(["v"] * (N * pm.m), dtype='U8').reshape(v.shape)
-    w_str = np.array(["w"] * (N + 1), dtype='U8').reshape(w.shape)
-    for r in range(z_str.shape[0]):
-        for c in range(z_str.shape[1]):
-            z_str[r, c] = z_str[r, c] + f"_{r}_{c}"
-    for r in range(v_str.shape[0]):
-        for c in range(v_str.shape[1]):
-            v_str[r, c] = v_str[r, c] + f"_{r}_{c}"
-    for r in range(w_str.shape[0]):
-        w_str[r, 0] = w_str[r, 0] + f"_{r}"
-
     # Generate solver
     x_nlp = ca.vertcat(
         ca.reshape(z, (N + 1) * pm.n, 1),
         ca.reshape(v, N * pm.m, 1),
         w
     )
-    x_cols = list(np.vstack((
-        np.reshape(z_str, ((N + 1) * pm.n, 1)),
-        np.reshape(v_str, (N * pm.m, 1)),
-        w_str
-    )).squeeze())
+
     lbx = ca.vertcat(
         ca.reshape(z_lb, (N + 1) * pm.n, 1),
         ca.reshape(v_lb, N * pm.m, 1),
@@ -264,8 +242,8 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
         w_ub
     )
     p_nlp = ca.vertcat(p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
-    obs_c_lst = [f'obs_{i}_x' for i in range(Nobs)] + [f'obs_{i}_y' for i in range(Nobs)]
-    p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + [f'obs_{i}_r' for i in range(Nobs)]
+
+    x_cols, g_cols, p_cols = generate_col_names(pm, N, Nobs, x_nlp, g, p_nlp)
     nlp_dict = {
         "x": x_nlp,
         "f": obj,
@@ -284,23 +262,67 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
         # "ipopt.file_print_level": 8,
         "ipopt.jacobian_approximation": "exact",  # "exact" (default) or "finite-difference-values"
         "ipopt.gradient_approximation": "exact",  # "exact" (default) or "finite-difference-values"
-        "ipopt.max_wall_time": 0.1,
+        # "ipopt.max_wall_time": 0.1,
         # "ipopt.constr_viol_tol": 1e-1,
-        "ipopt.hessian_approximation": "limited-memory"  # Seems to help get constraint violation down, now only dual infeasibility remains
+        "ipopt.hessian_approximation": "limited-memory"  # Seems to help get constraint violation down, now mostly dual infeasibility remains
     }
 
     if debug_filename is not None:
         nlp_opts['iteration_callback'] = SolverCallback('iter_callback', debug_filename, x_cols, g_cols, p_cols, {})
 
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
-    # nlp_solver = ca.nlpsol(
-    #     "trajectory_generator", "sqpmethod", nlp_dict,
-    #     dict(qpsol='qrqp', qpsol_options=dict(print_iter=True, error_on_fail=False, max_iter=max_iter), print_time=True)
-    # )  # Much worse
 
-    solver = {"solver": nlp_solver, "callback": nlp_opts['iteration_callback'], "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols}
+    solver = {
+        "solver": nlp_solver, "callback": nlp_opts['iteration_callback'],
+        "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx,
+        "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols
+    }
 
     return solver, nlp_dict, nlp_opts
+
+
+def generate_col_names(pm, N, Nobs, x, g, p):
+    z_str = np.array(["z"] * ((N + 1) * pm.n), dtype='U8').reshape((N + 1, pm.n))
+    v_str = np.array(["v"] * (N * pm.m), dtype='U8').reshape((N, pm.m))
+    for r in range(z_str.shape[0]):
+        for c in range(z_str.shape[1]):
+            z_str[r, c] = z_str[r, c] + f"_{r}_{c}"
+    for r in range(v_str.shape[0]):
+        for c in range(v_str.shape[1]):
+            v_str[r, c] = v_str[r, c] + f"_{r}_{c}"
+    if x.numel() == z_str.size + v_str.size:
+        x_cols = list(np.vstack((
+            np.reshape(z_str, ((N + 1) * pm.n, 1)),
+            np.reshape(v_str, (N * pm.m, 1))
+        )).squeeze())
+    else:
+        w_str = np.array(["w"] * (N + 1), dtype='U8').reshape((N + 1, 1))
+        for r in range(w_str.shape[0]):
+            w_str[r, 0] = w_str[r, 0] + f"_{r}"
+        x_cols = list(np.vstack((
+            np.reshape(z_str, ((N + 1) * pm.n, 1)),
+            np.reshape(v_str, (N * pm.m, 1)),
+            w_str
+        )).squeeze())
+
+    g_dyn_cols = []
+    for k in range(N):
+        g_dyn_cols.extend(["dyn_" + st + f"_{k}" for st in pm.state_names])
+    g_obs_cols = []
+    for i in range(Nobs):
+        g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
+    g_tube_dyn = [f"tube_{k}" for k in range(N)]
+    g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names]
+
+    if not len(g_cols) == g.numel():
+        g_cols.extend(g_tube_dyn)
+
+    obs_c_lst = [f'obs_{i}_x' for i in range(Nobs)] + [f'obs_{i}_y' for i in range(Nobs)]
+    p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + \
+             [f'obs_{i}_r' for i in range(Nobs)]
+
+    assert len(x_cols) == x.numel() and len(g_cols) == g.numel() and len(p_cols) == p.numel()
+    return x_cols, g_cols, p_cols
 
 
 def init_params(z0, zf, obs):
@@ -420,7 +442,10 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start',
     return sol, solver
 
 
-def solve_tube(start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None, warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000):
+def solve_tube(
+        start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None,
+        warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000
+):
     solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=max_iter, debug_filename=debug_filename)
 
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
@@ -491,7 +516,35 @@ def get_rolling_l2_tube_dynamics(scaling, window_size):
     return l2_tube_dyn
 
 
-def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10):
+def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
+    api = wandb.Api()
+    if device == 'cpu':
+        model_cfg, state_dict = wandb_model_load_cpu(api, model_name)
+    else:
+        model_cfg, state_dict = wandb_model_load(api, model_name)
+
+    H = model_cfg.dataset.H
+    # TODO: proper sizing
+    tube_oneshot_model = instantiate(model_cfg.model)(1 + 2 * H, H)
+
+    tube_oneshot_model.load_state_dict(state_dict)
+
+    tube_oneshot_model.to(device)
+    tube_oneshot_model.eval()
+    fw = l4c.L4CasADi(tube_oneshot_model, device=device)
+
+    def oneshot_nn_tube_dyn(z, v, w):
+        tube_input = ca.horzcat(w[0, :], z[0, 2:], ca.reshape(v, 1, v.numel()))
+        g = fw(tube_input.T).T - w[1:].T
+        g_lb = ca.DM(*g.shape)
+        g_ub = ca.DM(*g.shape)
+
+        return g, g_lb, g_ub
+
+    return oneshot_nn_tube_dyn
+
+
+def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10, nn_path=None, device='cuda'):
     if tube_dyn == 'l1':
         return get_l1_tube_dynamics(scaling)
     elif tube_dyn == 'l2':
@@ -500,8 +553,10 @@ def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10):
         return get_rolling_l1_tube_dynamics(scaling, window_size)
     elif tube_dyn == 'l2_rolling':
         return get_rolling_l2_tube_dynamics(scaling, window_size)
+    elif tube_dyn == 'NN_oneshot':
+        return get_oneshot_nn_tube_dynamics(f'{nn_path}_model:best', device=device)
     else:
-        raise ValueError(f'Tube dynamics {tube_dyn} not implemented')
+        raise ValueError(f'NN Tube dynamics {tube_dyn} not implemented')
 
 
 class SolverCallback(ca.Callback):
