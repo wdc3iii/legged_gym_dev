@@ -421,9 +421,12 @@ def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None,
     return z_init, v_init
 
 
-def get_tube_warm_start(w_init, N):
-
-    return np.ones((N + 1, 1)) * w_init
+def get_tube_warm_start(w_init, tube_dynamics, z, v, w):
+    if w_init == "evaluate":
+        return np.concatenate([np.array([[0]]), np.array(tube_dynamics(ca.DM(z), ca.DM(v), ca.DM(w))[0])], axis=-1).T
+    elif isinstance(w_init, (int, float)):
+        return np.ones((z.shape[0], 1)) * w_init
+    raise ValueError(f"Tube warm start {w_init} not implemented. Must be evaluate or a double")
 
 
 def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start', debug_filename=None):
@@ -449,7 +452,7 @@ def solve_tube(
     solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=max_iter, debug_filename=debug_filename)
 
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
-    w_init = get_tube_warm_start(tube_ws, N)
+    w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N + 1, 1)))
 
     params = init_params(start, goal, obs)
     x_init = init_decision_var(z_init, v_init, w=w_init)

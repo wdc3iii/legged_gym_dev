@@ -37,9 +37,9 @@ Kd = 10
 def eval_model():
     # Experiment whose model to evaluate
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l0oh8o1b"  # 32x32
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"   # 128x128
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"   # 128x128
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"   # 256x256
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"    # 128x128 Softplus
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"    # 128x128 Softplus b=5
     model_name = f'{exp_name}_model:best'
 
 

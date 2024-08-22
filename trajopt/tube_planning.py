@@ -11,14 +11,17 @@ prob_str = 'gap'
 warm_start = 'nominal'
 
 # tube_ws = 0
-tube_ws = 0.5
+# tube_ws = 0.5
+tube_ws = "evaluate"
 
 # tube_dyn = 'l1'
 # tube_dyn = "l2"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 softplus b=5
+
 
 
 def main(start, goal, obs, vel_max, pos_max, dt):
@@ -27,8 +30,8 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     planning_model = CasadiSingleInt2D(dt, -z_max, z_max, -v_max, v_max)
 
     Q = 10 * np.eye(2)
-    Qw = 0.5
-    R = 0.1 * np.eye(2)
+    Qw = 0
+    R = 1 * np.eye(2)
     N = 50
     w_max = 1
 

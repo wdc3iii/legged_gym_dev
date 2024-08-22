@@ -3,9 +3,12 @@
 % tbl = readtable("tube_right_nominal_l2_0.csv");
 % tbl = readtable("tube_right_wide_nominal_l1_0.csv");
 % tbl = readtable("tube_gap_nominal_l1_0.csv");
-tbl = readtable("tube_gap_nominal_l1_0_5.csv");
+% tbl = readtable("tube_gap_nominal_l1_0_5.csv");
 % tbl = readtable("tube_gap_nominal_l1_rolling_0.csv");
 % tbl = readtable("tube_right_nominal_l1_0.csv");
+tbl = readtable("tube_gap_nominal_NN_oneshot_evaluate.csv");
+% tbl = readtable("tube_right_wide_nominal_NN_oneshot_evaluate.csv");
+
 
 cols = tbl.Properties.VariableNames;
 
@@ -127,7 +130,7 @@ title("Input")
 subplot(2, 2, 1)
 
 %% Animate
-for it = 1:size(iters, 1)
+for it = 1:100 % size(iters, 1)
     for k = 1:size(w, 2)
         r = max(w(it, k), 0);
         tube{k}.Position = [z(it, k, 1)-r, z(it, k, 2)-r, 2*r, 2*r];
@@ -148,4 +151,5 @@ for it = 1:size(iters, 1)
     input_y_line.YData = squeeze(v(it, :, 2));
     tube_line.YData = w(it, :);
     drawnow
+    pause
 end

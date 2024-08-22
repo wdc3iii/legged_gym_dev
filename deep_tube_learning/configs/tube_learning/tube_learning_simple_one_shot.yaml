@@ -24,6 +24,7 @@ model:
   num_layers: 2
   activation:
     _target_: torch.nn.Softplus
+    beta: 5
 
 model_evaluation:
   _target_: deep_tube_learning.utils.evaluate_scalar_tube_oneshot

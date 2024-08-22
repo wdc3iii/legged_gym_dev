@@ -12,14 +12,14 @@ prob_str = 'gap'
 warm_start = 'nominal'
 
 # tube_ws = 0
-tube_ws = 0.5
+tube_ws = "evaluate"
 
 # tube_dyn = 'l1'
 # tube_dyn = "l2"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"
 
 H = 75
 
