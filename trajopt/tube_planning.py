@@ -5,7 +5,7 @@ from trajopt.tube_trajopt import *
 # prob_str = 'right_wide'
 prob_str = 'gap'
 
-track_warm = False
+track_warm = True
 
 # warm_start = 'start'
 # warm_start = 'goal'
@@ -16,11 +16,11 @@ warm_start = 'nominal'
 # tube_ws = 0.5
 tube_ws = "evaluate"
 
-tube_dyn = 'l1'
+# tube_dyn = 'l1'
 # tube_dyn = "l2"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
-# tube_dyn = "NN_oneshot"
+tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
 nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 softplus b=5
 
@@ -33,7 +33,7 @@ def main(start, goal, obs, vel_max, pos_max, dt):
 
     Q = 10 * np.eye(2)
     Qw = 0
-    R = 1 * np.eye(2)
+    R = 10 * np.eye(2)
     N = 50
     w_max = 1
 
