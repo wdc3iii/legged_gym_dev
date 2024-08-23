@@ -123,27 +123,28 @@ class TubeDataset(Dataset):
 
 class HorizonTubeDataset(Dataset):
 
-    def __init__(self, w, z, v, H, input_dim, output_dim):
+    def __init__(self, w, z, v, H_fwd, H_rev, input_dim, output_dim):
         self.w = w
         self.z = z
         self.v = v
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.H = H
+        self.H_fwd = H_fwd
+        self.H_rev = H_rev
 
     def __len__(self):
         return self.w.shape[0]
 
     def __getitem__(self, idx):
-        ind = torch.randint(self.w.shape[1] - self.H - 1, (1,))
+        ind = torch.randint(self.H_rev, self.w.shape[1] - self.H_fwd - 1, (1,))
         # select rnd index
         return self._get_item_helper(idx, ind)
 
     def _get_item_helper(self, idx, ind):
-        w0 = self.w[idx, ind]
+        w0 = self.w[idx, ind - self.H_rev:ind]
         z0 = self.z[idx, ind, :].squeeze()
-        w_1H = self.w[idx, ind + 1:ind + self.H + 1]
-        v_0Hm1 = self.v[idx, ind: ind + self.H]
+        w_1H = self.w[idx, ind + 1:ind + self.H_fwd + 1]
+        v_0Hm1 = self.v[idx, ind - self.H_rev: ind + self.H_fwd]
         return torch.concatenate((w0, z0, v_0Hm1.reshape((-1,)))), w_1H
 
     def update(self):
@@ -211,29 +212,36 @@ class ScalarTubeDataset(TubeDataset):
 class ScalarHorizonTubeDataset(HorizonTubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment, H=10):
+    def from_wandb(cls, wandb_experiment, H_fwd=50, H_rev=10):
         dataset = get_dataset(wandb_experiment)
 
         z = dataset['z'][:, :-1, :]
         pz_x = dataset['pz_x'][:, :-1, :]
         v = dataset['v']
 
+        v = torch.cat(torch.zeros(v.shape[0], H_rev, v.shape[2], device=v.device), v, dim=1)
+        z_rev = torch.repeat_interleave(z[:, 0, :], H_rev, dim=1)  # TODO: zero out non-position components
+        z = torch.cat(z_rev, z, dim=1)
+        pz_x_rev = torch.repeat_interleave(pz_x[:, 0, :], H_rev, dim=1)
+        pz_x = torch.cat(pz_x_rev, pz_x, dim=1)
+
         # Compute error terms
         w = np.linalg.norm(pz_x - z, axis=-1)
         z_no_pos = z[:, :, 2:]
 
-        input_dim = 1 + z_no_pos.shape[-1] + H * v.shape[-1]
-        output_dim = H
+        input_dim = 1 + z_no_pos.shape[-1] + H_fwd * v.shape[-1]
+        output_dim = H_fwd
 
         return cls(torch.from_numpy(w).float(),
                    torch.from_numpy(z_no_pos).float(),
                    torch.from_numpy(v).float(),
-                   H,
+                   H_fwd,
+                   H_rev,
                    input_dim,
                    output_dim)
 
-    def __init__(self, w, z, v, H, input_dim, output_dim):
-        super(ScalarHorizonTubeDataset, self).__init__(w, z, v, H, input_dim, output_dim)
+    def __init__(self, w, z, v, H_fwd, H_rev, input_dim, output_dim):
+        super(ScalarHorizonTubeDataset, self).__init__(w, z, v, H_fwd, H_rev, input_dim, output_dim)
 
 
 class VectorTubeDataset(TubeDataset):

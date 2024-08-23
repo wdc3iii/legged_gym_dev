@@ -25,7 +25,6 @@ tube_dyn = "NN_oneshot"
 nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 softplus b=5
 
 
-
 def main(start, goal, obs, vel_max, pos_max, dt):
     z_max = np.array([pos_max, pos_max])
     v_max = np.array([vel_max, vel_max])
