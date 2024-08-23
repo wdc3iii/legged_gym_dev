@@ -123,28 +123,30 @@ class TubeDataset(Dataset):
 
 class HorizonTubeDataset(Dataset):
 
-    def __init__(self, w, z, v, H, input_dim, output_dim):
+    def __init__(self, w, z, v, H_fwd, H_rev, input_dim, output_dim):
         self.w = w
         self.z = z
         self.v = v
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.H = H
+        self.H_fwd = H_fwd
+        self.H_rev = H_rev
 
     def __len__(self):
         return self.w.shape[0]
 
     def __getitem__(self, idx):
-        ind = torch.randint(self.w.shape[1] - self.H - 1, (1,))
+        ind = torch.randint(self.H_rev, self.w.shape[1] - self.H_fwd - 1, (1,))
         # select rnd index
         return self._get_item_helper(idx, ind)
 
+    # NOTE: right now, this does not condition on the current error, but only the previous errors
     def _get_item_helper(self, idx, ind):
-        w0 = self.w[idx, ind]
-        z0 = self.z[idx, ind, :].squeeze()
-        w_1H = self.w[idx, ind + 1:ind + self.H + 1]
-        v_0Hm1 = self.v[idx, ind: ind + self.H]
-        return torch.concatenate((w0, z0, v_0Hm1.reshape((-1,)))), w_1H
+        w_mHr_0 = self.w[idx, ind - self.H_rev:ind]                     # Previous H_rev errors
+        z0 = self.z[idx, ind, :].squeeze()                              # Current state
+        w_1_Hf = self.w[idx, ind + 1:ind + self.H_fwd + 1]              # Next H_fwd errors
+        v_mHr_Hfm1 = self.v[idx, ind - self.H_rev: ind + self.H_fwd]    # Previous H_rev and next H_fwd inputs
+        return torch.concatenate((w_mHr_0, z0, v_mHr_Hfm1.reshape((-1,)))), w_1_Hf
 
     def update(self):
         pass
@@ -165,8 +167,8 @@ class HorizonTubeDataset(Dataset):
         v2 = torch.vstack((self.v[:idx], self.v[split_len + idx:]))
         z2 = torch.vstack((self.z[:idx], self.z[split_len + idx:]))
 
-        return (type(self)(w, z, v, self.H, self.input_dim, self.output_dim),
-                type(self)(w2, z2, v2, self.H, self.input_dim, self.output_dim))
+        return (type(self)(w, z, v, self.H_fwd, self.H_rev, self.input_dim, self.output_dim),
+                type(self)(w2, z2, v2, self.H_fwd, self.H_rev, self.input_dim, self.output_dim))
 
 
 class ScalarTubeDataset(TubeDataset):
@@ -211,29 +213,36 @@ class ScalarTubeDataset(TubeDataset):
 class ScalarHorizonTubeDataset(HorizonTubeDataset):
 
     @classmethod
-    def from_wandb(cls, wandb_experiment, H=10):
+    def from_wandb(cls, wandb_experiment, H_fwd=50, H_rev=10):
         dataset = get_dataset(wandb_experiment)
 
         z = dataset['z'][:, :-1, :]
         pz_x = dataset['pz_x'][:, :-1, :]
         v = dataset['v']
 
+        v = np.concatenate((np.zeros((v.shape[0], H_rev, v.shape[2])), v), axis=1)
+        z_rev = np.repeat(z[:, None, 0, :], H_rev, axis=1)  # TODO: zero out non-position components
+        z = np.concatenate((z_rev, z), axis=1)
+        pz_x_rev = np.repeat(pz_x[:, None, 0, :], H_rev, axis=1)
+        pz_x = np.concatenate((pz_x_rev, pz_x), axis=1)
+
         # Compute error terms
         w = np.linalg.norm(pz_x - z, axis=-1)
         z_no_pos = z[:, :, 2:]
 
-        input_dim = 1 + z_no_pos.shape[-1] + H * v.shape[-1]
-        output_dim = H
+        input_dim = H_rev + z_no_pos.shape[-1] + (H_rev + H_fwd) * v.shape[-1]  # -H_rev:0 err, z0, -H_rev:H_fwd inputs
+        output_dim = H_fwd
 
         return cls(torch.from_numpy(w).float(),
                    torch.from_numpy(z_no_pos).float(),
                    torch.from_numpy(v).float(),
-                   H,
+                   H_fwd,
+                   H_rev,
                    input_dim,
                    output_dim)
 
-    def __init__(self, w, z, v, H, input_dim, output_dim):
-        super(ScalarHorizonTubeDataset, self).__init__(w, z, v, H, input_dim, output_dim)
+    def __init__(self, w, z, v, H_fwd, H_rev, input_dim, output_dim):
+        super(ScalarHorizonTubeDataset, self).__init__(w, z, v, H_fwd, H_rev, input_dim, output_dim)
 
 
 class VectorTubeDataset(TubeDataset):

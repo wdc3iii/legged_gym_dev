@@ -13,12 +13,16 @@ def eval_model():
     # Experiment whose model to evaluate
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l0oh8o1b"  # 32x32
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"   # 128x128
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"   # 256x256
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"   # 256x256
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"    # 128x128 Softplus
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 Softplus b=5
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"  # Updated 128x128 Softplus b=5
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
     model_cfg, state_dict = wandb_model_load(api, model_name)
-    H = model_cfg.dataset.H
+    H_fwd = model_cfg.dataset.H_fwd
+    H_rev = model_cfg.dataset.H_rev
 
     n_robots = 2
     epoch_data = main(n_robots, 1, max_rom_dist=0.)
@@ -26,6 +30,11 @@ def eval_model():
     z = epoch_data['z'][:, :-1, :]
     pz_x = epoch_data['pz_x'][:, :-1, :]
     v = epoch_data['v']
+    v = np.concatenate((np.zeros((v.shape[0], H_rev, v.shape[2])), v), axis=1)
+    z_rev = np.repeat(z[:, None, 0, :], H_rev, axis=1)  # TODO: zero out non-position components
+    z = np.concatenate((z_rev, z), axis=1)
+    pz_x_rev = np.repeat(pz_x[:, None, 0, :], H_rev, axis=1)
+    pz_x = np.concatenate((pz_x_rev, pz_x), axis=1)
     w = np.linalg.norm(pz_x - z, axis=-1)
 
     z_no_pos = z[:, :, 2:]
@@ -35,11 +44,11 @@ def eval_model():
         torch.from_numpy(w).float(),
         torch.from_numpy(z_no_pos).float(),
         torch.from_numpy(v).float(),
-        H, 1 + z_no_pos.shape[-1] + H * v.shape[-1], H
+        H_fwd, H_rev, H_rev + z_no_pos.shape[-1] + (H_rev + H_fwd) * v.shape[-1], H_fwd
     )
-    zero = torch.zeros((1,), dtype=torch.int)
+    zero = torch.ones((1,), dtype=torch.int) * H_rev
     tmp_data, tmp_target = dataset._get_item_helper(0, zero)
-    model = instantiate(model_cfg.model)(tmp_data.shape[-1], tmp_target.shape[-1])
+    model = instantiate(model_cfg.model)(dataset.input_dim, dataset.output_dim)
     model.load_state_dict(state_dict)
 
     model.to(device)
@@ -53,10 +62,10 @@ def eval_model():
 
             data, tmp_target = dataset._get_item_helper(ii, zero)
             fw = model(data.to(device)).cpu().detach().numpy()
-            fw = np.concatenate([w[ii, [0]], fw], axis=-1)
+            fw = np.concatenate([w[ii, [H_rev]], fw], axis=-1)
 
             plt.figure()
-            err = np.squeeze(fw) - w[ii, :51]
+            err = np.squeeze(fw) - w[ii, H_rev:H_rev+H_fwd+1]
             succ_rate = np.mean(err >= 0)
             succ_rate_total += succ_rate
             print(succ_rate)
@@ -68,7 +77,7 @@ def eval_model():
 
             plt.figure()
             plt.plot(fw, 'k', label='Tube Error')
-            plt.plot(w[ii, :51], 'b', label='Normed Error')
+            plt.plot(w[ii, H_rev:H_rev+H_fwd+1], 'b', label='Normed Error')
             plt.axhline(0, color='black', linewidth=0.5)
             plt.title("OneShot Tube Bounds")
             plt.legend()
@@ -76,9 +85,9 @@ def eval_model():
             plt.show()
 
             fig, ax = plt.subplots()
-            SingleInt2D.plot_tube(ax, z[ii, :51], fw[:, None])
-            SingleInt2D.plot_spacial(ax, z[ii, :51], 'k.-')
-            SingleInt2D.plot_spacial(ax, pz_x[ii, :51], 'b.-')
+            SingleInt2D.plot_tube(ax, z[ii, H_rev:H_rev+H_fwd+1], fw[:, None])
+            SingleInt2D.plot_spacial(ax, z[ii, H_rev:H_rev+H_fwd+1], 'k.-')
+            SingleInt2D.plot_spacial(ax, pz_x[ii, H_rev:H_rev+H_fwd+1], 'b.-')
             plt.axis("square")
             plt.title("OneShot Tube")
             plt.show()

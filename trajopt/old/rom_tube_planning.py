@@ -4,8 +4,8 @@ import casadi as ca
 import l4casadi as l4c
 import matplotlib.pyplot as plt
 
-from trajopt.planning_rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
-                                  ExtendedUnicycle, ExtendedLateralUnicycle)
+from trajopt.old.planning_rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
+                                               ExtendedUnicycle, ExtendedLateralUnicycle)
 
 model = "SingleInt2D"
 # model = "DoubleInt2D"

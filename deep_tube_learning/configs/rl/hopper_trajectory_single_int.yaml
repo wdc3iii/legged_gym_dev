@@ -108,6 +108,14 @@ env_config:
       clip_value_pos: 0.1
       clip_value_vel: 1.0
       clip_value_total: 1.0
+  policy_model:
+    policy_to_use: 'rh'  # 'rl' for Reinforcement Learning, 'rh' for Raibert
+    rh:
+      K_p: -0.3
+      K_v: -0.9
+      clip_value_pos: 0.1
+      clip_value_vel: 1.0
+      clip_value_total: 1.0
 
 train_config:
   policy:
