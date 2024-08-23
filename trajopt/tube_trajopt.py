@@ -49,7 +49,10 @@ def quadratic_objective(x, Q, goal=None):
     if goal is None:
         dist = x
     else:
-        dist = x - ca.repmat(goal, x.shape[0], 1)
+        if goal.shape == x.shape:
+            dist = x - goal
+        else:
+            dist = x - ca.repmat(goal, x.shape[0], 1)
     return ca.sum1(ca.sum2((dist @ Q) * dist))
 
 
@@ -140,26 +143,15 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
     g = ca.horzcat(g_dyn, g_obs, g_ic)
     g_lb = ca.horzcat(g_lb_dyn, g_lb_obs, g_lb_ic)
     g_ub = ca.horzcat(g_ub_dyn, g_ub_obs, g_ub_ic)
-
-    g_dyn_cols = []
-    for k in range(N):
-        g_dyn_cols.extend(["dyn_" + st + f"_{k}" for st in pm.state_names])
-    g_obs_cols = []
-    for i in range(Nobs):
-        g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
-    g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names]
-    z_str = np.array(['z'] * ((N + 1) * pm.n)).reshape(z.shape)
-    v_str = np.array(['v'] * (N * pm.m)).reshape(v.shape)
+    g = g.T
+    g_lb = g_lb.T
+    g_ub = g_ub.T
 
     # Generate solver
     x_nlp = ca.vertcat(
         ca.reshape(z, (N + 1) * pm.n, 1),
         ca.reshape(v, N * pm.m, 1),
     )
-    x_cols = list(np.vstack((
-        np.reshape(z_str, ((N + 1) * pm.n, 1)),
-        np.reshape(v_str, (N * pm.m, 1))
-    )))
     lbx = ca.vertcat(
         ca.reshape(z_lb, (N + 1) * pm.n, 1),
         ca.reshape(v_lb, N * pm.m, 1),
@@ -169,10 +161,8 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
         ca.reshape(v_ub, N * pm.m, 1),
     )
     p_nlp = ca.vertcat(p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
-    obs_c_lst = []
-    obs_c_lst = [f'obs_{i}_x' for i in range(Nobs)] + [f'obs_{i}_y' for i in range(Nobs)]
-    p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + [f'obs_{i}_r' for i in
-                                                                                                   range(Nobs)]
+
+    x_cols, g_cols, p_cols = generate_col_names(pm, N, Nobs, x_nlp, g, p_nlp)
     nlp_dict = {
         "x": x_nlp,
         "f": obj,
@@ -198,7 +188,8 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
     return solver, nlp_dict, nlp_opts
 
 
-def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, max_iter=1000, debug_filename=None):
+def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None,
+                        max_iter=1000, debug_filename=None, z_init=None, v_init=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N + 1, 1)
     w_lb = ca.DM(N + 1, 1)
@@ -210,8 +201,15 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None, ma
     Qf = ca.DM(Qf)
 
     # Define NLP
-    obj = quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(v, R) + \
-          quadratic_objective(z[-1, :], Qf, goal=p_zf) + quadratic_objective(w, Qw)
+    obj = quadratic_objective(w, Qw)
+    if z_init is None:
+        obj += quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(z[-1, :], Qf, goal=p_zf)
+    else:
+        obj += quadratic_objective(z[:-1, :], Q, goal=z_init[:-1, :]) + quadratic_objective(z[-1, :], Qf, goal=z_init[None, -1, :])
+    if v_init is None:
+        obj += quadratic_objective(v, R)
+    else:
+        obj += quadratic_objective(v, R, goal=v_init)
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c, p_obs_r, w=w)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
@@ -447,11 +445,17 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start',
 
 def solve_tube(
         start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None,
-        warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000
+        warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000, track_warm=False
 ):
-    solver, nlp_dict, nlp_opts = trajopt_tube_solver(planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf, max_iter=max_iter, debug_filename=debug_filename)
-
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
+    z_goal = z_init if track_warm else None
+    v_goal = v_init if track_warm else None
+
+    solver, nlp_dict, nlp_opts = trajopt_tube_solver(
+        planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf,
+        max_iter=max_iter, debug_filename=debug_filename, z_init=z_goal, v_init=v_goal
+    )
+
     w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N + 1, 1)))
 
     params = init_params(start, goal, obs)

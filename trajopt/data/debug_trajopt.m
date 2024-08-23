@@ -3,10 +3,10 @@
 % tbl = readtable("tube_right_nominal_l2_0.csv");
 % tbl = readtable("tube_right_wide_nominal_l1_0.csv");
 % tbl = readtable("tube_gap_nominal_l1_0.csv");
-% tbl = readtable("tube_gap_nominal_l1_0_5.csv");
+tbl = readtable("tube_gap_nominal_l1_evaluate_True.csv");
 % tbl = readtable("tube_gap_nominal_l1_rolling_0.csv");
 % tbl = readtable("tube_right_nominal_l1_0.csv");
-tbl = readtable("tube_gap_nominal_NN_oneshot_evaluate.csv");
+% tbl = readtable("tube_gap_nominal_NN_oneshot_evaluate.csv");
 % tbl = readtable("tube_right_wide_nominal_NN_oneshot_evaluate.csv");
 
 
