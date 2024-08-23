@@ -188,12 +188,14 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
     return solver, nlp_dict, nlp_opts
 
 
-def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None,
+def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None,
                         max_iter=1000, debug_filename=None, z_init=None, v_init=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N + 1, 1)
     w_lb = ca.DM(N + 1, 1)
     w_ub = ca.DM(np.ones((N + 1, 1)) * w_max)
+    e = ca.MX.sym("e", H_rev, 1)
+    v_prev = ca.MX.sym("v_prev", H_rev, pm.m)
 
     if Qf is None:
         Qf = Q
@@ -213,7 +215,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None,
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c, p_obs_r, w=w)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
-    g_tube, g_lb_tube, g_ub_tube = tube_dynamics(z, v, w)
+    g_tube, g_lb_tube, g_ub_tube = tube_dynamics(z, v, w, e, v_prev)
 
     g = ca.horzcat(g_dyn, g_obs, g_ic, g_tube)
     g_lb = ca.horzcat(g_lb_dyn, g_lb_obs, g_lb_ic, g_lb_tube)
@@ -239,9 +241,12 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None,
         ca.reshape(v_ub, N * pm.m, 1),
         w_ub
     )
-    p_nlp = ca.vertcat(p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
+    p_nlp = ca.vertcat(
+        p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r,
+        e, ca.reshape(v_prev, H_rev * pm.m, 1)
+    )
 
-    x_cols, g_cols, p_cols = generate_col_names(pm, N, Nobs, x_nlp, g, p_nlp)
+    x_cols, g_cols, p_cols = generate_col_names(pm, N, Nobs, x_nlp, g, p_nlp, H_rev=H_rev)
     nlp_dict = {
         "x": x_nlp,
         "f": obj,
@@ -267,7 +272,8 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None,
 
     if debug_filename is not None:
         nlp_opts['iteration_callback'] = SolverCallback('iter_callback', debug_filename, x_cols, g_cols, p_cols, {})
-
+    else:
+        nlp_opts['iteration_callback'] = None
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
     solver = {
@@ -279,7 +285,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, Q, Qw, R, w_max, Nobs, Qf=None,
     return solver, nlp_dict, nlp_opts
 
 
-def generate_col_names(pm, N, Nobs, x, g, p):
+def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
     z_str = np.array(["z"] * ((N + 1) * pm.n), dtype='U8').reshape((N + 1, pm.n))
     v_str = np.array(["v"] * (N * pm.m), dtype='U8').reshape((N, pm.m))
     for r in range(z_str.shape[0]):
@@ -319,6 +325,13 @@ def generate_col_names(pm, N, Nobs, x, g, p):
     p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + \
              [f'obs_{i}_r' for i in range(Nobs)]
 
+    if not len(p_cols) == p.numel():
+        e_cols = [f"e_{i}" for i in range(H_rev)]
+        v_prev_str = np.array(["v_prev"] * (H_rev * pm.m), dtype='U13').reshape((H_rev, pm.m))
+        for r in range(v_prev_str.shape[0]):
+            for c in range(v_prev_str.shape[1]):
+                v_prev_str[r, c] = v_prev_str[r, c] + f"_{r}_{c}"
+        p_cols += e_cols + list(np.reshape(v_prev_str, (-1, 1)).squeeze())
     assert len(x_cols) == x.numel() and len(g_cols) == g.numel() and len(p_cols) == p.numel()
     return x_cols, g_cols, p_cols
 
@@ -419,9 +432,9 @@ def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None,
     return z_init, v_init
 
 
-def get_tube_warm_start(w_init, tube_dynamics, z, v, w):
+def get_tube_warm_start(w_init, tube_dynamics, z, v, w, e, v_prev):
     if w_init == "evaluate":
-        return np.concatenate([np.array([[0]]), np.array(tube_dynamics(ca.DM(z), ca.DM(v), ca.DM(w))[0])], axis=-1).T
+        return np.concatenate([np.array([[0]]), np.array(tube_dynamics(ca.DM(z), ca.DM(v), ca.DM(w), ca.DM(e), ca.DM(v_prev))[0])], axis=-1).T
     elif isinstance(w_init, (int, float)):
         return np.ones((z.shape[0], 1)) * w_init
     raise ValueError(f"Tube warm start {w_init} not implemented. Must be evaluate or a double")
@@ -444,34 +457,38 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start',
 
 
 def solve_tube(
-        start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max, Qf=None,
+        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Qf=None,
         warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000, track_warm=False
 ):
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
     z_goal = z_init if track_warm else None
     v_goal = v_init if track_warm else None
+    e = np.zeros((H_rev, 1))
+    v_prev = np.zeros((H_rev, planning_model.m))
 
     solver, nlp_dict, nlp_opts = trajopt_tube_solver(
-        planning_model, tube_dynamics, N, Q, Qw, R, w_max, len(obs['r']), Qf=Qf,
+        planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, len(obs['r']), Qf=Qf,
         max_iter=max_iter, debug_filename=debug_filename, z_init=z_goal, v_init=v_goal
     )
 
-    w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N + 1, 1)))
+    w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N + 1, 1)), e, v_prev)
 
     params = init_params(start, goal, obs)
+
+    params = np.vstack([params, e, v_prev.reshape(-1, 1)])
     x_init = init_decision_var(z_init, v_init, w=w_init)
 
     sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
                            ubx=solver["ubx"])
 
-    if 'iteration_callback' in nlp_opts.keys():
+    if nlp_opts['iteration_callback'] is not None:
         nlp_opts['iteration_callback'].write_data(solver, params)
     return sol, solver
 
 
 def get_l1_tube_dynamics(scaling):
 
-    def l1_tube_dyn(z, v, w):
+    def l1_tube_dyn(z, v, w, e, v_prev):
         fw = scaling * ca.sum2(ca.fabs(v))
         g = (fw - w[1:]).T
         g_lb = ca.DM(*g.shape)
@@ -484,7 +501,7 @@ def get_l1_tube_dynamics(scaling):
 
 def get_l2_tube_dynamics(scaling):
 
-    def l2_tube_dyn(z, v, w):
+    def l2_tube_dyn(z, v, w, e, v_prev):
         fw = scaling * ca.sum2(v ** 2)
         g = (fw - w[1:]).T
         g_lb = ca.DM(*g.shape)
@@ -497,7 +514,7 @@ def get_l2_tube_dynamics(scaling):
 
 def get_rolling_l1_tube_dynamics(scaling, window_size):
 
-    def l1_tube_dyn(z, v, w):
+    def l1_tube_dyn(z, v, w, e, v_prev):
         l1 = scaling * ca.sum2(ca.fabs(v))
         fw = [ca.sum1(l1[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(l1.numel())]
         g = ca.horzcat(*fw) - w[1:].T
@@ -511,7 +528,7 @@ def get_rolling_l1_tube_dynamics(scaling, window_size):
 
 def get_rolling_l2_tube_dynamics(scaling, window_size):
 
-    def l2_tube_dyn(z, v, w):
+    def l2_tube_dyn(z, v, w, e, v_prev):
         l2 = scaling * ca.sum2(v ** 2)
         fw = [ca.sum1(l2[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(l2.numel())]
         g = ca.horzcat(*fw) - w[1:].T
@@ -530,9 +547,10 @@ def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
     else:
         model_cfg, state_dict = wandb_model_load(api, model_name)
 
-    H = model_cfg.dataset.H
+    H_fwd = model_cfg.dataset.H_fwd
+    H_rev = model_cfg.dataset.H_rev
     # TODO: proper sizing
-    tube_oneshot_model = instantiate(model_cfg.model)(1 + 2 * H, H)
+    tube_oneshot_model = instantiate(model_cfg.model)(H_rev + 2 * (H_rev + H_fwd), H_fwd)
 
     tube_oneshot_model.load_state_dict(state_dict)
 
@@ -540,8 +558,9 @@ def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
     tube_oneshot_model.eval()
     fw = l4c.L4CasADi(tube_oneshot_model, device=device)
 
-    def oneshot_nn_tube_dyn(z, v, w):
-        tube_input = ca.horzcat(w[0, :], z[0, 2:], ca.reshape(v, 1, v.numel()))
+    def oneshot_nn_tube_dyn(z, v, w, e, v_prev):
+        v_total = ca.vertcat(v_prev, v)
+        tube_input = ca.horzcat(e.T, z[0, 2:], ca.reshape(v_total, 1, v_total.numel()))
         g = fw(tube_input.T).T - w[1:].T
         g_lb = ca.DM(*g.shape)
         g_ub = ca.DM(*g.shape)

@@ -22,7 +22,7 @@ tube_ws = "evaluate"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 softplus b=5
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"  # 128x128 softplus b=5
 
 
 def main(start, goal, obs, vel_max, pos_max, dt):
@@ -34,6 +34,7 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     Qw = 0
     R = 10 * np.eye(2)
     N = 50
+    H_rev = 10
     w_max = 1
 
     tube_dynamics = get_tube_dynamics(tube_dyn, nn_path=nn_path)
@@ -41,7 +42,7 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     tube_ws_str = str(tube_ws).replace('.', '_')
     fn = f"data/tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
     sol, solver = solve_tube(
-        start, goal, obs, planning_model, tube_dynamics, N, Q, Qw, R, w_max,
+        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max,
         warm_start=warm_start, tube_ws=tube_ws, debug_filename=fn, track_warm=track_warm
     )
 

@@ -79,7 +79,7 @@ class CasadiRomDynamics(ABC):
         """
         for i in range(xt.shape[0]):
             # TODO: vector tube plotting
-            if wt.shape[1] == 1:
+            if not np.isnan(wt[i]):
                 xc = xt[i, 0]
                 yc = xt[i, 1]
                 circ = plt.Circle((xc, yc), wt[i], color=c, fill=False)
