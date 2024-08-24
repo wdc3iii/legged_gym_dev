@@ -1,6 +1,5 @@
 seed: 0
 
-wandb_experiment: null
 dataset_name: "hopper_trajectory"
 
 epochs: 10
@@ -24,6 +23,8 @@ omega_max: 0.4
 omega_min: -0.4
 pos_max: 1e9
 pos_min: -1e9
+
+controller: null
 
 env_config:
   env:
