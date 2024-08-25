@@ -30,6 +30,13 @@ env_config:
     soft_torque_limit: 1.
     base_height_target: .55
     max_contact_force: 100.  # forces above this value are penalized
+    raibert:
+      Kp: -0.1
+      Kv: -0.3
+      K_ff: 0.0
+      clip_pos: 0.5
+      clip_vel: 1.0
+      clip_ang: 0.2
   init_state:
     pos: [0.0, 0.0, 0.5]  # x,y,z [m]
     default_joint_angles:
@@ -146,14 +153,6 @@ env_config:
     sigma:
       tracking_lin_vel: [ 1., .8, .6 ]
       tracking_ang_vel: [ 1., .8, .6 ]
-  policy_model:
-    policy_to_use: 'rh'  # 'rl' for Reinforcement Learning, 'rh' for Raibert
-    rh:
-      K_p: -.3
-      K_v: -.9
-      clip_value_pos: .1
-      clip_value_vel: 1.
-      clip_value_total: 1.
 train_config:
   policy:
     actor_hidden_dims: [128, 64, 32]
@@ -168,7 +167,6 @@ train_config:
     max_iterations: 300
     resume: False
     checkpoint: -1
-
 
 args:
   task: ${task}

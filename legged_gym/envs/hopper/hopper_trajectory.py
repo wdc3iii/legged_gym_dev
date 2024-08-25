@@ -40,6 +40,7 @@ from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log
     euler_angles_to_matrix, matrix_to_quaternion
 
 from trajopt.rom_dynamics import SingleInt2D
+from deep_tube_learning.raibert import RaibertHeuristic
 
 
 class HopperTrajectory(LeggedRobotTrajectory):
@@ -58,6 +59,13 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.max_slope_range = cfg.domain_rand.torque_speed_properties.slope_range
         self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), cfg.env.num_envs, 0).float()
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
+        self.raibert_Kp = cfg.rewards.raibert.Kp
+        self.raibert_Kv = cfg.rewards.raibert.Kv
+        self.raibert_Kff = cfg.rewards.raibert.Kff
+        self.raibert_clip_pos = cfg.rewards.raibert.clip_pos
+        self.raibert_clip_vel = cfg.rewards.raibert.clip_vel
+        self.raibert_clip_ang = cfg.rewards.raibert.clip_ang
+
         self.zero_action = self.zero_action.to(self.device)
         self.foot_joint_index = torch.tensor([0])
         mask = torch.ones(self.num_dof, dtype=torch.bool)
@@ -478,8 +486,13 @@ class HopperTrajectory(LeggedRobotTrajectory):
             desired_velocity = self.traj_gen.trajectory[:, 1, :] - self.traj_gen.trajectory[:, 0, :]
 
             positional_error = desired_position - current_position
-            velocity_error = desired_velocity - current_velocity
+            # velocity_error = desired_velocity - current_velocity
             quaternion = self.root_states[:, 3:7]  # w,x,y,z
-            rh_obs = torch.cat((positional_error, velocity_error, quaternion), dim=1)
-        rh_actions = self.rh_policy(rh_obs.detach())
+            rh_obs = torch.cat((positional_error, current_velocity, desired_velocity, quaternion), dim=1)
+        else:
+            raise ValueError(f"Raibert Heuristic not implemented for RoM {type(self.traj_gen.rom)}")
+        rh_actions = RaibertHeuristic.raibert_policy(
+            rh_obs.detach(), self.raibert_Kp, self.raibert_Kv, self.raibert_Kff,
+            self.raibert_clip_pos, self.raibert_clip_vel, self.raibert_clip_ang
+        )
         return torch.sum(torch.square(rl_actions - rh_actions), dim=1)

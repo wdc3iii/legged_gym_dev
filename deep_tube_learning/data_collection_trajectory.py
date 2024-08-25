@@ -1,4 +1,6 @@
 import isaacgym
+import torch
+
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 
@@ -6,22 +8,22 @@ import os
 import hydra
 import wandb
 import pickle
-import torch
-import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
+from hydra import initialize_config_dir, compose
+from hydra.core.global_hydra import GlobalHydra
 from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
 from isaacgym.torch_utils import *
 from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_hydra, quat2yaw, yaw2rot, wrap_angles,
                                       wandb_model_load, update_hydra_cfg)
-from legged_gym.policy_models.raibert import RaibertHeuristic
+from deep_tube_learning.raibert import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
 
 
 def get_state(base, joint_pos, joint_vel):
-    return np.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), axis=1)
+    return torch.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), dim=1)
 
 
 @hydra.main(
@@ -38,10 +40,18 @@ def data_creation_main(cfg):
     else:
         experiment_name = cfg.dataset_name
 
-    exp_name = cfg.wandb_experiment
-    model_name = f'{exp_name}_model:best{cfg.curriculum}'
-    api = wandb.Api()
-    rl_cfg, state_dict = wandb_model_load(api, model_name)
+    if cfg.controller.type == 'rl':
+        exp_name = cfg.wandb_experiment
+        model_name = f'{exp_name}_model:best{cfg.curriculum}'
+        api = wandb.Api()
+        rl_cfg, state_dict = wandb_model_load(api, model_name)
+    elif cfg.controller.type == 'rh':
+        cfg_dir = str(Path(__file__).parent / "configs" / "rl")
+        GlobalHydra.instance().clear()
+        with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
+            rl_cfg = compose(config_name=cfg.controller.config_name)
+    else:
+        raise ValueError(f"Controller type {cfg.controller.type} not implemented.")
     rl_cfg = update_hydra_cfg(cfg, rl_cfg)
 
     # Send config to wandb
@@ -69,10 +79,10 @@ def data_creation_main(cfg):
 
     train_cfg.runner.resume = True
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
-    if rl_cfg.policy_model.policy_to_use == 'rl':
+    if cfg.controller.type == 'rl':
         policy = ppo_runner.get_inference_policy(device=env.device)
-    elif rl_cfg.env_config.policy_model.policy_to_use == 'rh':
-        raibert = RaibertHeuristic(rl_cfg)
+    elif cfg.controller.type == 'rh':
+        raibert = RaibertHeuristic(cfg)
         policy = raibert.get_inference_policy(device=env.device)
 
     obs = env.get_observations()
@@ -85,109 +95,119 @@ def data_creation_main(cfg):
     track_yaw = cfg.track_yaw
     for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
         # Data structures
-        x = np.zeros((int(env.max_episode_length) + 1, num_robots, x_n))  # Epochs, steps, states
-        z = np.zeros((int(env.max_episode_length) + 1, num_robots, rom_n))
-        pz_x = np.zeros((int(env.max_episode_length) + 1, num_robots, rom_n))
-        v = np.zeros((int(env.max_episode_length), num_robots, rom_m))
-        done = np.zeros((int(env.max_episode_length), num_robots), dtype='bool')
-        des_pose_all = np.zeros((int(env.max_episode_length), num_robots, 3))
-        des_vel_all = np.zeros((int(env.max_episode_length), num_robots, 3))
-        des_vel_local_all = np.zeros((int(env.max_episode_length), num_robots, 3))
-        robot_pose_all = np.zeros((int(env.max_episode_length), num_robots, 3))
-        robot_vel_all = np.zeros((int(env.max_episode_length), num_robots, 3))
-        err_global_all = np.zeros((int(env.max_episode_length), num_robots, 3))
-        err_local_all = np.zeros((int(env.max_episode_length), num_robots, 3))
+        x = torch.zeros((int(env.max_episode_length) + 1, num_robots, x_n), device=env.device)  # Epochs, steps, states
+        z = torch.zeros((int(env.max_episode_length) + 1, num_robots, rom_n), device=env.device)
+        pz_x = torch.zeros((int(env.max_episode_length) + 1, num_robots, rom_n), device=env.device)
+        v = torch.zeros((int(env.max_episode_length), num_robots, rom_m), device=env.device)
+        done = torch.zeros((int(env.max_episode_length), num_robots), dtype=torch.bool, device=env.device)
+        des_pose_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
+        des_vel_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
+        des_vel_local_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
+        robot_pose_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
+        robot_vel_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
+        err_global_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
+        err_local_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
+
+        env.reset()
 
         # Initialization
-        base = env.root_states.cpu().numpy()
-        x[0, :, :] = get_state(base, env.dof_pos.cpu().numpy(), env.dof_vel.cpu().numpy())
+        base = torch.clone(env.root_states.detach())
+        x[0, :, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
         z[0, :, :] = env.rom.proj_z(base)
         pz_x[0, :, :] = env.rom.proj_z(base)
 
-        env.traj_gen.reset(env.rom.proj_z(env.root_states).cpu())
+        env.traj_gen.reset(env.rom.proj_z(env.root_states))
 
         # Loop over time steps
         for t in range(int(env.max_episode_length)):
             # Get desired pose and velocity
 
             des_pose, des_vel = env.rom.des_pose_vel(z[t, :, :], env.traj_gen.v)
-            des_pose_all[t, :, :] = des_pose.copy()
-            des_vel_all[t, :, :] = des_vel.copy()
+            des_pose_all[t, :, :] = torch.clone(des_pose.detach())
+            des_vel_all[t, :, :] = torch.clone(des_vel.detach())
 
             # Get robot pose
-            robot_pose = np.hstack((base[:, :2], quat2yaw(base[:, 3:7])[:, None]))
-            robot_pose_all[t, :, :] = robot_pose.copy()
-            robot_vel_all[t, :, :] = np.hstack((base[:, 7:9], base[:, -1][:, None]))
-            y2r = yaw2rot(robot_pose[:, 2])
+            y = torch.from_numpy(quat2yaw(base[:, 3:7].cpu().numpy())).float().to(env.device)
+            robot_pose = torch.hstack((base[:, :2], y[:, None]))
+            robot_pose_all[t, :, :] = torch.clone(robot_pose.detach())
+            robot_vel_all[t, :, :] = torch.hstack((base[:, 7:9], base[:, -1][:, None]))
+            y2r = torch.from_numpy(yaw2rot(robot_pose[:, 2].cpu().numpy())).float().to(env.device)
 
             # Compute pose error
             err_global = des_pose - robot_pose
-            err_global[:, 2] = np.where(track_yaw, wrap_angles(err_global[:, 2]), 0)
-            err_global_all[t, :, :] = err_global.copy()
-            err_local = err_global.copy()
-            err_local[:, :2] = np.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
-            err_local_all[t, :, :] = err_local.copy()
+            if track_yaw:
+                err_global[:, 2] = wrap_angles(err_global[:, 2])
+            else:
+                err_global[:, 2] = 0
+            err_global_all[t, :, :] = torch.clone(err_global.detach())
+            err_local = torch.clone(err_global.detach())
+            err_local[:, :2] = torch.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
+            err_local_all[t, :, :] = torch.clone(err_local.detach())
 
             # Step environment
             # have to modify obs if using Raibert Heuristic
-            if rl_cfg.policy_model.policy_to_use == 'rh':
+            if cfg.controller.type == 'rh':
                 if isinstance(env.traj_gen.rom, SingleInt2D):
-                    current_velocity = quat_rotate_inverse(env.root_states[:, 3:7], env.root_states[:, 7:10])[:, :2]
+                    current_velocity = env.root_states[:, 7:9]
                     current_position = env.root_states[:, :2]
 
                     desired_position = env.traj_gen.trajectory[:, 0]
-                    desired_velocity = env.traj_gen.trajectory[:, 1, :] - env.traj_gen.trajectory[:, 0, :]
+                    desired_velocity = env.traj_gen.v
 
                     positional_error = desired_position - current_position
-                    velocity_error = desired_velocity - current_velocity
-                    quaternion = env.root_states[:, 3:7]  # w,x,y,z
-                    obs = torch.cat((positional_error, velocity_error, quaternion), dim=1)
+                    # velocity_error = desired_velocity - current_velocity
+                    quaternion = env.base_quat  # x,y,z,w
+                    obs = torch.cat((positional_error, current_velocity, desired_velocity, quaternion), dim=1)
             actions = policy(obs.detach())
             obs, _, _, dones, _ = env.step(actions.detach())
 
             # Save Data
-            base = env.root_states.cpu().numpy()
-            d = dones.cpu().numpy()
+            base = torch.clone(env.root_states.detach())
+            d = torch.clone(dones.detach())
             proj = env.rom.proj_z(base)
             done[t, :] = d  # Termination should not be used for tube training
             v[t, :, :] = env.traj_gen.v
-            x[t + 1, :, :] = get_state(base, env.dof_pos.cpu().numpy(), env.dof_vel.cpu().numpy())
+            x[t + 1, :, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
             z[t + 1, :, :] = env.traj_gen.trajectory[:, 0, :]
             z[t + 1, done[t, :], :] = proj[done[t, :], :]  # Terminated envs reset to zero tracking error
             pz_x[t + 1, :, :] = env.rom.proj_z(base)
 
         # Plot the trajectories after the loop
-        fig, ax = plt.subplots()
-        env.rom.plot_spacial(ax, z[:, 0, :], '.-k')
-        env.rom.plot_spacial(ax, pz_x[:, 0, :], '.-b')
+        fig, ax = plt.subplots(1, 2)
+        ax[0].plot(z[:, 0, :].cpu().numpy())
+        ax[0].plot(pz_x[:, 0, :].cpu().numpy())
+        env.rom.plot_spacial(ax[1], z[:, 0, :].cpu().numpy(), '.-k')
+        env.rom.plot_spacial(ax[1], pz_x[:, 0, :].cpu().numpy())
         plt.show()
-        fig, ax = plt.subplots()
-        env.rom.plot_spacial(ax, z[:, 1, :], '.-k')
-        env.rom.plot_spacial(ax, pz_x[:, 1, :], '.-b')
-        plt.show()
+        # fig, ax = plt.subplots(1, 2)
+        # ax[0].plot(z[:, 1, :].cpu().numpy())
+        # ax[0].plot(pz_x[:, 1, :].cpu().numpy())
+        # env.rom.plot_spacial(ax[1], z[:, 1, :].cpu().numpy(), '.-k')
+        # env.rom.plot_spacial(ax[1], pz_x[:, 1, :].cpu().numpy())
+        # plt.show()
         # Log Data
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
             if cfg.save_debugging_data:
                 epoch_data = {
-                    'x': x,
-                    'z': z,
-                    'v': v,
-                    'pz_x': pz_x,
-                    'done': done,
-                    'des_pose': des_pose_all,
-                    'des_vel': des_vel_all,
-                    'des_vel_local': des_vel_local_all,
-                    'robot_pose': robot_pose_all,
-                    'robot_vel': robot_vel_all,
-                    'err_local': err_local_all,
-                    'err_global': err_global_all
+                    'x': x.cpu().numpy(),
+                    'z': z.cpu().numpy(),
+                    'v': v.cpu().numpy(),
+                    'pz_x': pz_x.cpu().numpy(),
+                    'done': done.cpu().numpy(),
+                    'des_pose': des_pose_all.cpu().numpy(),
+                    'des_vel': des_vel_all.cpu().numpy(),
+                    'des_vel_local': des_vel_local_all.cpu().numpy(),
+                    'robot_pose': robot_pose_all.cpu().numpy(),
+                    'robot_vel': robot_vel_all.cpu().numpy(),
+                    'err_local': err_local_all.cpu().numpy(),
+                    'err_global': err_global_all.cpu().numpy()
                 }
             else:
                 epoch_data = {
-                    'z': z,
-                    'v': v,
-                    'pz_x': pz_x,
-                    'done': done
+                    'z': z.cpu().numpy(),
+                    'v': v.cpu().numpy(),
+                    'pz_x': pz_x.cpu().numpy(),
+                    'done': done.cpu().numpy()
                 }
             pickle.dump(epoch_data, f)
 
@@ -205,15 +225,16 @@ def data_creation_main(cfg):
 
 
 if __name__ == "__main__":
-    # Define parameter sweeps
-    overrides = [
-        "env_config/domain_rand/push_robots=True",
-        "env_config/domain_rand/push_robots=False",
-        "env_config/noise/add_noise=True",
-        "env_config/noise/add_noise=False"
-    ]
-
-    # Run multirun programmatically
-    with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "data_generation")):
-        hydra.core.global_hydra.GlobalHydra.instance().clear()
-        hydra.multirun.main(overrides)
+    # # Define parameter sweeps
+    # overrides = [
+    #     "env_config/domain_rand/push_robots=True",
+    #     "env_config/domain_rand/push_robots=False",
+    #     "env_config/noise/add_noise=True",
+    #     "env_config/noise/add_noise=False"
+    # ]
+    #
+    # # Run multirun programmatically
+    # with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "data_generation")):
+    #     hydra.core.global_hydra.GlobalHydra.instance().clear()
+    #     hydra.multirun.main(overrides)
+    data_creation_main()

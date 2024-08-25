@@ -140,6 +140,7 @@ class RomDynamics(ABC):
             cbar.set_label('Time')
         else:
             ax.plot(xt[:, 0], xt[:, 1], c)
+        ax.set_aspect('equal')
 
     @staticmethod
     def plot_tube(ax, xt, wt, c='g'):

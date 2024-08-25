@@ -28,30 +28,24 @@
 #
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
-from legged_gym import LEGGED_GYM_ROOT_DIR, envs
-from time import time
-from warnings import WarningMessage
-import numpy as np
 import os
 
 from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 
 import torch
-from torch import Tensor
-from typing import Tuple, Dict
+from typing import Dict
 
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
 from legged_gym.utils.terrain import Terrain
-from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
+from legged_gym.utils.math import quat_apply_yaw
 from legged_gym.utils.helpers import class_to_dict, torch_rand_vec_float
 from .legged_robot_trajectory_config import LeggedRobotTrajectoryCfg
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
                                   ExtendedLateralUnicycle, TrajectoryGenerator,ZeroTrajectoryGenerator,
                                   CircleTrajectoryGenerator, SquareTrajectoryGenerator)
 from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, UniformWeightSamplerNoRamp
-from ...policy_models.raibert import RaibertHeuristic
 
 
 class LeggedRobotTrajectory(BaseTask):
@@ -81,9 +75,6 @@ class LeggedRobotTrajectory(BaseTask):
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
         self._init_rom()
         self._init_trajectory_generator()
-        if self.cfg.policy_model.policy_to_use =='rh':
-            raibert = RaibertHeuristic(self.cfg)
-            self.rh_policy = raibert.get_inference_policy(device=self.device)
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True
@@ -95,6 +86,7 @@ class LeggedRobotTrajectory(BaseTask):
                                                      self.cfg.domain_rand.time_between_pushes[1],
                                                      (self.num_envs, 1),
                                                      device=self.device)
+
     def _init_rom(self):
         rom_cfg = self.cfg.rom
         model_class = globals()[rom_cfg.cls]

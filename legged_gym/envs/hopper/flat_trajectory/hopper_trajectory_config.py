@@ -178,6 +178,14 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
         base_height_target = .55
         max_contact_force = 100.  # forces above this value are penalized
 
+        class raibert:
+            Kp = -0.3
+            Kv = -0.9
+            Kff = 0.0
+            clip_pos = 0.5
+            clip_vel = 1.0
+            clip_ang = 0.2
+
         class differential_error:
             pos_slope = 4
             neg_slope = 1

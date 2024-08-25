@@ -3,7 +3,7 @@ seed: 0
 dataset_name: "hopper_trajectory"
 
 epochs: 10
-headless: False
+headless: True
 save_debugging_data: False
 upload_to_wandb: False
 track_yaw: False
@@ -29,18 +29,38 @@ controller: null
 env_config:
   env:
     num_envs: 4096
+    episode_length_s: 20
 #  terrain:
 #    curriculum: False
   noise:
-    add_noise: ${add_noise}
+    add_noise: False
   domain_rand:
-    push_robots: ${push_robots}
     randomize_friction: False
     randomize_base_mass: False
     randomize_inv_base_mass: False
+    push_robots: False
+    randomize_rom_distance: False
+    max_rom_distance: [0.0, 0.0]
     rigid_shape_properties:
+      randomize_restitution: False
+      randomize_compliance: False
+      randomize_thickness: False
+    dof_properties:
       randomize_stiffness: False
       randomize_damping: False
+    spring_properties:
+      randomize_stiffness: False
+      randomize_damping: False
+      randomize_setpoint: False
+    pd_gain_properties:
+      randomize_p_gain: False
+      randomize_d_gain: False
+    torque_speed_properties:
+      randomize_max_torque: False
+      randomize_max_speed: False
+      randomize_slope: False
+  curriculum:
+    use_curriculum: False
   init_state:
     default_dof_pos_noise_lower: [ -0., -0., -0., -0. ]  # [foot, wheel1, 2, 3]
     default_dof_pos_noise_upper: [ 0., 0., 0., 0. ]

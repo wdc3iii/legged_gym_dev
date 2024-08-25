@@ -61,7 +61,7 @@ env_config:
     freq_low: 0.01
     freq_high: 2
     seed: ${seed}
-    prob_stationary: 0.0001
+    prob_stationary: 0.0005
     dN: 5
   curriculum:
     use_curriculum: True

@@ -29,14 +29,16 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 import os
-import copy
-import torch
-import numpy as np
-import random
+
 from isaacgym import gymapi
 from isaacgym import gymutil
 
 from legged_gym import LEGGED_GYM_ROOT_DIR, LEGGED_GYM_ENVS_DIR
+
+import copy
+import torch
+import numpy as np
+import random
 
 
 def generate_grid_search_configs_2d(start, end, density):
