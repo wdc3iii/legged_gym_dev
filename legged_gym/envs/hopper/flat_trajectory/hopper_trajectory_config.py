@@ -125,6 +125,7 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
         max_push_vel_xy = 1.
         randomize_rom_distance = False
         max_rom_dist = None
+        zero_rom_distance_likelihood = 0.25
 
         class rigid_shape_properties:
             randomize_restitution = False

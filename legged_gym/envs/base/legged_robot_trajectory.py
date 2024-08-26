@@ -70,7 +70,7 @@ class LeggedRobotTrajectory(BaseTask):
         self._parse_cfg(self.cfg)
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
         self.max_rom_distance = torch.tensor(self.nominal_max_rom_distance, device=self.device)
-
+        self.zero_rom_dist_llh = self.nominal_zero_rom_distance_likelihood
         if not self.headless:
             self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
         self._init_rom()
@@ -246,7 +246,8 @@ class LeggedRobotTrajectory(BaseTask):
     def reset_traj(self, env_ids):
         p_zx = self.rom.proj_z(self.root_states)
         if self.cfg.domain_rand.randomize_rom_distance:
-            p_zx += torch_rand_vec_float(-self.max_rom_distance, self.max_rom_distance, p_zx.shape, device=self.device)
+            mask = torch.rand(self.num_envs) > self.zero_rom_dist_llh
+            p_zx[mask] += torch_rand_vec_float(-self.max_rom_distance, self.max_rom_distance, p_zx[mask].shape, device=self.device)
         self.traj_gen.reset_idx(env_ids, p_zx)
 
     def compute_reward(self):
@@ -525,6 +526,8 @@ class LeggedRobotTrajectory(BaseTask):
         self.push_time = self.nominal_push_time * self.cfg.curriculum.push.time[ind]
         # Rom distance
         self.max_rom_distance = torch.tensor(self.nominal_max_rom_distance, device=self.device) * self.cfg.curriculum.max_rom_distance[ind]
+        self.zero_rom_distance_likelihood = torch.tensor(self.nominal_zero_rom_distance_likelihood, device=self.device) * self.cfg.curriculum.zero_rom_distance_likelihood[ind]
+
         # RoM bounds
         self.rom.z_max = torch.tensor([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_max], device=self.device)
         self.rom.z_min = torch.tensor([z * self.cfg.curriculum.rom.z[ind] for z in self.nominal_rom_z_min], device=self.device)
@@ -880,6 +883,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.nominal_rom_v_max = self.cfg.rom.v_max
         self.nominal_rom_v_min = self.cfg.rom.v_min
         self.nominal_max_rom_distance = self.cfg.domain_rand.max_rom_dist
+        self.nominal_zero_rom_distance_likelihood = self.cfg.domain_rand.zero_rom_distance_likelihood
 
         # nominal values (curriculum)
         self.curriculum_state = 0
