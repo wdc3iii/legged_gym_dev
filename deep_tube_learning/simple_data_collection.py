@@ -11,7 +11,7 @@ from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, TrajectoryGenerator
 import torch
 
 
-def main(num_robots, epochs, max_rom_dist=1.):
+def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
     dt = 0.1
     ep_length = 200
     Kp = 10
@@ -65,8 +65,11 @@ def main(num_robots, epochs, max_rom_dist=1.):
         done = torch.zeros((num_robots, int(ep_length)), dtype=torch.bool)
 
         # Initialization
+        # TODO: check initialization
         z0 = z[:, 0, :]
-        z0 += torch_rand_vec_float(-max_rom_distance, max_rom_distance, z0.shape, device)
+        mask = torch.rand(num_robots) > zero_err_prob
+        z0[mask, :] += torch_rand_vec_float(-max_rom_distance, max_rom_distance, z0[mask, :].shape, device)
+
         traj_gen.reset(z0)
 
         # Loop over time steps
