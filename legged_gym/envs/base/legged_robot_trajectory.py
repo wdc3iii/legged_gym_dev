@@ -244,6 +244,7 @@ class LeggedRobotTrajectory(BaseTask):
             self.extras["time_outs"] = self.time_out_buf
 
     def reset_traj(self, env_ids):
+        # TODO: check if zero error is working properly
         p_zx = self.rom.proj_z(self.root_states)
         if self.cfg.domain_rand.randomize_rom_distance:
             mask = torch.rand(self.num_envs) > self.zero_rom_dist_llh
