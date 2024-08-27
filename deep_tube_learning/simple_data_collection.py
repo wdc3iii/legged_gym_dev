@@ -13,7 +13,7 @@ import torch
 
 def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
     dt = 0.1
-    ep_length = 200
+    ep_length = 100
     Kp = 10
     Kd = 10
     save_debugging_data = False
@@ -65,7 +65,6 @@ def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
         done = torch.zeros((num_robots, int(ep_length)), dtype=torch.bool)
 
         # Initialization
-        # TODO: check initialization
         z0 = z[:, 0, :]
         mask = torch.rand(num_robots) > zero_err_prob
         z0[mask, :] += torch_rand_vec_float(-max_rom_distance, max_rom_distance, z0[mask, :].shape, device)
@@ -99,14 +98,14 @@ def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
         plt.axis("square")
         plt.show()
 
-        fig, axs = plt.subplots(2, 1)
-        single_int.plot_ts(axs, z[0, :, :], v[0, :, :])
-        single_int.plot_ts(axs, x[0, :, :2], x[0, :-1, 2:])
-        plt.show()
-
-        fig, axs = plt.subplots(2, 1)
-        double_int.plot_ts(axs, x[0, :, :], u[0, :, :])
-        plt.show()
+        # fig, axs = plt.subplots(2, 1)
+        # single_int.plot_ts(axs, z[0, :, :], v[0, :, :])
+        # single_int.plot_ts(axs, x[0, :, :2], x[0, :-1, 2:])
+        # plt.show()
+        #
+        # fig, axs = plt.subplots(2, 1)
+        # double_int.plot_ts(axs, x[0, :, :], u[0, :, :])
+        # plt.show()
 
         # Log Data
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
@@ -133,4 +132,4 @@ def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
 
 
 if __name__ == "__main__":
-    main(4096, 10)
+    main(4096, 50)

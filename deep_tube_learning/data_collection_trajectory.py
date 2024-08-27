@@ -95,42 +95,40 @@ def data_creation_main(cfg):
     track_yaw = cfg.track_yaw
     for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
         # Data structures
-        x = torch.zeros((int(env.max_episode_length) + 1, num_robots, x_n), device=env.device)  # Epochs, steps, states
-        z = torch.zeros((int(env.max_episode_length) + 1, num_robots, rom_n), device=env.device)
-        pz_x = torch.zeros((int(env.max_episode_length) + 1, num_robots, rom_n), device=env.device)
-        v = torch.zeros((int(env.max_episode_length), num_robots, rom_m), device=env.device)
-        done = torch.zeros((int(env.max_episode_length), num_robots), dtype=torch.bool, device=env.device)
-        des_pose_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
-        des_vel_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
-        des_vel_local_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
-        robot_pose_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
-        robot_vel_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
-        err_global_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
-        err_local_all = torch.zeros((int(env.max_episode_length), num_robots, 3), device=env.device)
-
-        env.reset()
+        x = torch.zeros((num_robots, int(env.max_episode_length) + 1, x_n), device=env.device)  # Epochs, steps, states
+        z = torch.zeros((num_robots, int(env.max_episode_length) + 1, rom_n), device=env.device)
+        pz_x = torch.zeros((num_robots, int(env.max_episode_length) + 1, rom_n), device=env.device)
+        v = torch.zeros((num_robots, int(env.max_episode_length), rom_m), device=env.device)
+        done = torch.zeros((num_robots, int(env.max_episode_length)), dtype=torch.bool, device=env.device)
+        des_pose_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
+        des_vel_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
+        des_vel_local_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
+        robot_pose_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
+        robot_vel_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
+        err_global_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
+        err_local_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
 
         # Initialization
+        env.reset()
         base = torch.clone(env.root_states.detach())
-        x[0, :, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
-        z[0, :, :] = env.rom.proj_z(base)
-        pz_x[0, :, :] = env.rom.proj_z(base)
+        x[:, 0, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
+        pz_x[:, 0, :] = env.rom.proj_z(base)
 
-        env.traj_gen.reset(env.rom.proj_z(env.root_states))
+        z[:, 0, :] = env.traj_gen.trajectory[:, 0, :]
 
         # Loop over time steps
         for t in range(int(env.max_episode_length)):
             # Get desired pose and velocity
 
-            des_pose, des_vel = env.rom.des_pose_vel(z[t, :, :], env.traj_gen.v)
-            des_pose_all[t, :, :] = torch.clone(des_pose.detach())
-            des_vel_all[t, :, :] = torch.clone(des_vel.detach())
+            des_pose, des_vel = env.rom.des_pose_vel(z[:, t, :], env.traj_gen.v)
+            des_pose_all[:, t, :] = torch.clone(des_pose.detach())
+            des_vel_all[:, t, :] = torch.clone(des_vel.detach())
 
             # Get robot pose
             y = torch.from_numpy(quat2yaw(base[:, 3:7].cpu().numpy())).float().to(env.device)
             robot_pose = torch.hstack((base[:, :2], y[:, None]))
-            robot_pose_all[t, :, :] = torch.clone(robot_pose.detach())
-            robot_vel_all[t, :, :] = torch.hstack((base[:, 7:9], base[:, -1][:, None]))
+            robot_pose_all[:, t, :] = torch.clone(robot_pose.detach())
+            robot_vel_all[:, t, :] = torch.hstack((base[:, 7:9], base[:, -1][:, None]))
             y2r = torch.from_numpy(yaw2rot(robot_pose[:, 2].cpu().numpy())).float().to(env.device)
 
             # Compute pose error
@@ -139,10 +137,10 @@ def data_creation_main(cfg):
                 err_global[:, 2] = wrap_angles(err_global[:, 2])
             else:
                 err_global[:, 2] = 0
-            err_global_all[t, :, :] = torch.clone(err_global.detach())
+            err_global_all[:, t, :] = torch.clone(err_global.detach())
             err_local = torch.clone(err_global.detach())
             err_local[:, :2] = torch.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
-            err_local_all[t, :, :] = torch.clone(err_local.detach())
+            err_local_all[:, t, :] = torch.clone(err_local.detach())
 
             # Step environment
             # have to modify obs if using Raibert Heuristic
@@ -165,19 +163,19 @@ def data_creation_main(cfg):
             base = torch.clone(env.root_states.detach())
             d = torch.clone(dones.detach())
             proj = env.rom.proj_z(base)
-            done[t, :] = d  # Termination should not be used for tube training
-            v[t, :, :] = env.traj_gen.v
-            x[t + 1, :, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
-            z[t + 1, :, :] = env.traj_gen.trajectory[:, 0, :]
-            z[t + 1, done[t, :], :] = proj[done[t, :], :]  # Terminated envs reset to zero tracking error
-            pz_x[t + 1, :, :] = env.rom.proj_z(base)
+            done[:, t] = d  # Termination should not be used for tube training
+            v[:, t, :] = env.traj_gen.v
+            x[:, t + 1, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
+            z[:, t + 1, :] = env.traj_gen.trajectory[:, 0, :]
+            z[done[:, t], t + 1, :] = proj[done[:, t], :]  # Terminated envs reset to zero tracking error
+            pz_x[:, t + 1, :] = env.rom.proj_z(base)
 
         # Plot the trajectories after the loop
         fig, ax = plt.subplots(1, 2)
-        ax[0].plot(z[:, 0, :].cpu().numpy())
-        ax[0].plot(pz_x[:, 0, :].cpu().numpy())
-        env.rom.plot_spacial(ax[1], z[:, 0, :].cpu().numpy(), '.-k')
-        env.rom.plot_spacial(ax[1], pz_x[:, 0, :].cpu().numpy())
+        ax[0].plot(z[0, :, :].cpu().numpy())
+        ax[0].plot(pz_x[0, :, :].cpu().numpy())
+        env.rom.plot_spacial(ax[1], z[0, :, :].cpu().numpy(), '.-k')
+        env.rom.plot_spacial(ax[1], pz_x[0, :, :].cpu().numpy())
         plt.show()
         # fig, ax = plt.subplots(1, 2)
         # ax[0].plot(z[:, 1, :].cpu().numpy())

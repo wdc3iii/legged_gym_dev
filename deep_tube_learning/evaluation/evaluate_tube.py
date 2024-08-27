@@ -1,4 +1,4 @@
-from deep_tube_learning.data_collection import data_creation_main
+from deep_tube_learning.data_collection_trajectory import data_creation_main
 
 import torch
 import wandb
@@ -32,9 +32,6 @@ def eval_model():
     n_robots = 1
     data_cfg.epochs = 1
     data_cfg.num_robots = n_robots
-    data_cfg.sample_hold_dt.n_robots = n_robots
-    data_cfg.reduced_order_model.n_robots = n_robots
-    data_cfg.reduced_order_model.seed = data_cfg.seed
     data_cfg.upload_to_wandb = False
     data_cfg.save_debugging_data = True
 

@@ -1,24 +1,18 @@
+from deep_tube_learning.data_collection_trajectory import data_creation_main
+
+import torch
 import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 from hydra.utils import instantiate
-from deep_tube_learning.utils import wandb_model_load
-from deep_tube_learning.simple_data_collection import main
 from deep_tube_learning.datasets import ScalarHorizonTubeDataset
+from deep_tube_learning.utils import wandb_model_load, wandb_load_artifact
 from trajopt.rom_dynamics import SingleInt2D
-import torch
 
 
 def eval_model():
     # Experiment whose model to evaluate
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l0oh8o1b"  # 32x32
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"   # 128x128
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"   # 256x256
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"    # 128x128 Softplus
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 Softplus b=5
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"  # Updated 128x128 Softplus b=5
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/sani8n03"  # 128x128 S+b5, some zero error training data
-
+    exp_name = f"coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vbnmpmfa"
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
@@ -26,9 +20,16 @@ def eval_model():
     H_fwd = model_cfg.dataset.H_fwd
     H_rev = model_cfg.dataset.H_rev
 
-    n_robots = 2
-    epoch_data = main(n_robots, 1, max_rom_dist=0.)
+    data_name = f"coleonguard-Georgia Institute of Technology/RoM_Tracking_Data/{model_cfg.dataset.wandb_experiment}:latest"
+    data_cfg, _ = wandb_load_artifact(api, data_name)
+    data_cfg.seed = 0
 
+    n_robots = 10
+    data_cfg.epochs = 1
+    data_cfg.upload_to_wandb = False
+    data_cfg.save_debugging_data = False
+
+    epoch_data = data_creation_main(data_cfg)
     z = epoch_data['z'][:, :-1, :]
     pz_x = epoch_data['pz_x'][:, :-1, :]
     v = epoch_data['v']
@@ -58,16 +59,29 @@ def eval_model():
 
     print(f"alpha: {model_cfg.loss.alpha}")
 
+    rom_cfg = data_cfg.env_config.rom
+    model_class = globals()[rom_cfg.cls]
+    rom = model_class(
+        dt=0.02,
+        z_min=torch.tensor(rom_cfg.z_min, device=device),
+        z_max=torch.tensor(rom_cfg.z_max, device=device),
+        v_min=torch.tensor(rom_cfg.v_min, device=device),
+        v_max=torch.tensor(rom_cfg.v_max, device=device),
+        n_robots=1,
+        backend='torch',
+        device=device
+    )
+
+
     with torch.no_grad():
         succ_rate_single_total, succ_rate_total = 0, 0
         for ii in range(n_robots):
-
             data, tmp_target = dataset._get_item_helper(ii, zero)
             fw = model(data.to(device)).cpu().detach().numpy()
             fw = np.concatenate([w[ii, [H_rev]], fw], axis=-1)
 
             plt.figure()
-            err = np.squeeze(fw) - w[ii, H_rev:H_rev+H_fwd+1]
+            err = np.squeeze(fw) - w[ii, H_rev:H_rev + H_fwd + 1]
             succ_rate = np.mean(err >= 0)
             succ_rate_total += succ_rate
             print(succ_rate)
@@ -79,17 +93,16 @@ def eval_model():
 
             plt.figure()
             plt.plot(fw, 'k', label='Tube Error')
-            plt.plot(w[ii, H_rev:H_rev+H_fwd+1], 'b', label='Normed Error')
+            plt.plot(w[ii, H_rev:H_rev + H_fwd + 1], 'b', label='Normed Error')
             plt.axhline(0, color='black', linewidth=0.5)
             plt.title("OneShot Tube Bounds")
             plt.legend()
-            plt.savefig('data/OneShotTubeBound.png')
             plt.show()
 
             fig, ax = plt.subplots()
-            SingleInt2D.plot_tube(ax, z[ii, H_rev:H_rev+H_fwd+1], fw[:, None])
-            SingleInt2D.plot_spacial(ax, z[ii, H_rev:H_rev+H_fwd+1], 'k.-')
-            SingleInt2D.plot_spacial(ax, pz_x[ii, H_rev:H_rev+H_fwd+1], 'b.-')
+            rom.plot_tube(ax, z[ii, H_rev:H_rev + H_fwd + 1], fw[:, None])
+            rom.plot_spacial(ax, z[ii, H_rev:H_rev + H_fwd + 1], 'k.-')
+            rom.plot_spacial(ax, pz_x[ii, H_rev:H_rev + H_fwd + 1], 'b.-')
             plt.axis("square")
             plt.title("OneShot Tube")
             plt.show()

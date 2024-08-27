@@ -116,7 +116,7 @@ env_config:
     max_push_vel: [0.25, 0.25, 0.25, 0.75, 0.75, 0.75]  # [vx, vy, vz, wx, wy, wz]
     time_between_pushes: [2., 10.] # min max time (sec) between pushes of the robot. randomly selected in this range
     randomize_rom_distance: True
-    max_rom_distance:
+    max_rom_dist:
     zero_rom_distance_likelihood: 0.25
     rigid_shape_properties:
       randomize_restitution: True

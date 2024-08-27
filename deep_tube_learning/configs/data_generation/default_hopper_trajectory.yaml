@@ -28,8 +28,8 @@ controller: null
 
 env_config:
   env:
-    num_envs: 4096
-    episode_length_s: 20
+    num_envs: 8192
+    episode_length_s: 10
 #  terrain:
 #    curriculum: False
   noise:
@@ -39,8 +39,8 @@ env_config:
     randomize_base_mass: False
     randomize_inv_base_mass: False
     push_robots: False
-    randomize_rom_distance: False
-    max_rom_distance: [0.0, 0.0]
+    randomize_rom_distance: True
+    max_rom_dist: [0.1, 0.1]
     rigid_shape_properties:
       randomize_restitution: False
       randomize_compliance: False

@@ -5,6 +5,7 @@ defaults:
 curriculum: 7
 dataset_name: "hopper_trajectory_single_int"
 wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/fcoard3m"
+upload_to_wandb: True
 
 vel_min: -0.2
 vel_max: 0.2

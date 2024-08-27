@@ -7,7 +7,7 @@ experiment_name: "deep_tube_learning"
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-  wandb_experiment: "simple_t6bm3041"
+  wandb_experiment: "hopper_trajectory_single_int_3kbn4ouh"
   H_fwd: 50
   H_rev: 10
 loss:
@@ -15,6 +15,8 @@ loss:
   alpha: 0.9
 
 lr_scheduler:
+  _target_: torch.optim.lr_scheduler.StepLR
+  _partial_: true
   step_size: 1000
   gamma: 0.75
 
