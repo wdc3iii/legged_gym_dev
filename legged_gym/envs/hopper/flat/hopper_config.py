@@ -76,7 +76,6 @@ class HopperRoughCfg( LeggedRobotCfg ):
         spring_stiffness = 7000
         spring_damping = 4
 
-        # TODO: actuator frame correct on hardware?
         rot_actuator = [
             [-0.8165, 0.2511, 0.2511],
             [-0, -0.7643, 0.7643],

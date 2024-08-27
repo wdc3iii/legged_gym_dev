@@ -48,7 +48,6 @@ def add_obs(k, z, w, p_obs_c, p_obs_r, Nobs, g, g_lb, g_ub):
     return g, g_lb, g_ub
 
 
-# TODO: tube solver
 def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=None, device='cpu'):
     if Qf is None:
         Qf = Q

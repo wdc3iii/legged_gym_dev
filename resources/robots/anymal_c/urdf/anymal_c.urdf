@@ -338,7 +338,6 @@
     </joint>
     <!-- Hatch cover link -->
     <link name="docking_hatch_cover">
-        <!--  TODO(fgiraldez): add visual    -->
         <inertial>
             <origin rpy="0 0 0" xyz="-0.003 0.0 0.005"/>
             <mass value="0.065"/>

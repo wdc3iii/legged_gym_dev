@@ -78,7 +78,6 @@ class CasadiRomDynamics(ABC):
         :param c: color/line type
         """
         for i in range(xt.shape[0]):
-            # TODO: vector tube plotting
             if not np.isnan(wt[i]):
                 xc = xt[i, 0]
                 yc = xt[i, 1]

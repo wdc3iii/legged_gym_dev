@@ -44,7 +44,6 @@ def add_obs(k, z, w, p_obs_c, p_obs_r, Nobs, g, g_lb, g_ub):
     return g, g_lb, g_ub
 
 
-# TODO: tube solver
 def trajopt_tube_solver(pm, tube_oneshot_model, w_max, N, Q, Qw, R, Nobs, Qf=None, device='cpu'):
     if Qf is None:
         Qf = Q
@@ -279,7 +278,6 @@ def generate_trajectory(plan_model, z0, zf, tube_oneshot_model, w_max, N, Q, Qw,
         v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, plan_model.m)))
         w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
 
-        # TODO: Debug warm start
         g = np.array(solver["solver"].get_function("nlp_g")(sol['x'], params)).T
         ubg = np.array(solver["ubg"]).T
         lbg = np.array(solver["lbg"]).T

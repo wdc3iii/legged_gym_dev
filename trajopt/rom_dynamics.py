@@ -152,7 +152,6 @@ class RomDynamics(ABC):
         :param c: color/line type
         """
         for i in range(xt.shape[0]):
-            # TODO: vector tube plotting
             if wt.shape[1] == 1:
                 xc = xt[i, 0]
                 yc = xt[i, 1]
