@@ -1,5 +1,4 @@
 import isaacgym
-import torch
 
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
@@ -13,12 +12,13 @@ from tqdm import tqdm
 from pathlib import Path
 from hydra import initialize_config_dir, compose
 from hydra.core.global_hydra import GlobalHydra
+from hydra.utils import instantiate
 from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
 from isaacgym.torch_utils import *
-from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_hydra, quat2yaw, yaw2rot, wrap_angles,
-                                      wandb_model_load, update_hydra_cfg)
-from deep_tube_learning.raibert import RaibertHeuristic
+from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_hydra, wandb_model_load, update_hydra_cfg)
+from deep_tube_learning.controllers import RaibertHeuristic
+from deep_tube_learning.custom_sim import CustomSim
 from trajopt.rom_dynamics import SingleInt2D
 
 
@@ -32,27 +32,7 @@ def get_state(base, joint_pos, joint_vel):
     version_base="1.2",
 )
 def data_creation_main(cfg):
-
-    # Construct a dynamic experiment name based on overridden parameters
-    if "hydra" in cfg and "sweep" in cfg.hydra:
-        experiment_name = f"{cfg.dataset_name}_epochs={cfg.epochs}_track_yaw={cfg.track_yaw}"
-        # replace the above with the actual attributes being changed
-    else:
-        experiment_name = cfg.dataset_name
-
-    if cfg.controller.type == 'rl':
-        exp_name = cfg.wandb_experiment
-        model_name = f'{exp_name}_model:best{cfg.curriculum}'
-        api = wandb.Api()
-        rl_cfg, state_dict = wandb_model_load(api, model_name)
-    elif cfg.controller.type == 'rh':
-        cfg_dir = str(Path(__file__).parent / "configs" / "rl")
-        GlobalHydra.instance().clear()
-        with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
-            rl_cfg = compose(config_name=cfg.controller.config_name)
-    else:
-        raise ValueError(f"Controller type {cfg.controller.type} not implemented.")
-    rl_cfg = update_hydra_cfg(cfg, rl_cfg)
+    experiment_name = cfg.dataset_name
 
     # Send config to wandb
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -69,30 +49,55 @@ def data_creation_main(cfg):
         run_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
     data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{cfg.dataset_name}_{run_id}")
     os.makedirs(data_path, exist_ok=True)
+    with open(f"{data_path}/config.pickle", "wb") as f:
+        pickle.dump(cfg_dict, f)
 
-    args = get_args()
-    args = update_args_from_hydra(rl_cfg, args)
-    env_cfg, train_cfg = task_registry.get_cfgs(rl_cfg.task)
-    env_cfg, train_cfg = update_cfgs_from_hydra(rl_cfg, env_cfg, train_cfg)
+    # Handle IsaacGym vs. Custom simulators
+    if cfg.env_config.env.type == 'isaacgym':
+        # Handle RL vs RH configs
+        if cfg.controller.type == 'rl':
+            exp_name = cfg.wandb_experiment
+            model_name = f'{exp_name}_model:best{cfg.curriculum}'
+            api = wandb.Api()
+            rl_cfg, state_dict = wandb_model_load(api, model_name)
+        elif cfg.controller.type == 'rh':
+            cfg_dir = str(Path(__file__).parent / "configs" / "rl")
+            GlobalHydra.instance().clear()
+            with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
+                rl_cfg = compose(config_name=cfg.controller.config_name)
+        else:
+            raise ValueError(f"Controller type {cfg.controller.type} not implemented.")
+        rl_cfg = update_hydra_cfg(cfg, rl_cfg)
 
-    env, env_cfg = task_registry.make_env(name=rl_cfg.task, args=args, env_cfg=env_cfg)
+        args = get_args()
+        args = update_args_from_hydra(rl_cfg, args)
+        env_cfg, train_cfg = task_registry.get_cfgs(rl_cfg.task)
+        env_cfg, train_cfg = update_cfgs_from_hydra(rl_cfg, env_cfg, train_cfg)
 
-    train_cfg.runner.resume = True
-    ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
-    if cfg.controller.type == 'rl':
-        policy = ppo_runner.get_inference_policy(device=env.device)
-    elif cfg.controller.type == 'rh':
-        raibert = RaibertHeuristic(cfg)
-        policy = raibert.get_inference_policy(device=env.device)
+        env, env_cfg = task_registry.make_env(name=rl_cfg.task, args=args, env_cfg=env_cfg)
+
+        train_cfg.runner.resume = True
+        ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
+        # Generate policy
+        if cfg.controller.type == 'rl':
+            policy = ppo_runner.get_inference_policy(device=env.device)
+        elif cfg.controller.type == 'rh':
+            raibert = RaibertHeuristic(cfg)
+            policy = raibert.get_inference_policy(device=env.device)
+    elif cfg.env_config.env.type == 'custom':
+        env_cfg = cfg.env_config
+        env = CustomSim(env_cfg)
+        policy = instantiate(cfg.controller)(state_dependent_input_bound=env.model.clip_v_z)
+    else:
+        raise ValueError(f"Environment type {cfg.env_config.type} not implemented.")
 
     obs = env.get_observations()
-    x_n = env.dof_pos.shape[1] + env.dof_vel.shape[1] + env.root_states.shape[1]
+    x_n = env.get_state().shape[1]
 
     # Loop over epochs
     num_robots = env_cfg.env.num_envs
     rom_n = env.rom.n
     rom_m = env.rom.m
-    track_yaw = cfg.track_yaw
     max_rom_ep_length = int(cfg.env_config.env.episode_length_s / env.rom.dt)
     for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
         # Data structures
@@ -101,53 +106,23 @@ def data_creation_main(cfg):
         pz_x = torch.zeros((num_robots, max_rom_ep_length + 1, rom_n), device=env.device)
         v = torch.zeros((num_robots, max_rom_ep_length, rom_m), device=env.device)
         done = torch.zeros((num_robots, max_rom_ep_length), dtype=torch.bool, device=env.device)
-        des_pose_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        des_vel_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        des_vel_local_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        robot_pose_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        robot_vel_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        err_global_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        err_local_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
 
         # Initialization
         env.reset()
         base = torch.clone(env.root_states.detach())
-        x[:, 0, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
+        x[:, 0, :] = env.get_state()
         pz_x[:, 0, :] = env.rom.proj_z(base)
 
         z[:, 0, :] = env.traj_gen.trajectory[:, 0, :]
 
         # Loop over time steps
         for t in range(max_rom_ep_length):
-            # Get desired pose and velocity
-
-            des_pose, des_vel = env.rom.des_pose_vel(z[:, t, :], env.traj_gen.v)
-            des_pose_all[:, t, :] = torch.clone(des_pose.detach())
-            des_vel_all[:, t, :] = torch.clone(des_vel.detach())
-
-            # Get robot pose
-            y = torch.from_numpy(quat2yaw(base[:, 3:7].cpu().numpy())).float().to(env.device)
-            robot_pose = torch.hstack((base[:, :2], y[:, None]))
-            robot_pose_all[:, t, :] = torch.clone(robot_pose.detach())
-            robot_vel_all[:, t, :] = torch.hstack((base[:, 7:9], base[:, -1][:, None]))
-            y2r = torch.from_numpy(yaw2rot(robot_pose[:, 2].cpu().numpy())).float().to(env.device)
-
-            # Compute pose error
-            err_global = des_pose - robot_pose
-            if track_yaw:
-                err_global[:, 2] = wrap_angles(err_global[:, 2])
-            else:
-                err_global[:, 2] = 0
-            err_global_all[:, t, :] = torch.clone(err_global.detach())
-            err_local = torch.clone(err_global.detach())
-            err_local[:, :2] = torch.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
-            err_local_all[:, t, :] = torch.clone(err_local.detach())
-
             # Step environment until rom steps
             k = torch.clone(env.traj_gen.k.detach())
             while torch.any(env.traj_gen.k == k):
                 # have to modify obs if using Raibert Heuristic
-                if cfg.controller.type == 'rh':
+                # TODO: reimplement raibert heuristic to properly grab from observation
+                if 'type' in cfg.controller.keys() and cfg.controller.type == 'rh':
                     if isinstance(env.traj_gen.rom, SingleInt2D):
                         current_velocity = env.root_states[:, 7:9]
                         current_position = env.root_states[:, :2]
@@ -168,7 +143,7 @@ def data_creation_main(cfg):
             proj = env.rom.proj_z(base)
             done[:, t] = d  # Termination should not be used for tube training
             v[:, t, :] = env.traj_gen.v
-            x[:, t + 1, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
+            x[:, t + 1, :] = env.get_state()
             z[:, t + 1, :] = env.traj_gen.get_trajectory()[:, 0, :]
             z[done[:, t], t + 1, :] = proj[done[:, t], :]  # Terminated envs reset to zero tracking error
             pz_x[:, t + 1, :] = proj
@@ -184,7 +159,6 @@ def data_creation_main(cfg):
         env.rom.plot_spacial(ax[1], pz_x[0, :, :].cpu().numpy())
         plt.show()
 
-
         # Log Data
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
             if cfg.save_debugging_data:
@@ -193,14 +167,7 @@ def data_creation_main(cfg):
                     'z': z.cpu().numpy(),
                     'v': v.cpu().numpy(),
                     'pz_x': pz_x.cpu().numpy(),
-                    'done': done.cpu().numpy(),
-                    'des_pose': des_pose_all.cpu().numpy(),
-                    'des_vel': des_vel_all.cpu().numpy(),
-                    'des_vel_local': des_vel_local_all.cpu().numpy(),
-                    'robot_pose': robot_pose_all.cpu().numpy(),
-                    'robot_vel': robot_vel_all.cpu().numpy(),
-                    'err_local': err_local_all.cpu().numpy(),
-                    'err_global': err_global_all.cpu().numpy()
+                    'done': done.cpu().numpy()
                 }
             else:
                 epoch_data = {
@@ -225,16 +192,4 @@ def data_creation_main(cfg):
 
 
 if __name__ == "__main__":
-    # # Define parameter sweeps
-    # overrides = [
-    #     "env_config/domain_rand/push_robots=True",
-    #     "env_config/domain_rand/push_robots=False",
-    #     "env_config/noise/add_noise=True",
-    #     "env_config/noise/add_noise=False"
-    # ]
-    #
-    # # Run multirun programmatically
-    # with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "data_generation")):
-    #     hydra.core.global_hydra.GlobalHydra.instance().clear()
-    #     hydra.multirun.main(overrides)
     data_creation_main()

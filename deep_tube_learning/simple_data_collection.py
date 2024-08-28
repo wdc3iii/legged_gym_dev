@@ -9,9 +9,22 @@ import matplotlib.pyplot as plt
 from deep_tube_learning.utils import UniformWeightSamplerNoRamp, UniformSampleHoldDT, torch_rand_vec_float
 from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, TrajectoryGenerator
 import torch
+import hydra
+from omegaconf import OmegaConf
 
 
-def main(num_robots, epochs, max_rom_dist=0.5, zero_err_prob=0.25):
+
+@hydra.main(
+    config_path=str(Path(__file__).parent / "configs" / "data_generation"),
+    config_name="default_trajectory",
+    version_base="1.2",
+)
+def data_creation_simple_main(cfg):
+
+    num_robots = cfg.num_robots
+    epochs = cfg.epochs
+    max_rom_dist = cfg.max_rom_dist
+    zero_err_prob = cfg.zero_err_prob
     dt = 0.1
     ep_length = 100
     Kp = 10
@@ -30,12 +43,9 @@ def main(num_robots, epochs, max_rom_dist=0.5, zero_err_prob=0.25):
     double_int = DoubleInt2D(dt, -double_z_max, double_z_max, -double_v_max, double_v_max, n_robots=num_robots, device=device, backend='torch')
 
     # Send config to wandb
-    cfg_dict = pd.json_normalize({
-        "dt": dt, "ep_length": 100, "Kp": 10, "Kd": 10, "save_debugging_data": save_debugging_data, "upload_to_wandb": upload_to_wandb,
-        "v_max": list(single_v_max), "z_max": list(single_z_max)
-
-    }, sep="/").to_dict(orient="records")[0]
-    if upload_to_wandb:
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
+    if cfg.upload_to_wandb:
         wandb.init(project="RoM_Tracking_Data",
                    entity="coleonguard-Georgia Institute of Technology",
                    name="simple",  # Use the dynamic experiment name
@@ -128,9 +138,18 @@ def main(num_robots, epochs, max_rom_dist=0.5, zero_err_prob=0.25):
                 }
             pickle.dump(epoch_data, f)
 
+    if cfg.upload_to_wandb:
+        artifact = wandb.Artifact(
+            type="rom_tracking_data",
+            name=f"{cfg.dataset_name}_{wandb.run.id}"
+        )
+        artifact.add_dir(str(data_path))
+        wandb.run.log_artifact(artifact)
+        print("[INFO] Finished generating data. Waiting for wandb to finish uploading...")
+
     print(f"\nrun ID: {run_id}\ndataset name: simple\nlocal folder: simple_{run_id}")
     return epoch_data
 
 
 if __name__ == "__main__":
-    main(8192, 100)
+    data_creation_simple_main()

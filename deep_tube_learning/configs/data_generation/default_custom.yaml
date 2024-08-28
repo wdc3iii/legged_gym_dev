@@ -1,0 +1,56 @@
+seed: 0
+
+dataset_name: "custom_trajectory"
+
+epochs: 25
+headless: True
+save_debugging_data: False
+upload_to_wandb: False
+track_yaw: False
+curriculum: 0
+
+acc_max: 0.5
+acc_min: -0.5
+alpha_max: 2
+alpha_min: -2
+vel_max: 0.2
+vel_min: -0.2
+vel_par_max: 0.3
+vel_perp_max: 0.15
+vel_par_min: -0.15
+vel_perp_min: -0.15
+omega_max: 0.4
+omega_min: -0.4
+pos_max: 1e9
+pos_min: -1e9
+
+controller: null
+
+env_config:
+  env:
+    type: 'custom'
+    num_envs: 8192
+    episode_length_s: 20
+    model:
+  controller:
+  noise:
+    add_noise: False
+  rom:
+    dt: 0.1
+    cls: 'SingleInt2D'
+    z_min:
+      - ${pos_min}
+      - ${pos_min}
+    z_max:
+      - ${pos_max}
+      - ${pos_max}
+    v_min:
+      - ${vel_min}
+      - ${vel_min}
+    v_max:
+      - ${vel_max}
+      - ${vel_max}
+  domain_rand:
+  init_state:
+    default_noise_lower:
+    default__noise_upper:

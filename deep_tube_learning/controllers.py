@@ -71,3 +71,22 @@ class RaibertHeuristic:
         cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
         yaw = torch.atan2(siny_cosp, cosy_cosp)
         return yaw
+
+    @staticmethod
+    def parse_obs(obs):
+        pass
+
+
+class DoubleSingleTracking:
+
+    def __init__(self, Kp, Kd, state_dependent_input_bound):
+        self.K_p = Kp
+        self.K_d = Kd
+        self.state_dependent_input_bound = state_dependent_input_bound
+
+    def __call__(self, obs):
+        xt = obs[:, :4]
+        zt = obs[:, 4:6]
+        vt = obs[:, 6:]
+        u = self.K_p * (zt - xt[:, :2]) + self.K_d * (vt - xt[:, 2:])
+        return self.state_dependent_input_bound(xt, u)

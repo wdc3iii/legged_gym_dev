@@ -40,7 +40,7 @@ from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log
     euler_angles_to_matrix, matrix_to_quaternion
 
 from trajopt.rom_dynamics import SingleInt2D
-from deep_tube_learning.raibert import RaibertHeuristic
+from deep_tube_learning.controllers import RaibertHeuristic
 
 
 class HopperTrajectory(LeggedRobotTrajectory):
@@ -65,6 +65,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.raibert_clip_pos = cfg.rewards.raibert.clip_pos
         self.raibert_clip_vel = cfg.rewards.raibert.clip_vel
         self.raibert_clip_ang = cfg.rewards.raibert.clip_ang
+        self.use_raibert = cfg.controller.type == 'rh'
 
         self.zero_action = self.zero_action.to(self.device)
         self.foot_joint_index = torch.tensor([0])
@@ -261,9 +262,6 @@ class HopperTrajectory(LeggedRobotTrajectory):
         # Adjust trajectory positions relative to current position
         mod_traj = torch.clone(self.trajectory)
         mod_traj[:, :, :2] -= self.rom.proj_z(self.root_states)[:, None, :2]
-        #
-        # if self.base_quat[3] > 0:
-        #     print('pos')
 
         self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,
@@ -282,6 +280,9 @@ class HopperTrajectory(LeggedRobotTrajectory):
         # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
+    def get_state(self):
+        return torch.concatenate((self.root_states[:, :7], self.dof_pos, self.root_states[:, 7:], self.dof_pos), dim=1)
 
     def reset(self):
         """ Reset all robots"""

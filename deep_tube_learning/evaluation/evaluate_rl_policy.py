@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_hydra, wandb_model_load)
-from deep_tube_learning.raibert import RaibertHeuristic
+from deep_tube_learning.controllers import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
 def get_state(base, joint_pos, joint_vel):
     return torch.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), dim=1)
