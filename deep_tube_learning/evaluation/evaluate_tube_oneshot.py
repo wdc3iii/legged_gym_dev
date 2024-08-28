@@ -1,4 +1,4 @@
-from deep_tube_learning.data_collection_trajectory import data_creation_main
+from deep_tube_learning.data_collection import data_creation_main
 
 import torch
 import wandb

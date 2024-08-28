@@ -16,9 +16,8 @@ from hydra.core.global_hydra import GlobalHydra
 from omegaconf import OmegaConf
 import matplotlib.pyplot as plt
 from isaacgym.torch_utils import *
-from deep_tube_learning.utils import (update_args_from_hydra, update_cfgs_from_hydra, quat2yaw, yaw2rot, wrap_angles,
-                                      wandb_model_load, update_hydra_cfg)
-from deep_tube_learning.raibert import RaibertHeuristic
+from deep_tube_learning.utils import update_args_from_hydra, update_cfgs_from_hydra, wandb_model_load, update_hydra_cfg
+from deep_tube_learning.controllers import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
 
 
@@ -32,13 +31,7 @@ def get_state(base, joint_pos, joint_vel):
     version_base="1.2",
 )
 def data_creation_main(cfg):
-
-    # Construct a dynamic experiment name based on overridden parameters
-    if "hydra" in cfg and "sweep" in cfg.hydra:
-        experiment_name = f"{cfg.dataset_name}_epochs={cfg.epochs}_track_yaw={cfg.track_yaw}"
-        # replace the above with the actual attributes being changed
-    else:
-        experiment_name = cfg.dataset_name
+    experiment_name = cfg.dataset_name
 
     if cfg.controller.type == 'rl':
         exp_name = cfg.wandb_experiment
@@ -101,13 +94,6 @@ def data_creation_main(cfg):
         pz_x = torch.zeros((num_robots, max_rom_ep_length + 1, rom_n), device=env.device)
         v = torch.zeros((num_robots, max_rom_ep_length, rom_m), device=env.device)
         done = torch.zeros((num_robots, max_rom_ep_length), dtype=torch.bool, device=env.device)
-        des_pose_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        des_vel_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        des_vel_local_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        robot_pose_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        robot_vel_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        err_global_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
-        err_local_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
 
         # Initialization
         env.reset()
@@ -119,30 +105,6 @@ def data_creation_main(cfg):
 
         # Loop over time steps
         for t in range(max_rom_ep_length):
-            # Get desired pose and velocity
-
-            des_pose, des_vel = env.rom.des_pose_vel(z[:, t, :], env.traj_gen.v)
-            des_pose_all[:, t, :] = torch.clone(des_pose.detach())
-            des_vel_all[:, t, :] = torch.clone(des_vel.detach())
-
-            # Get robot pose
-            y = torch.from_numpy(quat2yaw(base[:, 3:7].cpu().numpy())).float().to(env.device)
-            robot_pose = torch.hstack((base[:, :2], y[:, None]))
-            robot_pose_all[:, t, :] = torch.clone(robot_pose.detach())
-            robot_vel_all[:, t, :] = torch.hstack((base[:, 7:9], base[:, -1][:, None]))
-            y2r = torch.from_numpy(yaw2rot(robot_pose[:, 2].cpu().numpy())).float().to(env.device)
-
-            # Compute pose error
-            err_global = des_pose - robot_pose
-            if track_yaw:
-                err_global[:, 2] = wrap_angles(err_global[:, 2])
-            else:
-                err_global[:, 2] = 0
-            err_global_all[:, t, :] = torch.clone(err_global.detach())
-            err_local = torch.clone(err_global.detach())
-            err_local[:, :2] = torch.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
-            err_local_all[:, t, :] = torch.clone(err_local.detach())
-
             # Step environment until rom steps
             k = torch.clone(env.traj_gen.k.detach())
             while torch.any(env.traj_gen.k == k):
@@ -193,14 +155,7 @@ def data_creation_main(cfg):
                     'z': z.cpu().numpy(),
                     'v': v.cpu().numpy(),
                     'pz_x': pz_x.cpu().numpy(),
-                    'done': done.cpu().numpy(),
-                    'des_pose': des_pose_all.cpu().numpy(),
-                    'des_vel': des_vel_all.cpu().numpy(),
-                    'des_vel_local': des_vel_local_all.cpu().numpy(),
-                    'robot_pose': robot_pose_all.cpu().numpy(),
-                    'robot_vel': robot_vel_all.cpu().numpy(),
-                    'err_local': err_local_all.cpu().numpy(),
-                    'err_global': err_global_all.cpu().numpy()
+                    'done': done.cpu().numpy()
                 }
             else:
                 epoch_data = {
@@ -225,16 +180,4 @@ def data_creation_main(cfg):
 
 
 if __name__ == "__main__":
-    # # Define parameter sweeps
-    # overrides = [
-    #     "env_config/domain_rand/push_robots=True",
-    #     "env_config/domain_rand/push_robots=False",
-    #     "env_config/noise/add_noise=True",
-    #     "env_config/noise/add_noise=False"
-    # ]
-    #
-    # # Run multirun programmatically
-    # with hydra.initialize(config_path=str(Path(__file__).parent / "configs" / "data_generation")):
-    #     hydra.core.global_hydra.GlobalHydra.instance().clear()
-    #     hydra.multirun.main(overrides)
     data_creation_main()

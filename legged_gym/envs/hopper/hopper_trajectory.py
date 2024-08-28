@@ -40,7 +40,7 @@ from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log
     euler_angles_to_matrix, matrix_to_quaternion
 
 from trajopt.rom_dynamics import SingleInt2D
-from deep_tube_learning.raibert import RaibertHeuristic
+from deep_tube_learning.controllers import RaibertHeuristic
 
 
 class HopperTrajectory(LeggedRobotTrajectory):
