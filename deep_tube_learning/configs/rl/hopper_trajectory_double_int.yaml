@@ -31,6 +31,7 @@ env_config:
     max_contact_force: 100.  # forces above this value are penalized
   rom:
     cls: 'DoubleInt2D'
+    dt: 0.1
     z_min:
       - ${pos_min}
       - ${pos_min}

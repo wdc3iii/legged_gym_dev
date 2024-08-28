@@ -12,7 +12,8 @@ from trajopt.rom_dynamics import SingleInt2D
 
 def eval_model():
     # Experiment whose model to evaluate
-    exp_name = f"coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vbnmpmfa"
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/idbt0oad"
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/isdo1nyp"
     model_name = f'{exp_name}_model:best'
 
     api = wandb.Api()
@@ -22,9 +23,10 @@ def eval_model():
 
     data_name = f"coleonguard-Georgia Institute of Technology/RoM_Tracking_Data/{model_cfg.dataset.wandb_experiment}:latest"
     data_cfg, _ = wandb_load_artifact(api, data_name)
-    data_cfg.seed = 0
+    data_cfg.seed = 1
+    data_cfg.env_config.domain_rand.max_rom_dist = [0., 0.]
 
-    n_robots = 10
+    n_robots = 2
     data_cfg.epochs = 1
     data_cfg.upload_to_wandb = False
     data_cfg.save_debugging_data = False
@@ -75,13 +77,13 @@ def eval_model():
 
     with torch.no_grad():
         succ_rate_single_total, succ_rate_total = 0, 0
-        for ii in range(n_robots):
-            data, tmp_target = dataset._get_item_helper(ii, zero)
+        for ii in range(100):
+            data, tmp_target = dataset._get_item_helper(0, zero + ii)
             fw = model(data.to(device)).cpu().detach().numpy()
-            fw = np.concatenate([w[ii, [H_rev]], fw], axis=-1)
+            fw = np.concatenate([w[0, [H_rev + ii]], fw], axis=-1)
 
             plt.figure()
-            err = np.squeeze(fw) - w[ii, H_rev:H_rev + H_fwd + 1]
+            err = np.squeeze(fw) - w[0, H_rev + ii:H_rev + H_fwd + 1 + ii]
             succ_rate = np.mean(err >= 0)
             succ_rate_total += succ_rate
             print(succ_rate)
@@ -93,16 +95,16 @@ def eval_model():
 
             plt.figure()
             plt.plot(fw, 'k', label='Tube Error')
-            plt.plot(w[ii, H_rev:H_rev + H_fwd + 1], 'b', label='Normed Error')
+            plt.plot(w[0, H_rev + ii:H_rev + H_fwd + 1 + ii], 'b', label='Normed Error')
             plt.axhline(0, color='black', linewidth=0.5)
             plt.title("OneShot Tube Bounds")
             plt.legend()
             plt.show()
 
             fig, ax = plt.subplots()
-            rom.plot_tube(ax, z[ii, H_rev:H_rev + H_fwd + 1], fw[:, None])
-            rom.plot_spacial(ax, z[ii, H_rev:H_rev + H_fwd + 1], 'k.-')
-            rom.plot_spacial(ax, pz_x[ii, H_rev:H_rev + H_fwd + 1], 'b.-')
+            rom.plot_tube(ax, z[0, H_rev + ii:H_rev + H_fwd + 1+ ii], fw[:, None])
+            rom.plot_spacial(ax, z[0, H_rev + ii:H_rev + H_fwd + 1 + ii], 'k.-')
+            rom.plot_spacial(ax, pz_x[0, H_rev + ii:H_rev + H_fwd + 1 + ii])
             plt.axis("square")
             plt.title("OneShot Tube")
             plt.show()

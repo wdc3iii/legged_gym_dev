@@ -9,14 +9,14 @@ from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 
 
 problem_dict = {
-    "gap": {"start": np.array([0, 0]), "goal": np.array([3., 3]),
-            "obs": {'c': np.array([[2, 0.], [1.5, 3]]), 'r': np.array([1., 1])},
-            "vel_max": 1, "pos_max": 10, "dt": 0.1},
-    "right": {"start": np.array([0, 0]), "goal": np.array([4, 0]),
-              "obs": {'c': np.array([[2, 2.], [1.25, -1.25]]), 'r': np.array([1., 1])},
+    "gap": {"start": np.array([0.3, 0.3]), "goal": np.array([1.5, 1.5]),
+            "obs": {'c': np.array([[1, 0.], [0.75, 1.5]]), 'r': np.array([0.5, 0.5])},
+            "vel_max": 0.2, "pos_max": 10, "dt": 0.1},
+    "right": {"start": np.array([0.5, 0]), "goal": np.array([2, 0]),
+              "obs": {'c': np.array([[1, 1.], [0.625, -0.625]]), 'r': np.array([0.5, 0.5])},
               "vel_max": 1, "pos_max": 10, "dt": 0.1},
-    "right_wide": {"start": np.array([0, 0]), "goal": np.array([4, 0]),
-                   "obs": {'c': np.array([[2, 2.], [2.5, -2.5]]), 'r': np.array([1., 1])},
+    "right_wide": {"start": np.array([0.5, 0]), "goal": np.array([2, 0]),
+                   "obs": {'c': np.array([[1, 1.], [1.25, -1.25]]), 'r': np.array([0.5, 0.5])},
                    "vel_max": 1, "pos_max": 10, "dt": 0.1}
 }
 

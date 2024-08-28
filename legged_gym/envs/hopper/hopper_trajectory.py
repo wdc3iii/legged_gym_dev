@@ -122,6 +122,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
             # prepare quantities
             self.base_quat[:] = self.root_states[:, 3:7]
+            self.prev_x = self.root_states[0, 0]
             self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
 
         self.post_physics_step()
@@ -285,9 +286,11 @@ class HopperTrajectory(LeggedRobotTrajectory):
     def reset(self):
         """ Reset all robots"""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        self.prev_x = self.root_states[0, 0]
         obs, privileged_obs, _, _, _ = self.step(self.zero_action)
         # For some reason we need an addiontional reset
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        self.prev_x = self.root_states[0, 0]
         obs, privileged_obs, _, _, _ = self.step(self.zero_action)
         return obs, privileged_obs
 
@@ -482,8 +485,8 @@ class HopperTrajectory(LeggedRobotTrajectory):
             current_velocity = quat_rotate_inverse(self.root_states[:, 3:7], self.root_states[:, 7:10])[:, :2]
             current_position = self.root_states[:, :2]
 
-            desired_position = self.traj_gen.trajectory[:, 0]
-            desired_velocity = self.traj_gen.trajectory[:, 1, :] - self.traj_gen.trajectory[:, 0, :]
+            desired_position = self.traj_gen.get_trajectory()[:, 0]
+            desired_velocity = self.traj_gen.v
 
             positional_error = desired_position - current_position
             # velocity_error = desired_velocity - current_velocity

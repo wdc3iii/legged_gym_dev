@@ -440,9 +440,10 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
 
 class TrajectoryGenerator:
 
-    def __init__(self, rom, t_sampler, weight_sampler, N=4, freq_low=0.01, freq_high=10, seed=42,
-                 backend='numpy', device='cuda', prob_stationary=.01, dN=1):
+    def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10,
+                 seed=42, backend='numpy', device='cuda', prob_stationary=.01, dN=1):
         self.rom = rom
+        self.dt_loop = dt_loop      # Rate at which env steps
         self.device = device
         if backend == 'numpy':
             self.zeros = np.zeros
@@ -486,6 +487,7 @@ class TrajectoryGenerator:
         self.weights = self.zeros((self.rom.n_robots, 4))
         self.t_final = self.zeros((self.rom.n_robots,))
         self.t = self.zeros((self.rom.n_robots,))
+        self.k = self.zeros((self.rom.n_robots,))
         self.sample_hold_input = self.zeros((self.rom.n_robots, self.rom.m))
         self.extreme_input = self.zeros((self.rom.n_robots, self.rom.m))
         self.ramp_t_start = self.zeros((self.rom.n_robots,))
@@ -499,17 +501,11 @@ class TrajectoryGenerator:
         self.freq_low = freq_low
         self.freq_high = freq_high
         self.weight_sampler = weight_sampler
-        self.trajectory = self.zeros((self.rom.n_robots, self.N * self.dN, self.rom.n))
-        self.v_trajectory = self.zeros((self.rom.n_robots, self.N * self.dN - 1, self.rom.m))
+        self.trajectory = self.zeros((self.rom.n_robots, self.N * self.dN + 1, self.rom.n))
+        self.v_trajectory = self.zeros((self.rom.n_robots, self.N * self.dN, self.rom.m))
         self.v = self.zeros((self.rom.n_robots, self.rom.m))
         self.prob_stationary = prob_stationary
         self.stationary_inds = self.zeros((self.rom.n_robots,)).bool()
-
-    def reset_inputs(self):
-        t_mask = self.ones_like(self.t_final, bool)
-        z = self.zeros((self.rom.n_robots, self.rom.n))
-        self.t_final = self.zeros((self.rom.n_robots,))
-        self.resample(t_mask, z)
 
     def resample(self, idx, z):
         if len(idx) > 0:
@@ -546,7 +542,7 @@ class TrajectoryGenerator:
         self.sin_mag[idx, :] = self.uniform(self.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx), self.rom.m))
         self.sin_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :], size=(len(idx), self.rom.m))
         self.sin_freq[idx, :] = self.uniform(self.array([self.freq_low]), self.array([self.freq_high]), size=(len(idx), self.rom.m))
-        self.sin_off[idx, :] = self.uniform(self.array([-self.pi]), self.array([-self.pi]), size=(len(idx), self.rom.m))
+        self.sin_off[idx, :] = self.uniform(self.array([-self.pi]), self.array([self.pi]), size=(len(idx), self.rom.m))
 
     def _const_input(self):
         return self.sample_hold_input
@@ -570,19 +566,15 @@ class TrajectoryGenerator:
             self.weights[:, 3][:, None] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
 
     def step(self):
-        # Get input to apply for trajectory
-        self.v = self.get_input_t(self.t, self.trajectory[:, -1, :])
-        self.v[self.stationary_inds, :] = 0
-        z_next = self.rom.f(self.trajectory[:, -1, :], self.v)
-        mask = self.stationary_inds[:, None] & self.rom.vel_inds
-        z_next[mask] = 0
-        self.trajectory[:, :-1, :] = self.trajectory[:, 1:, :].clone()
-        self.trajectory[:, -1, :] = z_next
-        self.v_trajectory[:, :-1, :] = self.v_trajectory[:, 1:, :].clone()
-        self.v_trajectory[:, -1, :] = self.v
-        self.t += self.rom.dt
+        self.step_idx(self.arange(self.rom.n_robots))
 
     def step_idx(self, idx):
+        # first, remask for envs which need a rom step
+        masked_idx = idx[self.t[idx] >= self.k[idx] * self.rom.dt - 1e-5]
+        self.step_rom_idx(masked_idx)
+        self.t[idx] += self.dt_loop
+
+    def step_rom_idx(self, idx, increment_rom_time=False):
         # Get input to apply for trajectory
         self.v = self.get_input_t(self.t, self.trajectory[:, -1, :])
         self.v[self.stationary_inds, :] = 0
@@ -593,24 +585,34 @@ class TrajectoryGenerator:
         self.trajectory[idx, -1, :] = z_next
         self.v_trajectory[idx, :-1, :] = self.v_trajectory[idx, 1:, :]
         self.v_trajectory[idx, -1, :] = self.v[idx]
-        self.t[idx] += self.rom.dt
+        self.k[idx] += 1
+        if increment_rom_time:
+            self.t[idx] += self.rom.dt
 
     def reset(self, z):
-        self.reset_idx(self.ones((self.rom.n_robots,), bool), z)
+        self.reset_idx(self.arange(self.rom.n_robots), z)
 
     def reset_idx(self, idx, z):
-        self.trajectory[idx, :, :] = self.zeros((len(idx), self.N * self.dN, self.rom.n))
-        self.v_trajectory[idx, :, :] = self.zeros((len(idx), self.N * self.dN - 1, self.rom.m))
+        self.trajectory[idx, :, :] = self.zeros((len(idx), self.N * self.dN + 1, self.rom.n))
+        self.v_trajectory[idx, :, :] = self.zeros((len(idx), self.N * self.dN, self.rom.m))
         self.trajectory[idx, -1, :] = z[idx, :]
-        self.t[idx] = 0
-        self.t_final[idx] = 0
+        self.k[idx] = -self.N * self.dN
+        self.t[idx] = self.k[idx] * self.rom.dt
+        self.t_final[idx] = self.k[idx] * self.rom.dt
         self.resample(idx, z)
 
-        for t in range(self.N * self.dN - 1):
-            self.step_idx(idx)
+        for t in range(self.N * self.dN):
+            self.step_rom_idx(idx, increment_rom_time=True)
 
     def get_trajectory(self):
-        return self.trajectory[:, ::self.dN, :]
+        traj0 = self.trajectory[:, :-1, :]
+        traj1 = self.trajectory[:, 1:, :]
+        # Interpolate time is between planning times
+        traj_interp = traj0 + (traj1 - traj0) * (self.t - (self.k - 1) * self.rom.dt)[:, None, None] / self.rom.dt
+        return traj_interp[:, ::self.dN, :]
+
+    def get_v_trajectory(self):
+        return self.v_trajectory[:, ::self.dN, :]
 
 
 class ZeroTrajectoryGenerator(TrajectoryGenerator):

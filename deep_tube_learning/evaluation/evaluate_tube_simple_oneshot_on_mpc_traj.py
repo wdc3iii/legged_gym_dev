@@ -24,7 +24,7 @@ tube_ws = 0.5
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 softplus b=5
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0ks4vit2"  # 128x128 softplus b=5
 
 Kp = 10
 Kd = 10
@@ -34,7 +34,7 @@ def eval_model():
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l0oh8o1b"  # 32x32
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"   # 128x128
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3vdx800j"   # 256x256
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"    # 128x128 Softplus b=5
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0ks4vit2"    # 128x128 Softplus b=5
     model_name = f'{exp_name}_model:best'
 
 

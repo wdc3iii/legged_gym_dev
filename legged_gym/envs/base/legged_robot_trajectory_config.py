@@ -70,6 +70,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
 
     class rom:
         cls = 'SingleInt2D'
+        dt = 0.1
         vel_max = .35
         pos_max = 1e9
         z_min = [-pos_max, -pos_max]

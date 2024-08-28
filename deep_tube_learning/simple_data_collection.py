@@ -11,7 +11,7 @@ from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, TrajectoryGenerator
 import torch
 
 
-def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
+def main(num_robots, epochs, max_rom_dist=0.5, zero_err_prob=0.25):
     dt = 0.1
     ep_length = 100
     Kp = 10
@@ -23,9 +23,9 @@ def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
     device = torch.device('cpu')
 
     single_z_max = torch.tensor([np.inf, np.inf])
-    single_v_max = torch.tensor([1., 1.])
-    double_z_max = torch.tensor([np.inf, np.inf, 2., 2.])
-    double_v_max = torch.tensor([2., 2.])
+    single_v_max = torch.tensor([0.2, 0.2])
+    double_z_max = torch.tensor([np.inf, np.inf, 0.3, 0.3])
+    double_v_max = torch.tensor([0.5, 0.5])
     single_int = SingleInt2D(dt, -single_z_max, single_z_max, -single_v_max, single_v_max, n_robots=num_robots, device=device, backend='torch')
     double_int = DoubleInt2D(dt, -double_z_max, double_z_max, -double_v_max, double_v_max, n_robots=num_robots, device=device, backend='torch')
 
@@ -53,7 +53,8 @@ def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
         weight_sampler=UniformWeightSamplerNoRamp(device='cpu'),
         rom=single_int,
         backend='torch',
-        device=device
+        device=device,
+        dt_loop=0.1
     )
 
     for epoch in tqdm(range(epochs)):
@@ -86,7 +87,7 @@ def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
             # Store
             x[:, t + 1, :] = xt_p1
             u[:, t, :] = ut
-            z[:, t + 1, :] = traj_gen.trajectory[:, 1, :]
+            z[:, t + 1, :] = traj_gen.get_trajectory()[:, 1, :]
             v[:, t, :] = vt
             pz_x[:, t + 1, :] = double_int.proj_z(xt_p1)
             traj_gen.step()
@@ -132,4 +133,4 @@ def main(num_robots, epochs, max_rom_dist=1., zero_err_prob=0.25):
 
 
 if __name__ == "__main__":
-    main(4096, 50)
+    main(8192, 100)

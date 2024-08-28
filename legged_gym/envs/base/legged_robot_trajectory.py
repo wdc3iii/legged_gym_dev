@@ -91,7 +91,7 @@ class LeggedRobotTrajectory(BaseTask):
         rom_cfg = self.cfg.rom
         model_class = globals()[rom_cfg.cls]
         self.rom = model_class(
-            dt=self.dt,
+            dt=rom_cfg.dt,
             z_min=torch.tensor(rom_cfg.z_min, device=self.device),
             z_max=torch.tensor(rom_cfg.z_max, device=self.device),
             v_min=torch.tensor(rom_cfg.v_min, device=self.device),
@@ -111,6 +111,7 @@ class LeggedRobotTrajectory(BaseTask):
             self.rom,
             t_samp,
             weight_samp,
+            dt_loop=self.dt,
             N=traj_cfg.N,
             freq_low=traj_cfg.freq_low,
             freq_high=traj_cfg.freq_high,
@@ -229,7 +230,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.feet_air_time[env_ids] = 0.
         self.episode_length_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
-        self.prev_error[env_ids] = torch.square(self.trajectory[env_ids, 0, :] - self.rom.proj_z(self.root_states)[env_ids])
+        self.prev_error[env_ids] = torch.square(self.trajectory[env_ids, 0, :] - self.rom.proj_z(torch.clone(self.root_states.detach()))[env_ids])
         # fill extras
         self.extras["episode"] = {}
         for key in self.episode_sums.keys():
@@ -242,12 +243,13 @@ class LeggedRobotTrajectory(BaseTask):
         # send timeout info to the algorithm
         if self.cfg.env.send_timeouts:
             self.extras["time_outs"] = self.time_out_buf
+        self.x_prev = self.root_states[0, 0]
 
     def reset_traj(self, env_ids):
-        p_zx = self.rom.proj_z(self.root_states)
+        p_zx = self.rom.proj_z(torch.clone(self.root_states.detach()))
         if self.cfg.domain_rand.randomize_rom_distance:
-            mask = torch.rand(self.num_envs) > self.zero_rom_dist_llh
-            p_zx[mask, :] += torch_rand_vec_float(-self.max_rom_distance, self.max_rom_distance, p_zx[mask, :].shape, device=self.device)
+            mask = torch.rand(len(env_ids)) > self.zero_rom_dist_llh
+            p_zx[env_ids[mask], :] += torch_rand_vec_float(-self.max_rom_distance, self.max_rom_distance, p_zx[env_ids[mask], :].shape, device=self.device)
         self.traj_gen.reset_idx(env_ids, p_zx)
 
     def compute_reward(self):
@@ -274,7 +276,7 @@ class LeggedRobotTrajectory(BaseTask):
         """
         # Adjust trajectory positions relative to current position
         mod_traj = torch.clone(self.trajectory)
-        mod_traj -= self.rom.proj_z(self.root_states)[:, None, :2]
+        mod_traj -= self.rom.proj_z(torch.clone(self.root_states.detach()))[:, None, :2]
         self.obs_buf = torch.cat((self.base_lin_vel * self.obs_scales.lin_vel,
                                   self.base_ang_vel * self.obs_scales.ang_vel,
                                   self.projected_gravity,
@@ -487,7 +489,7 @@ class LeggedRobotTrajectory(BaseTask):
         max_vel = self.cfg.domain_rand.max_push_vel_xy
         self.root_states[push_idx, 7:9] = torch_rand_float(-max_vel, max_vel, (torch.sum(push_idx), 2),
                                                     device=self.device)  # lin vel x/y
-        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
+        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(torch.clone(self.root_states.detach())))
 
     def _update_terrain_curriculum(self, env_ids):
         """ Implements the game-inspired curriculum.
@@ -1061,7 +1063,7 @@ class LeggedRobotTrajectory(BaseTask):
         This function is generalized to work with any type of ROM, using weights from the configuration file.
         """
         desired_state = self.trajectory[:, 0, :]
-        pz_x = self.rom.proj_z(self.root_states)
+        pz_x = self.rom.proj_z(torch.clone(self.root_states.detach()))
         tracking_error = torch.square(pz_x - desired_state)
         err = torch.inner(tracking_error, self.reward_weighting)
         return torch.exp(-err / self.tracking_sigma)

@@ -17,7 +17,7 @@ def eval_model():
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/trq7kcv2"    # 128x128 Softplus
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yasik42v"  # 128x128 Softplus b=5
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"  # Updated 128x128 Softplus b=5
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/sani8n03"  # 128x128 S+b5, some zero error training data
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/isdo1nyp"  # 128x128 S+b5, some zero error training data
 
     model_name = f'{exp_name}_model:best'
 

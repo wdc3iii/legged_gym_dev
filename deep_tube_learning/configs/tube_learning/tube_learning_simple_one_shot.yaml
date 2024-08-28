@@ -7,7 +7,7 @@ experiment_name: "deep_tube_learning"
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-  wandb_experiment: "simple_t6bm3041"
+  wandb_experiment: "simple_40nmkrkj"
   H_fwd: 50
   H_rev: 10
 loss:

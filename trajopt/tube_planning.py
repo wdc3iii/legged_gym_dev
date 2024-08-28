@@ -22,7 +22,9 @@ tube_ws = "evaluate"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"  # 128x128 softplus b=5
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0ks4vit2"  # 128x128 softplus b=5
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/idbt0oad"  # 128x128 softplus b=5 hopper
+
 
 
 def main(start, goal, obs, vel_max, pos_max, dt):

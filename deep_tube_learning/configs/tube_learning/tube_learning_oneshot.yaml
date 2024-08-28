@@ -7,9 +7,9 @@ experiment_name: "deep_tube_learning"
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-  wandb_experiment: "hopper_trajectory_single_int_3kbn4ouh"
+  wandb_experiment: "hopper_trajectory_single_int_r7v58tj0"
   H_fwd: 50
-  H_rev: 10
+  H_rev: 25
 loss:
   _target_: deep_tube_learning.losses.VectorTubeLoss
   alpha: 0.9

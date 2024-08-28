@@ -4,9 +4,9 @@ from trajopt.rom_dynamics import SingleInt2D
 from trajopt.rom_dynamics import DoubleInt2D
 import time
 
-prob_str = 'right'
+# prob_str = 'right'
 # prob_str = 'right_wide'
-# prob_str = 'gap'
+prob_str = 'gap'
 
 # warm_start = 'start'
 # warm_start = 'goal'
@@ -21,7 +21,8 @@ tube_ws = "evaluate"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/isdo1nyp"
 
 H = 75
 
@@ -44,8 +45,8 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     H_rev = 10
     w_max = 1
 
-    double_z_max = np.array([np.inf, np.inf, 2., 2.])
-    double_v_max = np.array([2., 2.])
+    double_z_max = np.array([np.inf, np.inf, 0.3, 0.3])
+    double_v_max = np.array([0.5, 0.5])
     double_int = DoubleInt2D(dt, -double_z_max, double_z_max, -double_v_max, double_v_max, n_robots=1, backend='numpy')
 
     tube_dynamics = get_tube_dynamics(tube_dyn, nn_path=nn_path)

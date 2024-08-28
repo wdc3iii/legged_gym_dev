@@ -39,6 +39,7 @@ env_config:
       neg_slope: -1
   rom:
     cls: 'SingleInt2D'
+    dt: 0.1
     z_min:
       - ${pos_min}
       - ${pos_min}

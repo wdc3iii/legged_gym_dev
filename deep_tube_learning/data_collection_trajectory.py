@@ -93,20 +93,21 @@ def data_creation_main(cfg):
     rom_n = env.rom.n
     rom_m = env.rom.m
     track_yaw = cfg.track_yaw
+    max_rom_ep_length = int(cfg.env_config.env.episode_length_s / env.rom.dt)
     for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
         # Data structures
-        x = torch.zeros((num_robots, int(env.max_episode_length) + 1, x_n), device=env.device)  # Epochs, steps, states
-        z = torch.zeros((num_robots, int(env.max_episode_length) + 1, rom_n), device=env.device)
-        pz_x = torch.zeros((num_robots, int(env.max_episode_length) + 1, rom_n), device=env.device)
-        v = torch.zeros((num_robots, int(env.max_episode_length), rom_m), device=env.device)
-        done = torch.zeros((num_robots, int(env.max_episode_length)), dtype=torch.bool, device=env.device)
-        des_pose_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
-        des_vel_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
-        des_vel_local_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
-        robot_pose_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
-        robot_vel_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
-        err_global_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
-        err_local_all = torch.zeros((num_robots, int(env.max_episode_length), 3), device=env.device)
+        x = torch.zeros((num_robots, max_rom_ep_length + 1, x_n), device=env.device)  # Epochs, steps, states
+        z = torch.zeros((num_robots, max_rom_ep_length + 1, rom_n), device=env.device)
+        pz_x = torch.zeros((num_robots, max_rom_ep_length + 1, rom_n), device=env.device)
+        v = torch.zeros((num_robots, max_rom_ep_length, rom_m), device=env.device)
+        done = torch.zeros((num_robots, max_rom_ep_length), dtype=torch.bool, device=env.device)
+        des_pose_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
+        des_vel_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
+        des_vel_local_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
+        robot_pose_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
+        robot_vel_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
+        err_global_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
+        err_local_all = torch.zeros((num_robots, max_rom_ep_length, 3), device=env.device)
 
         # Initialization
         env.reset()
@@ -117,7 +118,7 @@ def data_creation_main(cfg):
         z[:, 0, :] = env.traj_gen.trajectory[:, 0, :]
 
         # Loop over time steps
-        for t in range(int(env.max_episode_length)):
+        for t in range(max_rom_ep_length):
             # Get desired pose and velocity
 
             des_pose, des_vel = env.rom.des_pose_vel(z[:, t, :], env.traj_gen.v)
@@ -142,22 +143,24 @@ def data_creation_main(cfg):
             err_local[:, :2] = torch.squeeze(y2r @ err_global[:, :2][:, :, None])  # Place error in local frame
             err_local_all[:, t, :] = torch.clone(err_local.detach())
 
-            # Step environment
-            # have to modify obs if using Raibert Heuristic
-            if cfg.controller.type == 'rh':
-                if isinstance(env.traj_gen.rom, SingleInt2D):
-                    current_velocity = env.root_states[:, 7:9]
-                    current_position = env.root_states[:, :2]
+            # Step environment until rom steps
+            k = torch.clone(env.traj_gen.k.detach())
+            while torch.any(env.traj_gen.k == k):
+                # have to modify obs if using Raibert Heuristic
+                if cfg.controller.type == 'rh':
+                    if isinstance(env.traj_gen.rom, SingleInt2D):
+                        current_velocity = env.root_states[:, 7:9]
+                        current_position = env.root_states[:, :2]
 
-                    desired_position = env.traj_gen.trajectory[:, 0]
-                    desired_velocity = env.traj_gen.v
+                        desired_position = env.traj_gen.get_trajectory()[:, cfg.controller.N]
+                        desired_velocity = env.traj_gen.get_v_trajectory()[:, cfg.controller.N]
 
-                    positional_error = desired_position - current_position
-                    # velocity_error = desired_velocity - current_velocity
-                    quaternion = env.base_quat  # x,y,z,w
-                    obs = torch.cat((positional_error, current_velocity, desired_velocity, quaternion), dim=1)
-            actions = policy(obs.detach())
-            obs, _, _, dones, _ = env.step(actions.detach())
+                        positional_error = desired_position - current_position
+                        # velocity_error = desired_velocity - current_velocity
+                        quaternion = env.base_quat  # x,y,z,w
+                        obs = torch.cat((positional_error, current_velocity, desired_velocity, quaternion), dim=1)
+                actions = policy(obs.detach())
+                obs, _, _, dones, _ = env.step(actions.detach())
 
             # Save Data
             base = torch.clone(env.root_states.detach())
@@ -166,23 +169,22 @@ def data_creation_main(cfg):
             done[:, t] = d  # Termination should not be used for tube training
             v[:, t, :] = env.traj_gen.v
             x[:, t + 1, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
-            z[:, t + 1, :] = env.traj_gen.trajectory[:, 0, :]
+            z[:, t + 1, :] = env.traj_gen.get_trajectory()[:, 0, :]
             z[done[:, t], t + 1, :] = proj[done[:, t], :]  # Terminated envs reset to zero tracking error
-            pz_x[:, t + 1, :] = env.rom.proj_z(base)
+            pz_x[:, t + 1, :] = proj
 
         # Plot the trajectories after the loop
+        plt.figure()
+        plt.plot(v[0, :, :].cpu().numpy())
+        plt.show()
         fig, ax = plt.subplots(1, 2)
         ax[0].plot(z[0, :, :].cpu().numpy())
         ax[0].plot(pz_x[0, :, :].cpu().numpy())
         env.rom.plot_spacial(ax[1], z[0, :, :].cpu().numpy(), '.-k')
         env.rom.plot_spacial(ax[1], pz_x[0, :, :].cpu().numpy())
         plt.show()
-        # fig, ax = plt.subplots(1, 2)
-        # ax[0].plot(z[:, 1, :].cpu().numpy())
-        # ax[0].plot(pz_x[:, 1, :].cpu().numpy())
-        # env.rom.plot_spacial(ax[1], z[:, 1, :].cpu().numpy(), '.-k')
-        # env.rom.plot_spacial(ax[1], pz_x[:, 1, :].cpu().numpy())
-        # plt.show()
+
+
         # Log Data
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
             if cfg.save_debugging_data:
