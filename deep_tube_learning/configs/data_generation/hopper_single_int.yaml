@@ -19,9 +19,10 @@ controller:
   K_p: -0.1
   K_v: -0.3
   K_ff: 0.0
-  clip_value_pos: 0.4
-  clip_value_vel: 1.
-  clip_value_total: 0.2
+  clip_pos: 0.5
+  clip_vel: 1.
+  clip_vel_des: 0.2
+  clip_ang: 0.2
   N: 8
 
 env_config:

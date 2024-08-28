@@ -64,6 +64,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         self.raibert_Kff = cfg.rewards.raibert.Kff
         self.raibert_clip_pos = cfg.rewards.raibert.clip_pos
         self.raibert_clip_vel = cfg.rewards.raibert.clip_vel
+        self.raibert_clip_vel_des = cfg.rewards.raibert.clip_vel_des
         self.raibert_clip_ang = cfg.rewards.raibert.clip_ang
 
         self.zero_action = self.zero_action.to(self.device)
@@ -496,6 +497,6 @@ class HopperTrajectory(LeggedRobotTrajectory):
             raise ValueError(f"Raibert Heuristic not implemented for RoM {type(self.traj_gen.rom)}")
         rh_actions = RaibertHeuristic.raibert_policy(
             rh_obs.detach(), self.raibert_Kp, self.raibert_Kv, self.raibert_Kff,
-            self.raibert_clip_pos, self.raibert_clip_vel, self.raibert_clip_ang
+            self.raibert_clip_pos, self.raibert_clip_vel, self.raibert_clip_vel_des, self.raibert_clip_ang
         )
         return torch.sum(torch.square(rl_actions - rh_actions), dim=1)
