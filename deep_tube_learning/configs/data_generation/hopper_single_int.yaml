@@ -9,9 +9,6 @@ wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/fcoar
 curriculum: 7
 upload_to_wandb: True
 
-vel_min: -0.05
-vel_max: 0.05
-
 controller:
   type: 'rh'
   # Below for option 'rh'

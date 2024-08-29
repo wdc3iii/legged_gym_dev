@@ -1,0 +1,72 @@
+defaults:
+  - default_custom
+  - _self_
+
+epochs: 10
+
+dataset_name: "double_single_int"
+upload_to_wandb: True
+
+controller:
+  _target_: deep_tube_learning.controllers.DoubleSingleTracking
+  _partial_: True
+  Kp: 10
+  Kd: 10
+
+env_config:
+  env:
+    num_envs: 8192
+    episode_length_s: 20
+    model:
+      dt: 0.05
+      cls: 'DoubleInt2D'
+      z_min:
+        - ${pos_min}
+        - ${pos_min}
+        - ${vel_min_model}
+        - ${vel_min_model}
+      z_max:
+        - ${pos_max}
+        - ${pos_max}
+        - ${vel_max_model}
+        - ${vel_max_model}
+      v_min:
+        - ${acc_min_model}
+        - ${acc_min_model}
+      v_max:
+        - ${acc_max_model}
+        - ${acc_max_model}
+  rom:
+    dt: 0.1
+    cls: 'SingleInt2D'
+    z_min:
+      - ${pos_min}
+      - ${pos_min}
+    z_max:
+      - ${pos_max}
+      - ${pos_max}
+    v_min:
+      - ${vel_min}
+      - ${vel_min}
+    v_max:
+      - ${vel_max}
+      - ${vel_max}
+  trajectory_generator:
+    cls: 'TrajectoryGenerator'
+    t_samp_cls: 'UniformSampleHoldDT'
+    weight_samp_cls: 'UniformWeightSamplerNoRamp'
+    N: 10
+    t_low: 1
+    t_high: 2
+    freq_low: 0.01
+    freq_high: 2
+    seed: ${seed}
+    prob_stationary: 0.0005
+    dN: 1
+  domain_rand:
+    randomize_rom_distance: True
+    max_rom_distance: [ 1.0, 1.0 ]
+    zero_rom_dist_llh: 0.25
+  init_state:
+    default_noise_lower: [ 0.0, 0.0, -0.1, -0.1 ]
+    default_noise_upper: [ 0.0, 0.0, 0.1, 0.1 ]

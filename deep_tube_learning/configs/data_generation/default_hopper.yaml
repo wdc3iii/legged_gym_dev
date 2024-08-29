@@ -9,18 +9,10 @@ upload_to_wandb: False
 track_yaw: False
 curriculum: 0
 
-acc_max: 1.5
-acc_min: -1.5
-alpha_max: 2
-alpha_min: -2
-vel_max: 0.3
-vel_min: -0.3
-vel_par_max: 0.3
-vel_perp_max: 0.15
-vel_par_min: -0.15
-vel_perp_min: -0.15
-omega_max: 0.4
-omega_min: -0.4
+acc_max: 0.3
+acc_min: -0.3
+vel_max: 0.2
+vel_min: -0.2
 pos_max: 1e9
 pos_min: -1e9
 
@@ -28,6 +20,7 @@ controller: null
 
 env_config:
   env:
+    type: 'isaacgym'
     num_envs: 8192
     episode_length_s: 20
 #  terrain:

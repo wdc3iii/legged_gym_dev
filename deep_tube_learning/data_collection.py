@@ -11,6 +11,7 @@ import pickle
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
+from hydra.utils import instantiate
 from hydra import initialize_config_dir, compose
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import OmegaConf
@@ -19,10 +20,7 @@ from isaacgym.torch_utils import *
 from deep_tube_learning.utils import update_args_from_hydra, update_cfgs_from_hydra, wandb_model_load, update_hydra_cfg
 from deep_tube_learning.controllers import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
-
-
-def get_state(base, joint_pos, joint_vel):
-    return torch.concatenate((base[:, :7], joint_pos, base[:, 7:], joint_vel), dim=1)
+from deep_tube_learning.custom_sim import CustomSim
 
 
 @hydra.main(
@@ -32,20 +30,6 @@ def get_state(base, joint_pos, joint_vel):
 )
 def data_creation_main(cfg):
     experiment_name = cfg.dataset_name
-
-    if cfg.controller.type == 'rl':
-        exp_name = cfg.wandb_experiment
-        model_name = f'{exp_name}_model:best{cfg.curriculum}'
-        api = wandb.Api()
-        rl_cfg, state_dict = wandb_model_load(api, model_name)
-    elif cfg.controller.type == 'rh':
-        cfg_dir = str(Path(__file__).parent / "configs" / "rl")
-        GlobalHydra.instance().clear()
-        with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
-            rl_cfg = compose(config_name=cfg.controller.config_name)
-    else:
-        raise ValueError(f"Controller type {cfg.controller.type} not implemented.")
-    rl_cfg = update_hydra_cfg(cfg, rl_cfg)
 
     # Send config to wandb
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -63,29 +47,53 @@ def data_creation_main(cfg):
     data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{cfg.dataset_name}_{run_id}")
     os.makedirs(data_path, exist_ok=True)
 
-    args = get_args()
-    args = update_args_from_hydra(rl_cfg, args)
-    env_cfg, train_cfg = task_registry.get_cfgs(rl_cfg.task)
-    env_cfg, train_cfg = update_cfgs_from_hydra(rl_cfg, env_cfg, train_cfg)
+    if cfg.env_config.env.type == 'isaacgym':
+        if cfg.controller.type == 'rl':
+            exp_name = cfg.wandb_experiment
+            model_name = f'{exp_name}_model:best{cfg.curriculum}'
+            api = wandb.Api()
+            rl_cfg, state_dict = wandb_model_load(api, model_name)
+        elif cfg.controller.type == 'rh':
+            cfg_dir = str(Path(__file__).parent / "configs" / "rl")
+            GlobalHydra.instance().clear()
+            with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
+                rl_cfg = compose(config_name=cfg.controller.config_name)
+        else:
+            raise ValueError(f"Controller type {cfg.controller.type} not implemented.")
+        rl_cfg = update_hydra_cfg(cfg, rl_cfg)
 
-    env, env_cfg = task_registry.make_env(name=rl_cfg.task, args=args, env_cfg=env_cfg)
+        args = get_args()
+        args = update_args_from_hydra(rl_cfg, args)
+        env_cfg, train_cfg = task_registry.get_cfgs(rl_cfg.task)
+        env_cfg, train_cfg = update_cfgs_from_hydra(rl_cfg, env_cfg, train_cfg)
 
-    train_cfg.runner.resume = True
-    ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
-    if cfg.controller.type == 'rl':
-        policy = ppo_runner.get_inference_policy(device=env.device)
-    elif cfg.controller.type == 'rh':
-        raibert = RaibertHeuristic(cfg)
-        policy = raibert.get_inference_policy(device=env.device)
+        env, env_cfg = task_registry.make_env(name=rl_cfg.task, args=args, env_cfg=env_cfg)
+
+        if cfg.controller.type == 'rl':
+            train_cfg.runner.resume = True
+            ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args,
+                                                                  train_cfg=train_cfg)
+            policy = ppo_runner.get_inference_policy(device=env.device)
+        elif cfg.controller.type == 'rh':
+            raibert = RaibertHeuristic(cfg)
+            policy = raibert.get_inference_policy(device=env.device)
+        else:
+            raise ValueError(f"IsaacGym controller type {cfg.controller.type} not implemented.")
+    elif cfg.env_config.env.type == 'custom':
+        env_cfg = cfg.env_config
+        env = CustomSim(env_cfg)
+        policy = instantiate(cfg.controller)(state_dependent_input_bound=env.model.clip_v_z)
+    else:
+        raise ValueError(f"Environment type {cfg.env_config.env.type} not implemented.")
+
 
     obs = env.get_observations()
-    x_n = env.dof_pos.shape[1] + env.dof_vel.shape[1] + env.root_states.shape[1]
+    x_n = env.get_states().shape[1]
 
     # Loop over epochs
     num_robots = env_cfg.env.num_envs
     rom_n = env.rom.n
     rom_m = env.rom.m
-    track_yaw = cfg.track_yaw
     max_rom_ep_length = int(cfg.env_config.env.episode_length_s / env.rom.dt)
     for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
         # Data structures
@@ -98,7 +106,7 @@ def data_creation_main(cfg):
         # Initialization
         env.reset()
         base = torch.clone(env.root_states.detach())
-        x[:, 0, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
+        x[:, 0, :] = env.get_states()
         pz_x[:, 0, :] = env.rom.proj_z(base)
 
         z[:, 0, :] = env.traj_gen.trajectory[:, 0, :]
@@ -109,7 +117,7 @@ def data_creation_main(cfg):
             k = torch.clone(env.traj_gen.k.detach())
             while torch.any(env.traj_gen.k == k):
                 # have to modify obs if using Raibert Heuristic
-                if cfg.controller.type == 'rh':
+                if 'type' in cfg.controller.keys() and cfg.controller.type == 'rh':
                     if isinstance(env.traj_gen.rom, SingleInt2D):
                         current_velocity = env.root_states[:, 7:9]
                         current_position = env.root_states[:, :2]
@@ -130,7 +138,7 @@ def data_creation_main(cfg):
             proj = env.rom.proj_z(base)
             done[:, t] = d  # Termination should not be used for tube training
             v[:, t, :] = env.traj_gen.v
-            x[:, t + 1, :] = get_state(base, torch.clone(env.dof_pos.detach()), torch.clone(env.dof_vel.detach()))
+            x[:, t + 1, :] = env.get_states()
             z[:, t + 1, :] = env.traj_gen.get_trajectory()[:, 0, :]
             z[done[:, t], t + 1, :] = proj[done[:, t], :]  # Terminated envs reset to zero tracking error
             pz_x[:, t + 1, :] = proj

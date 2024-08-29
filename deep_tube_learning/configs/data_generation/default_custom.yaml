@@ -1,0 +1,39 @@
+seed: 0
+
+dataset_name: "custom_trajectory"
+
+epochs: 25
+headless: True
+save_debugging_data: False
+upload_to_wandb: False
+track_yaw: False
+curriculum: 0
+
+acc_max: 0.3
+acc_min: -0.3
+vel_max: 0.2
+vel_min: -0.2
+
+acc_max_model: 0.3
+acc_min_model: -0.3
+vel_max_model: 0.3
+vel_min_model: -0.3
+pos_max: 1e9
+pos_min: -1e9
+
+controller: null
+
+env_config:
+  env:
+    type: 'custom'
+    num_envs: 8192
+    episode_length_s: 20
+    model:
+  noise:
+    add_noise: False
+  domain_rand:
+  curriculum:
+    use_curriculum: False
+  init_state:
+    default_noise_lower: [ -0., -0., -0., -0. ]  # [foot, wheel1, 2, 3]
+    default_noise_upper: [ 0., 0., 0., 0. ]

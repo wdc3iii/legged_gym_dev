@@ -21,6 +21,7 @@ experiment_name: 'hopper_traj_single_int'
 
 env_config:
   env:
+    type: 'isaacgym'
     num_envs: 4096
     num_observations: 38
     num_actions: 4

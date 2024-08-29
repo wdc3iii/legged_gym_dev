@@ -284,6 +284,9 @@ class HopperTrajectory(LeggedRobotTrajectory):
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
 
+    def get_states(self):
+        return torch.clone(torch.concatenate((self.root_states[:, :7], self.dof_pos, self.root_states[:, 7:], self.dof_vel), dim=1).detach())
+
     def reset(self):
         """ Reset all robots"""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))

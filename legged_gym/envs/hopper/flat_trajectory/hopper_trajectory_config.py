@@ -184,6 +184,7 @@ class HopperRoughTrajectoryCfg( LeggedRobotTrajectoryCfg ):
             Kff = 0.0
             clip_pos = 0.5
             clip_vel = 1.0
+            clip_vel_des = 0.2
             clip_ang = 0.2
 
         class differential_error:
