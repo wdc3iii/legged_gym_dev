@@ -46,6 +46,8 @@ def data_creation_main(cfg):
         run_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
     data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{cfg.dataset_name}_{run_id}")
     os.makedirs(data_path, exist_ok=True)
+    with open(f"{data_path}/config.pickle", "wb") as f:
+        pickle.dump(cfg_dict, f)
 
     if cfg.env_config.env.type == 'isaacgym':
         if cfg.controller.type == 'rl':

@@ -71,7 +71,7 @@ def sliding_window(data, N, dN, m):
 
 
 def get_dataset(wandb_experiment):
-    data_folder = f"rom_tracking_data/{wandb_experiment}"
+    data_folder = str(Path(__file__).parent / f"rom_tracking_data/{wandb_experiment}")
     dataset_file = f"{data_folder}/dataset.pickle"
     if not os.path.isfile(dataset_file):
         if not os.path.isfile(f"{data_folder}/epoch_0.pickle"):
@@ -131,25 +131,24 @@ class HorizonTubeDataset(Dataset):
         self.output_dim = output_dim
         self.H_fwd = H_fwd
         self.H_rev = H_rev
+        self.k_inds = torch.randint(self.H_rev, self.w.shape[1] - self.H_fwd - 1, (self.w.shape[0],))
 
     def __len__(self):
         return self.w.shape[0]
 
     def __getitem__(self, idx):
-        ind = torch.randint(self.H_rev, self.w.shape[1] - self.H_fwd - 1, (1,))
-        # select rnd index
-        return self._get_item_helper(idx, ind)
+        return self._get_item_helper(idx, self.k_inds[idx])
 
     # NOTE: right now, this does not condition on the current error, but only the previous errors
-    def _get_item_helper(self, idx, ind):
-        w_mHr_0 = self.w[idx, ind - self.H_rev:ind]                     # Previous H_rev errors
-        z0 = self.z[idx, ind, :].squeeze()                              # Current state
-        w_1_Hf = self.w[idx, ind + 1:ind + self.H_fwd + 1]              # Next H_fwd errors
-        v_mHr_Hfm1 = self.v[idx, ind - self.H_rev: ind + self.H_fwd]    # Previous H_rev and next H_fwd inputs
+    def _get_item_helper(self, idx, k_ind):
+        w_mHr_0 = self.w[idx, k_ind - self.H_rev:k_ind]                     # Previous H_rev errors
+        z0 = self.z[idx, k_ind, :].squeeze()                              # Current state
+        w_1_Hf = self.w[idx, k_ind + 1:k_ind + self.H_fwd + 1]              # Next H_fwd errors
+        v_mHr_Hfm1 = self.v[idx, k_ind - self.H_rev: k_ind + self.H_fwd]    # Previous H_rev and next H_fwd inputs
         return torch.concatenate((w_mHr_0, z0, v_mHr_Hfm1.reshape((-1,)))), w_1_Hf
 
     def update(self):
-        pass
+        self.k_inds = torch.randint(self.H_rev, self.w.shape[1] - self.H_fwd - 1, (self.w.shape[0],))
 
     def random_split(self, split_proportion):
         """
@@ -176,7 +175,10 @@ class ScalarTubeDataset(TubeDataset):
     @classmethod
     def from_wandb(cls, wandb_experiment, N=1, dN=1, recursive=False):
         dataset = get_dataset(wandb_experiment)
+        return ScalarTubeDataset.from_dataset(dataset, N, dN, recursive)
 
+    @classmethod
+    def from_dataset(cls, dataset, N=1, dN=1, recursive=False):
         z = dataset['z'][:, :-1, :]
         pz_x = dataset['pz_x'][:, :-1, :]
 
@@ -215,7 +217,10 @@ class ScalarHorizonTubeDataset(HorizonTubeDataset):
     @classmethod
     def from_wandb(cls, wandb_experiment, H_fwd=50, H_rev=10):
         dataset = get_dataset(wandb_experiment)
+        return ScalarHorizonTubeDataset.from_dataset(dataset, H_fwd, H_rev)
 
+    @classmethod
+    def from_dataset(cls, dataset, H_fwd=50, H_rev=10):
         z = dataset['z'][:, :-1, :]
         pz_x = dataset['pz_x'][:, :-1, :]
         v = dataset['v']

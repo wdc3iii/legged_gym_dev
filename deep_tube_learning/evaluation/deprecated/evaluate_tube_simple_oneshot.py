@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from hydra.utils import instantiate
 from deep_tube_learning.utils import wandb_model_load
-from deep_tube_learning.simple_data_collection import main
+from deep_tube_learning.deprecated.simple_data_collection import main
 from deep_tube_learning.datasets import ScalarHorizonTubeDataset
 from trajopt.rom_dynamics import SingleInt2D
 import torch
