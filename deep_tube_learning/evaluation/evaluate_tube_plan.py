@@ -1,11 +1,15 @@
 from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
 from trajopt.tube_trajopt import *
+import pickle
+from omegaconf import OmegaConf
+from deep_tube_learning.utils import unnormalize_dict
+
 
 # prob_str = 'right'
 # prob_str = 'right_wide'
 prob_str = 'gap'
 
-track_warm = True
+track_warm = False
 
 # warm_start = 'start'
 # warm_start = 'goal'
@@ -27,16 +31,26 @@ nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vv703y
 
 
 
-def main(start, goal, obs, vel_max, pos_max, dt):
-    z_max = np.array([pos_max, pos_max])
-    v_max = np.array([vel_max, vel_max])
-    planning_model = CasadiSingleInt2D(dt, -z_max, z_max, -v_max, v_max)
+def main(start, goal, obs):
+    model_name = f'{nn_path}_model:best'
+
+    api = wandb.Api()
+    model_cfg, state_dict = wandb_model_load(api, model_name)
+
+    run_id = model_cfg.dataset.wandb_experiment
+    with open(f"../rom_tracking_data/{run_id}/config.pickle", 'rb') as f:
+        dataset_cfg = pickle.load(f)
+    dataset_cfg = OmegaConf.create(unnormalize_dict(dataset_cfg))
+
+    z_max = np.array([dataset_cfg.pos_max, dataset_cfg.pos_max])
+    v_max = np.array([dataset_cfg.vel_max, dataset_cfg.vel_max])
+    planning_model = CasadiSingleInt2D(dataset_cfg.env_config.rom.dt, -z_max, z_max, -v_max, v_max)
 
     Q = 10 * np.eye(2)
     Qw = 0
     R = 10 * np.eye(2)
-    N = 50
-    H_rev = 25
+    N = model_cfg.dataset.H_fwd
+    H_rev = model_cfg.dataset.H_rev
     w_max = 1
 
     tube_dynamics = get_tube_dynamics(tube_dyn, nn_path=nn_path)
@@ -121,7 +135,4 @@ if __name__ == '__main__':
         problem_dict[prob_str]["start"],
         problem_dict[prob_str]["goal"],
         problem_dict[prob_str]["obs"],
-        problem_dict[prob_str]["vel_max"],
-        problem_dict[prob_str]["pos_max"],
-        problem_dict[prob_str]["dt"]
     )
