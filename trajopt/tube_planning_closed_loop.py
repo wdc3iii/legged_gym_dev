@@ -22,7 +22,7 @@ tube_ws = "evaluate"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/t3b8qehd"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/isdo1nyp"
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vv703y5s"
 
 H = 75
 
@@ -42,7 +42,7 @@ def main(start, goal, obs, vel_max, pos_max, dt):
     Qw = 0
     R = 10 * np.eye(2)
     N = 50
-    H_rev = 10
+    H_rev = 25
     w_max = 1
 
     double_z_max = np.array([np.inf, np.inf, 0.3, 0.3])

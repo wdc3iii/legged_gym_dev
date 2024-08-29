@@ -7,7 +7,7 @@ experiment_name: "deep_tube_learning"
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-  wandb_experiment: "hopper_trajectory_single_int_r7v58tj0"
+  wandb_experiment: "hopper_single_int_pfq0jfwu"
   H_fwd: 50
   H_rev: 25
 loss:

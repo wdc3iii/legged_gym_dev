@@ -560,7 +560,8 @@ def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
 
     def oneshot_nn_tube_dyn(z, v, w, e, v_prev):
         v_total = ca.vertcat(v_prev, v)
-        tube_input = ca.horzcat(e.T, z[0, 2:], ca.reshape(v_total, 1, v_total.numel()))
+        tube_input = ca.horzcat(e.T, z[0, 2:], ca.reshape(v_total.T, 1, v_total.numel()))
+        print(tube_input, fw(tube_input.T).T, w, "\n")
         g = fw(tube_input.T).T - w[1:].T
         g_lb = ca.DM(*g.shape)
         g_ub = ca.DM(*g.shape)

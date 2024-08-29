@@ -7,6 +7,16 @@ epochs: 10
 dataset_name: "double_single_int"
 upload_to_wandb: True
 
+acc_max: 0.3
+acc_min: -0.3
+vel_max: 0.2
+vel_min: -0.2
+
+acc_max_model: 0.1
+acc_min_model: -0.1
+vel_max_model: 0.3
+vel_min_model: -0.3
+
 controller:
   _target_: deep_tube_learning.controllers.DoubleSingleTracking
   _partial_: True
@@ -56,8 +66,8 @@ env_config:
     t_samp_cls: 'UniformSampleHoldDT'
     weight_samp_cls: 'UniformWeightSamplerNoRamp'
     N: 10
-    t_low: 1
-    t_high: 2
+    t_low: 0.5
+    t_high: 5
     freq_low: 0.01
     freq_high: 2
     seed: ${seed}
