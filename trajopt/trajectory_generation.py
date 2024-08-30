@@ -34,8 +34,10 @@ class AbstractTrajectoryGenerator(ABC):
 
     def step_idx(self, idx, e_prev=None, dt_tol=1e-5):
         # first, remask for envs which need a rom step
-        masked_idx = idx[self.t[idx] >= self.k[idx] * self.rom.dt - dt_tol]
-        self.step_rom_idx(masked_idx, e_prev=e_prev)
+        # TODO: check how changing this to k from k+1 impacts TrajectoryGenerator
+        masked_idx = idx[self.t[idx] >= (self.k[idx] + 1) * self.rom.dt - dt_tol]
+        if len(masked_idx):
+            self.step_rom_idx(masked_idx, e_prev=e_prev)
         self.t[idx] += self.dt_loop
 
     @abstractmethod
@@ -46,7 +48,8 @@ class AbstractTrajectoryGenerator(ABC):
         traj0 = self.trajectory[:, :-1, :]
         traj1 = self.trajectory[:, 1:, :]
         # Interpolate time is between planning times
-        traj_interp = traj0 + (traj1 - traj0) * (self.t - (self.k - 1) * self.rom.dt)[:, None, None] / self.rom.dt
+        # TODO: check how changing this to k from k-1 impacts TrajectoryGenerator
+        traj_interp = traj0 + (traj1 - traj0) * (self.t - self.k * self.rom.dt)[:, None, None] / self.rom.dt
         return traj_interp[:, ::self.dN, :]
 
     def get_v_trajectory(self):
@@ -226,13 +229,13 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         )
 
     def reset_idx(self, idx, z, e_prev=None):
-        self.k[idx] = 0
-        self.t[idx] = 0
+        self.k[idx] = -1
+        self.t[idx] = self.k[idx] * self.rom.dt
         self.trajectory[0, 1, :] = z
         self.z_warm, self.v_warm = None, None
         self.e = np.ones((self.H_rev, 1)) * np.linalg.norm(e_prev.detach().cpu().numpy())
         self.v_prev = np.zeros((self.H_rev, self.planning_model.m))
-        # self.step_idx(idx, e_prev=e_prev)
+        self.step_rom_idx(idx, e_prev=e_prev, increment_rom_time=True)
 
     def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False):
         z0 = self.trajectory[0, 1, :].cpu().numpy()

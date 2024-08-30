@@ -101,7 +101,7 @@ def main():
     timing = np.zeros((H,))
 
     env.reset()
-    z_k[0, :] = env.traj_gen.trajectory[:, 1, :]
+    z_k[0, :] = env.traj_gen.get_trajectory()[:, 0, :]
     x[:, 0, :] = env.get_states()
     pz_x[0, :] = env.model.proj_z(x[:, 0, :])
     w_k[0] = torch.linalg.norm(z_k[0, :] - pz_x[0, :])
@@ -179,7 +179,7 @@ def main():
 
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_{tube_dyn}_{tube_ws_str}.mat"
+    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),

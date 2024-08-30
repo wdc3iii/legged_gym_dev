@@ -1,4 +1,3 @@
-from deep_tube_learning.evaluation.deprecated.evaluate_tube_simple_oneshot_on_mpc_traj import tube_ws
 from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
 from trajopt.trajectory_generation import TrajectoryGenerator, ClosedLoopTrajectoryGenerator
 from trajopt.trajectory_generation import TrajectoryGenerator, ClosedLoopTrajectoryGenerator
@@ -123,13 +122,12 @@ class CustomSim:
             (len(idx), self.model.n), device=self.device
         )
         self.reset_traj(idx)
-        self.step(torch.zeros(self.num_envs, self.model.m, device=self.device))
 
     def get_observations(self):
         return torch.concatenate((
             torch.clone(self.root_states.detach()),
             self.trajectory[:, 0, :],
-            torch.clone(self.traj_gen.v_trajectory[:, 1, :].detach())
+            torch.clone(self.traj_gen.get_v_trajectory()[:, 0, :].detach())
         ), dim=1)
 
     def get_states(self):
