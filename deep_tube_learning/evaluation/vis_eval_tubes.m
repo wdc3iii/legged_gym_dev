@@ -2,7 +2,7 @@ clear; clc;
 % nm = 'eval_double_single_int_fhdyz7y2_0';  % 0.3 v_max, a_max for tracking model
 % nm = 'eval_double_single_int_st0soq8m_1';  % 0.3 v_max, 0.1 a_max for tracking model, Hrev=10
 % nm = 'eval_double_single_int_6ndx7g2n_0';  % 0.3 v_max, 0.1 a_max for tracking model, Hrev=25
-nm = 'eval_double_single_int_932hlryb_1'; 
+nm = 'eval_double_single_int_pl0dhg5j_1'; 
 
 % nm = 'eval_hopper_single_int_0i2o675r_1';  % Hopper single int
 

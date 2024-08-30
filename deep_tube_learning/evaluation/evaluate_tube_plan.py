@@ -5,12 +5,12 @@ from omegaconf import OmegaConf
 from deep_tube_learning.utils import unnormalize_dict
 
 
-prob_str = 'right'
+# prob_str = 'right'
 # prob_str = 'right_wide'
-# prob_str = 'gap'
+prob_str = 'gap'
 # prob_str = 'gap_big'
 
-track_warm = False
+track_warm = True
 
 # warm_start = 'start'
 # warm_start = 'goal'
@@ -27,12 +27,16 @@ tube_ws = "evaluate"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/932hlryb"  # 128x128 softplus b=5
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # 128x128 softplus b=5
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
 
 
-def main(start, goal, obs):
+def main():
+    start = problem_dict[prob_str]["start"]
+    goal = problem_dict[prob_str]["goal"]
+    obs = problem_dict[prob_str]["obs"]
+
     model_name = f'{nn_path}_model:best'
 
     api = wandb.Api()
@@ -47,14 +51,14 @@ def main(start, goal, obs):
     v_max = np.array([dataset_cfg.vel_max, dataset_cfg.vel_max])
     planning_model = CasadiSingleInt2D(dataset_cfg.env_config.rom.dt, -z_max, z_max, -v_max, v_max)
 
-    Q = 10 * np.eye(2)
-    Qw = 0
-    R = 10 * np.eye(2)
+    Q = problem_dict[prob_str]["Q"]
+    Qw = problem_dict[prob_str]["Qw"]
+    R = problem_dict[prob_str]["R_warm"] if track_warm else problem_dict[prob_str]["R"]
     N = model_cfg.dataset.H_fwd
     H_rev = model_cfg.dataset.H_rev
     w_max = 1
 
-    tube_dynamics = get_tube_dynamics(tube_dyn, nn_path=nn_path)
+    tube_dynamics, _, _ = get_tube_dynamics(tube_dyn, nn_path=nn_path)
 
     tube_ws_str = str(tube_ws).replace('.', '_')
     fn = f"data/tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
@@ -132,8 +136,4 @@ def main(start, goal, obs):
 
 
 if __name__ == '__main__':
-    main(
-        problem_dict[prob_str]["start"],
-        problem_dict[prob_str]["goal"],
-        problem_dict[prob_str]["obs"],
-    )
+    main()

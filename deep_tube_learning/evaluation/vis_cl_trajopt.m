@@ -1,6 +1,8 @@
 clear; clc;
-nm = 'cl_tube_gap_big_932hlryb_nominal_NN_oneshot_evaluate';
-% nm = 'cl_tube_right_nominal_NN_oneshot_evaluate';
+% nm = 'cl_tube_gap_big_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
+% nm = 'cl_tube_right_wide_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
+nm = 'cl_tube_right_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
+% nm = 'cl_tube_gap_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
 
 set(groot, 'DefaultAxesFontSize', 17);  % Set default font size for axes labels and ticks
 set(groot, 'DefaultTextFontSize', 17);  % Set default font size for text objects
@@ -14,8 +16,15 @@ set(groot, 'DefaultLineMarkerSize', 15)
 write_video = false;
 load(['data/' nm '.mat']);
 
-x_lim = [-.75, 1.75] * 2;
-y_lim = [-0.25, 2.25] * 2;
+max_tube = max(w, [], 'all');
+x_lim = [
+    min([min(z(:, :, 1), [], 'all'), min(pz_x(:, :, 1), [], 'all'), min(obs_x)]) - max_tube - 0.1, ...
+    max([max(z(:, :, 1), [], 'all'), min(pz_x(:, :, 1), [], 'all'), max(obs_x)]) + max_tube + 0.1
+];
+y_lim = [
+    min([min(z(:, :, 2), [], 'all'), min(pz_x(:, :, 2), [], 'all'), min(obs_y)]) - max_tube - 0.1, ...
+    max([max(z(:, :, 2), [], 'all'), min(pz_x(:, :, 2), [], 'all'), max(obs_y)]) + max_tube + 0.1
+];
 node_lim = [0, size(z, 1) + size(z_sol, 2)];
 tube_ylim = [0, max([max(w, [], 'all'), max(w_sol, [], 'all'), max(vecnorm(z - pz_x, 2, 3), [], 'all')]) * 1.05];
 state_y_lim = [
@@ -47,10 +56,7 @@ for ii = 1:size(obs_r, 2)
         'FaceColor', 'r', ...
         'LineWidth', 1);
 end
-% Plot traj
-z_line = plot(z(1, :, 1), z(1, :, 2), '.-k', LineWidth=2, Markersize=15);
-pz_x_line = plot(pz_x(1, :, 1), pz_x(1, :, 2), '.-', LineWidth=2, Markersize=15);
-pz_x_line.Color = "#A2142F";
+
 tube = cell(size(w, 2), 1);
 for j = 1:size(w, 2)
     r = max(w(1, j), 0);
@@ -72,6 +78,10 @@ for j = 1:size(w_sol, 2)
         'EdgeColor', "#77AC30", ...
         'LineWidth', 1);
 end
+% Plot traj
+z_line = plot(z(1, :, 1), z(1, :, 2), '.-k', LineWidth=2, Markersize=15);
+pz_x_line = plot(pz_x(1, :, 1), pz_x(1, :, 2), '.-', LineWidth=2, Markersize=15);
+pz_x_line.Color = "#A2142F";
 xlabel('x')
 ylabel('y')
 xlim(x_lim);

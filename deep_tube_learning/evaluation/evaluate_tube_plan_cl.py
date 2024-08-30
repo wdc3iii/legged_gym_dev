@@ -8,9 +8,9 @@ from deep_tube_learning.custom_sim import CustomSim
 
 
 # prob_str = 'right'
-# prob_str = 'right_wide'
+prob_str = 'right_wide'
 # prob_str = 'gap'
-prob_str = 'gap_big'
+# prob_str = 'gap_big'
 
 track_warm = True
 
@@ -29,10 +29,10 @@ tube_ws = "evaluate"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/932hlryb"  # 128x128 softplus b=5
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # 128x128 softplus b=5
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
-time_it = True
+time_it = False
 H = 50
 max_iter = 200
 
@@ -43,6 +43,8 @@ def arr2list(d):
         return [arr2list(v) for v in list(d)]
     elif type(d) is np.float64:
         return float(d)
+    elif type(d) is np.int64:
+        return int(d)
     else:
         return d
 
@@ -192,8 +194,8 @@ def main():
         "t": timing,
         "z0": env.traj_gen.start,
         "zf": env.traj_gen.goal,
-        "obs_x": env.traj_gen.obs['c'][0, :],
-        "obs_y": env.traj_gen.obs['c'][1, :],
+        "obs_x": env.traj_gen.obs['cx'],
+        "obs_y": env.traj_gen.obs['cy'],
         "obs_r": env.traj_gen.obs['r'],
         "timing": timing
     })

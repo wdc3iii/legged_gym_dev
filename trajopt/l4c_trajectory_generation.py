@@ -25,7 +25,8 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.Q = p_dict['Q']
         self.Qf = p_dict['Qf'] if 'Qf' in p_dict.keys() else self.Q
         self.Qw = p_dict['Qw']
-        self.R = p_dict['R']
+        self.R = p_dict["R"] if track_nominal else p_dict["R_nominal"]
+        self.R_nominal = p_dict["R_nominal"]
         self.w_max = w_max
         self.tube_ws = tube_ws
         self.warm_start = warm_start
@@ -34,19 +35,20 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.track_nominal = track_nominal
 
         self.z_warm, self.v_warm = None, None
+        self.nominal_z_warm, self.nominal_v_warm = None, None
         self.e = np.zeros((self.H_rev, 1))
         self.v_prev = np.zeros((self.H_rev, self.planning_model.m))
         self.g_dict = {}
 
         if self.warm_start == 'nominal' or self.track_nominal:
             self.nominal_solver, self.nominal_nlp_dict, self.nominal_nlp_opts = trajopt_solver(
-                self.planning_model, self.N, self.Q, self.R, self.Nobs, Qf=self.Qf,
+                self.planning_model, self.N, self.Q, self.R_nominal, self.Nobs, Qf=self.Qf,
                 max_iter=self.max_iter, debug_filename=None
             )
 
         self.solver, self.nlp_dict, self.nlp_opts = trajopt_tube_solver(
             self.planning_model, self.tube_dynamics, self.N, self.H_rev, self.Q, self.Qw, self.R, self.w_max, self.Nobs,
-            Qf=self.Qf, max_iter=self.max_iter, debug_filename=None, z_init=None, v_init=None
+            Qf=self.Qf, max_iter=self.max_iter, debug_filename=None
         )
 
     def reset_idx(self, idx, z, e_prev=None):
@@ -54,6 +56,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.t[idx] = self.k[idx] * self.rom.dt
         self.trajectory[0, 1, :] = z
         self.z_warm, self.v_warm = None, None
+        self.nominal_z_warm, self.nominal_v_warm = None, None
         self.e = np.ones((self.H_rev, 1)) * np.linalg.norm(e_prev.detach().cpu().numpy())
         self.v_prev = np.zeros((self.H_rev, self.planning_model.m))
         self.step_rom_idx(idx, e_prev=e_prev, increment_rom_time=True)
@@ -63,17 +66,19 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.e[-1] = np.linalg.norm(e_prev.detach().cpu().numpy())
         # Solve nominal ocp if necessary
         if self.track_nominal or (self.warm_start == 'nominal' and self.z_warm is None):
-            z_nominal_init, v_nominal_init = get_warm_start(self.nominal_ws, z0, self.goal, self.N, self.planning_model)
+            if self.nominal_z_warm is None:
+                self.nominal_z_warm, self.nominal_v_warm = get_warm_start(self.nominal_ws, z0, self.goal, self.N, self.planning_model)
             nominal_params = init_params(z0, self.goal, self.obs)
-            nominal_x_init = init_decision_var(z_nominal_init, v_nominal_init)
+            nominal_x_init = init_decision_var(self.nominal_z_warm, self.nominal_v_warm)
 
             nominal_sol = self.nominal_solver["solver"](
                 x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
                 lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
             )
-            z_cost, v_cost = extract_solution(nominal_sol, self.N, self.planning_model.n, self.planning_model.m)
+            self.nominal_z_warm, self.nominal_v_warm = extract_solution(nominal_sol, self.N, self.planning_model.n, self.planning_model.m)
+            z_cost, v_cost = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
             if self.warm_start == 'nominal':
-                self.z_warm, self.v_warm = z_cost.copy(), v_cost.copy()
+                self.z_warm, self.v_warm = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
         else:
             z_cost, v_cost = None, None
 

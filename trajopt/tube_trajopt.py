@@ -9,18 +9,18 @@ from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 
 
 problem_dict = {
-    "gap": {"start": np.array([0.3, 0.3]), "goal": np.array([1.5, 1.5]),
-            "obs": {'c': np.array([[1, 0.], [0.75, 1.5]]), 'r': np.array([0.5, 0.5])},
-            "Q": 10, "R": 10, "Qw": 0},
-    "right": {"start": np.array([0.5, 0]), "goal": np.array([2, 0]),
-              "obs": {'c': np.array([[1, 1.], [0.625, -0.625]]), 'r': np.array([0.5, 0.5])},
-            "Q": 10, "R": 10, "Qw": 0},
-    "right_wide": {"start": np.array([0.5, 0]), "goal": np.array([2, 0]),
-                   "obs": {'c': np.array([[1, 1.], [1.25, -1.25]]), 'r': np.array([0.5, 0.5])},
-            "Q": 10, "R": 10, "Qw": 0},
+    "gap": {"start": np.array([0.0, 0.0]), "goal": np.array([1.5, 1.5]),
+            "obs": {'cx': np.array([1., 0.]), 'cy': np.array([0.75, 1.5]), 'r': np.array([0.5, 0.5])},
+            "Q": 10., "R_nominal": 0.1, "R": 10., "Qw": 0.},
+    "right": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
+              "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.625, 0.625]), 'r': np.array([0.5, 0.5])},
+            "Q": 10., "R_nominal": 0.1, "R": 10., "Qw": 0.},
+    "right_wide": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
+                   "obs": {'cx': np.array([1, 1.]), 'cy': np.array([-1.25, 1.25]), 'r': np.array([0.5, 0.5])},
+            "Q": 10., "R_nominal": 0.1, "R": 10., "Qw": 0.},
     "gap_big": {"start": np.array([0., 0.]), "goal": np.array([3., 3.]),
-            "obs": {'c': np.array([[2., 0.], [1.75, 3.]]), 'r': np.array([1., 1.])},
-            "Q": 10, "R": 10, "Qw": 0},
+            "obs": {'cx': np.array([2., 0.]), 'cy': np.array([1.75, 3.]), 'r': np.array([1., 1.])},
+            "Q": 10, "R_nominal": 0.1, "R": 10., "Qw": 0},
 }
 
 
@@ -80,7 +80,7 @@ def single_obstacle_constraint(z, obs_c, obs_r, w=None):
     return ca.horzcat(*g), ca.horzcat(*g_lb), ca.horzcat(*g_ub)
 
 
-def obstacle_constraints(z, obs_c, obs_r, w=None):
+def obstacle_constraints(z, obs_c_x, obs_c_y, obs_r, w=None):
     """
     Constructs circular obstacle constraints, for obstacles of given centers and radii. If w (tube diameter)
     is given, the radius of the tube is expanded by this amount.
@@ -93,7 +93,7 @@ def obstacle_constraints(z, obs_c, obs_r, w=None):
     g_lb = []
     g_ub = []
     for i in range(obs_r.shape[0]):
-        g_i, g_lb_i, g_ub_i = single_obstacle_constraint(z, obs_c[i, :], obs_r[i, :], w=w)
+        g_i, g_lb_i, g_ub_i = single_obstacle_constraint(z, ca.horzcat(obs_c_x[i, :], obs_c_y[i, :]), obs_r[i, :], w=w)
         g.append(g_i)
         g_lb.append(g_lb_i)
         g_ub.append(g_ub_i)
@@ -119,7 +119,8 @@ def setup_trajopt_solver(pm, N, Nobs):
     # Parameters: initial condition, final condition
     p_z0 = ca.MX.sym("p_z0", 1, pm.n)  # Initial projection Pz(x0) state
     p_zf = ca.MX.sym("p_zf", 1, pm.n)  # Goal state
-    p_obs_c = ca.MX.sym("p_obs_c", Nobs, 2)  # positional obstacle centers
+    p_obs_c_x = ca.MX.sym("p_obs_c_x", Nobs, 1)  # positional obstacle centers
+    p_obs_c_y = ca.MX.sym("p_obs_c_y", Nobs, 1)  # positional obstacle centers
     p_obs_r = ca.MX.sym("p_obs_r", Nobs, 1)  # positional obstacle radii
 
     # Make decision variables (2D double integrator)
@@ -130,11 +131,11 @@ def setup_trajopt_solver(pm, N, Nobs):
     p_z_cost = ca.MX.sym("p_z_cost", N + 1, pm.n)
     p_v_cost = ca.MX.sym("p_z_cost", N, pm.m)
 
-    return z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c, p_obs_r
+    return z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r
 
 
 def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=None):
-    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, _, _, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
+    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, _, _, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
 
     if Qf is None:
         Qf = Q
@@ -144,7 +145,7 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
     # Define NLP
     obj = quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(v, R) + quadratic_objective(z[-1, :], Qf, goal=p_zf)
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
-    g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c, p_obs_r)
+    g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c_x, p_obs_c_y, p_obs_r)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
 
     g = ca.horzcat(g_dyn, g_obs, g_ic)
@@ -167,7 +168,7 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
         ca.reshape(z_ub, (N + 1) * pm.n, 1),
         ca.reshape(v_ub, N * pm.m, 1),
     )
-    p_nlp = ca.vertcat(p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r)
+    p_nlp = ca.vertcat(p_z0.T, p_zf.T, p_obs_c_x, p_obs_c_y, p_obs_r)
 
     x_cols, g_cols, p_cols = generate_col_names(pm, N, Nobs, x_nlp, g, p_nlp)
     nlp_dict = {
@@ -196,8 +197,8 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
 
 
 def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None,
-                        max_iter=1000, debug_filename=None, z_init=None, v_init=None):
-    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
+                        max_iter=1000, debug_filename=None):
+    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N, 1)
     w_lb = ca.DM(N, 1)
     w_ub = ca.DM(np.ones((N, 1)) * w_max)
@@ -210,9 +211,10 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     Qf = ca.DM(Qf)
 
     # Define NLP
-    obj = quadratic_objective(z[:-1, :], Q, goal=p_z_cost[:-1, :]) + quadratic_objective(v, R, goal=p_v_cost) + quadratic_objective(z[-1, :], Qf, goal=p_z_cost[-1, :])
+    obj = quadratic_objective(z[:-1, :], Q, goal=p_z_cost[:-1, :]) + quadratic_objective(v, R, goal=p_v_cost) \
+          + quadratic_objective(z[-1, :], Qf, goal=p_z_cost[-1, :]) + quadratic_objective(w, Qw)
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
-    g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c, p_obs_r, w=w)
+    g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c_x, p_obs_c_y, p_obs_r, w=w)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
     g_tube, g_lb_tube, g_ub_tube = tube_dynamics(z, v, w, e, v_prev)
 
@@ -243,7 +245,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     p_nlp = ca.vertcat(
         p_z0.T, p_zf.T,
         ca.reshape(p_z_cost, (N + 1) * pm.n, 1), ca.reshape(p_v_cost, N * pm.m, 1),
-        ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r,
+        p_obs_c_x, p_obs_c_y, p_obs_r,
         e, ca.reshape(v_prev, H_rev * pm.m, 1)
     )
 
@@ -297,16 +299,16 @@ def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
             v_str[r, c] = v_str[r, c] + f"_{r}_{c}"
     if x.numel() == z_str.size + v_str.size:
         x_cols = list(np.vstack((
-            np.reshape(z_str, ((N + 1) * pm.n, 1)),
-            np.reshape(v_str, (N * pm.m, 1))
+            np.reshape(z_str, ((N + 1) * pm.n, 1), order='F'),
+            np.reshape(v_str, (N * pm.m, 1), order='F')
         )).squeeze())
     else:
         w_str = np.array(["w"] * N, dtype='U8').reshape((N, 1))
         for r in range(w_str.shape[0]):
             w_str[r, 0] = w_str[r, 0] + f"_{r}"
         x_cols = list(np.vstack((
-            np.reshape(z_str, ((N + 1) * pm.n, 1)),
-            np.reshape(v_str, (N * pm.m, 1)),
+            np.reshape(z_str, ((N + 1) * pm.n, 1), order='F'),
+            np.reshape(v_str, (N * pm.m, 1), order='F'),
             w_str
         )).squeeze())
 
@@ -334,10 +336,10 @@ def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
         for r in range(v_prev_str.shape[0]):
             for c in range(v_prev_str.shape[1]):
                 v_prev_str[r, c] = v_prev_str[r, c] + f"_{r}_{c}"
-        p_cols += e_cols + list(np.reshape(v_prev_str, (-1, 1)).squeeze())
+        p_cols += e_cols + list(np.reshape(v_prev_str, (-1, 1), order='F').squeeze())
     else:
-        z_cost = ["cost_" + s for s in np.reshape(z_str, ((N + 1) * pm.n,))]
-        v_cost = ["cost_" + s for s in np.reshape(v_str, (N * pm.m,))]
+        z_cost = ["cost_" + s for s in np.reshape(z_str, ((N + 1) * pm.n,), order='F')]
+        v_cost = ["cost_" + s for s in np.reshape(v_str, (N * pm.m,), order='F')]
         p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + z_cost + v_cost + obs_c_lst + \
                  [f'obs_{i}_r' for i in range(Nobs)]
         e_cols = [f"e_{i}" for i in range(H_rev)]
@@ -354,15 +356,15 @@ def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
 def init_params(z0, zf, obs, z_cost=None, v_cost=None, e=None, v_prev=None):
     Nobs = len(obs['r'])
     if z_cost is None:
-        params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
+        params = np.vstack([z0[:, None], zf[:, None], obs['cx'][:, None], obs['cy'][:, None], obs['r'][:, None]])
     else:
         params = np.vstack([
             z0[:, None], zf[:, None],
-            np.reshape(z_cost, (-1, 1)), np.reshape(v_cost, (-1, 1)),
-            np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]
+            np.reshape(z_cost, (-1, 1), order='F'), np.reshape(v_cost, (-1, 1), order='F'),
+            obs['cx'][:, None], obs['cy'][:, None], obs['r'][:, None]
         ])
     if e is not None:
-        params = np.vstack([params, e, v_prev.reshape(-1, 1)])
+        params = np.vstack([params, e, np.reshape(v_prev, (-1, 1), order='F')])
     return params
 
 
@@ -398,8 +400,8 @@ def extract_solution(sol, N, n, m):
 
 def plot_problem(ax, obs, z0, zf):
     for i in range(len(obs["r"])):
-        xc = obs['c'][0, i]
-        yc = obs['c'][1, i]
+        xc = obs['cx'][i]
+        yc = obs['cy'][i]
         circ = plt.Circle((xc, yc), obs['r'][i], color='r', alpha=0.5)
         ax.add_patch(circ)
     plt.plot(z0[0], z0[1], 'rx')
@@ -485,21 +487,23 @@ def solve_tube(
         warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000, track_warm=False
 ):
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
-    z_goal = z_init if track_warm else None
-    v_goal = v_init if track_warm else None
     e = np.zeros((H_rev, 1))
     v_prev = np.zeros((H_rev, planning_model.m))
 
     solver, nlp_dict, nlp_opts = trajopt_tube_solver(
         planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, len(obs['r']), Qf=Qf,
-        max_iter=max_iter, debug_filename=debug_filename, z_init=z_goal, v_init=v_goal
+        max_iter=max_iter, debug_filename=debug_filename
     )
 
     w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N, 1)), e, v_prev)
 
-    params = init_params(start, goal, obs)
-
-    params = np.vstack([params, e, v_prev.reshape(-1, 1)])
+    if track_warm:
+        z_cost = z_init.copy()
+        v_cost = v_init.copy()
+    else:
+        z_cost = np.repeat(goal[None, :], N + 1, axis=0)
+        v_cost = np.zeros((N, planning_model.m))
+    params = init_params(start, goal, obs, z_cost=z_cost, v_cost=v_cost, e=e, v_prev=v_prev)
     x_init = init_decision_var(z_init, v_init, w=w_init)
 
     sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
@@ -584,7 +588,7 @@ def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
 
     def oneshot_nn_tube_dyn(z, v, w, e, v_prev):
         v_total = ca.vertcat(v_prev, v)
-        tube_input = ca.horzcat(e.T, z[0, 2:], ca.reshape(v_total.T, 1, v_total.numel()))
+        tube_input = ca.horzcat(e.T, z[0, 2:], ca.reshape(v_total.T, 1, v_total.numel()))  # Note this transpose to get ca.reshape and np.reshape to agree
         print(tube_input, fw(tube_input.T).T, w, "\n")
         g = fw(tube_input.T).T - w.T
         g_lb = ca.DM(*g.shape)

@@ -1,13 +1,18 @@
 clear; clc;
-nm = 'tube_gap_nominal_NN_oneshot_evaluate_False';
+nm = 'tube_right_nominal_NN_oneshot_evaluate_True';
+% nm = 'tube_gap_big_nominal_NN_oneshot_evaluate_True';
+% nm = 'tube_right_wide_nominal_NN_oneshot_evaluate_True';
+% nm = 'tube_gap_nominal_NN_oneshot_evaluate_True';
+
+step_through = false;
 
 tbl = readtable(['data/' nm '.csv']);
 cols = tbl.Properties.VariableNames;
 
 iters = tbl.iter;
 
-z_cols = find(cellfun(@(x) contains(x, 'z_') && ~contains(x, 'lb') && ~contains(x, 'ub') && ~contains(x, 'ic') && ~contains(x, '_g_'), cols));
-v_cols = find(cellfun(@(x) contains(x, 'v_') && ~contains(x, 'lb') && ~contains(x, 'ub') && ~contains(x, 'ic')&& ~contains(x, 'prev'), cols));
+z_cols = find(cellfun(@(x) contains(x, 'z_') && ~contains(x, 'lb') && ~contains(x, 'cost') && ~contains(x, 'ub') && ~contains(x, 'ic') && ~contains(x, '_g_'), cols));
+v_cols = find(cellfun(@(x) contains(x, 'v_') && ~contains(x, 'lb') && ~contains(x, 'cost') && ~contains(x, 'ub') && ~contains(x, 'ic')&& ~contains(x, 'prev'), cols));
 w_cols = find(cellfun(@(x) contains(x, 'w_') && ~contains(x, 'lb') && ~contains(x, 'ub') && ~contains(x, 'ic'), cols));
 z = tbl{:, z_cols};
 z = reshape(z, size(z, 1), size(z, 2) / 2, 2);
@@ -86,7 +91,7 @@ end
 tube = cell(size(w, 2), 1);
 for k = 1:size(w, 2)
     r = max(w(1, k), 0);
-    tube{k} = rectangle('Position', [z(1, k, 1)-r, z(1, k, 2)-r, 2*r, 2*r], ...
+    tube{k} = rectangle('Position', [z(1, k+1, 1)-r, z(1, k+1, 2)-r, 2*r, 2*r], ...
         'Curvature', [1, 1], ...
         'EdgeColor', 'b', ...
         'LineWidth', 1);
@@ -125,7 +130,7 @@ subplot(2, 2, 1)
 for it = 1:size(iters, 1)
     for k = 1:size(w, 2)
         r = max(w(it, k), 0);
-        tube{k}.Position = [z(it, k, 1)-r, z(it, k, 2)-r, 2*r, 2*r];
+        tube{k}.Position = [z(it, k+1, 1)-r, z(it, k+1, 2)-r, 2*r, 2*r];
     end
     z_line.XData = z(it, :, 1);
     z_line.YData = z(it, :, 2);
@@ -143,5 +148,9 @@ for it = 1:size(iters, 1)
     input_y_line.YData = squeeze(v(it, :, 2));
     tube_line.YData = w(it, :);
     drawnow
-    % pause
+    if step_through
+        pause
+    else
+        pause(0.1)
+    end
 end
