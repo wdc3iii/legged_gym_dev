@@ -7,20 +7,25 @@ import matplotlib.pyplot as plt
 from hydra.utils import instantiate
 from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 
-
+Q = 10.
+QW = 0.
+R = 0.1
+R_WARM = 10.
+RV_FIRST = 0.
+RV_SECOND = 0.
 problem_dict = {
     "gap": {"start": np.array([0.0, 0.0]), "goal": np.array([1.5, 1.5]),
             "obs": {'cx': np.array([1., 0.]), 'cy': np.array([0.75, 1.5]), 'r': np.array([0.5, 0.5])},
-            "Q": 10., "R_nominal": 0.1, "R": 10., "Qw": 0.},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
     "right": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
               "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.625, 0.625]), 'r': np.array([0.5, 0.5])},
-            "Q": 10., "R_nominal": 0.1, "R": 10., "Qw": 0.},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
     "right_wide": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
                    "obs": {'cx': np.array([1, 1.]), 'cy': np.array([-1.25, 1.25]), 'r': np.array([0.5, 0.5])},
-            "Q": 10., "R_nominal": 0.1, "R": 10., "Qw": 0.},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
     "gap_big": {"start": np.array([0., 0.]), "goal": np.array([3., 3.]),
             "obs": {'cx': np.array([2., 0.]), 'cy': np.array([1.75, 3.]), 'r': np.array([1., 1.])},
-            "Q": 10, "R_nominal": 0.1, "R": 10., "Qw": 0},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
 }
 
 
@@ -134,7 +139,7 @@ def setup_trajopt_solver(pm, N, Nobs):
     return z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r
 
 
-def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=None):
+def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter=1000, debug_filename=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, _, _, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
 
     if Qf is None:
@@ -144,6 +149,11 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
 
     # Define NLP
     obj = quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(v, R) + quadratic_objective(z[-1, :], Qf, goal=p_zf)
+    if Rv_first > 0:
+        obj += quadratic_objective(v[:-1, :] - v[1:, :], Rv_first)
+    if Rv_second > 0:
+        first = v[:-1, :] - v[1:, :]
+        obj += quadratic_objective(first[:-1, :] - first[1:, :], Rv_first)
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c_x, p_obs_c_y, p_obs_r)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
@@ -196,7 +206,7 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
     return solver, nlp_dict, nlp_opts
 
 
-def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None,
+def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None, Rv_first=0, Rv_second=0,
                         max_iter=1000, debug_filename=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N, 1)
@@ -213,6 +223,13 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     # Define NLP
     obj = quadratic_objective(z[:-1, :], Q, goal=p_z_cost[:-1, :]) + quadratic_objective(v, R, goal=p_v_cost) \
           + quadratic_objective(z[-1, :], Qf, goal=p_z_cost[-1, :]) + quadratic_objective(w, Qw)
+    if Rv_first > 0:
+        Rv_first = ca.DM(Rv_first)
+        obj += quadratic_objective(v[:-1, :] - v[1:, :], Rv_first)
+    if Rv_second > 0:
+        Rv_second = ca.DM(Rv_second)
+        first = v[:-1, :] - v[1:, :]
+        obj += quadratic_objective(first[:-1, :] - first[1:, :], Rv_second)
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c_x, p_obs_c_y, p_obs_r, w=w)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
@@ -438,7 +455,8 @@ def segment_constraint_violation(g_viol, g_col):
     return g_seg
 
 
-def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None, R=None, nominal_ws='interpolate'):
+def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None, R=None,
+                   Rv_first=0, Rv_second=0, nominal_ws='interpolate'):
     if warm_start == 'start':
         v_init = np.zeros((N, planning_model.m))
         z_init = np.repeat(start[None, :], N + 1, 0)
@@ -450,7 +468,7 @@ def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None,
         v_init = np.diff(z_init, axis=0) / planning_model.dt
     elif warm_start == 'nominal':
         assert obs is not None and Q is not None and R is not None
-        sol, solver = solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start=nominal_ws)
+        sol, solver = solve_nominal(start, goal, obs, planning_model, N, Q, R, Rv_first=Rv_first, Rv_second=Rv_second, warm_start=nominal_ws)
         z_init, v_init = extract_solution(sol, N, planning_model.n, planning_model.m)
     else:
         raise ValueError(f'Warm start {warm_start} not implemented. Must be ic, goal, interpolate, or nominal')
@@ -466,8 +484,9 @@ def get_tube_warm_start(w_init, tube_dynamics, z, v, w, e, v_prev):
     raise ValueError(f"Tube warm start {w_init} not implemented. Must be evaluate or a double")
 
 
-def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start', debug_filename=None):
-    solver, nlp_dict, nlp_opts = trajopt_solver(planning_model, N, Q, R, len(obs["r"]), debug_filename=debug_filename)
+def solve_nominal(start, goal, obs, planning_model, N, Q, R, Rv_first=0, Rv_second=0, warm_start='start', debug_filename=None):
+    solver, nlp_dict, nlp_opts = trajopt_solver(planning_model, N, Q, R, len(obs["r"]),
+                                                Rv_first=Rv_first, Rv_second=Rv_second, debug_filename=debug_filename)
 
     z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model)
 
@@ -483,16 +502,19 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, warm_start='start',
 
 
 def solve_tube(
-        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Qf=None,
-        warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000, track_warm=False
+        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Qf=None, R_nominal=None,
+        Rv_first=0, Rv_second=0, warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000, track_warm=False
 ):
-    z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R, nominal_ws=nominal_ws)
+    if R_nominal is None:
+        R_nominal = R
+    z_init, v_init = get_warm_start(warm_start, start, goal, N, planning_model, obs, Q, R_nominal,
+                                    Rv_first=Rv_first, Rv_second=Rv_second, nominal_ws=nominal_ws)
     e = np.zeros((H_rev, 1))
     v_prev = np.zeros((H_rev, planning_model.m))
 
     solver, nlp_dict, nlp_opts = trajopt_tube_solver(
         planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, len(obs['r']), Qf=Qf,
-        max_iter=max_iter, debug_filename=debug_filename
+        Rv_first=Rv_first, Rv_second=Rv_second, max_iter=max_iter, debug_filename=debug_filename
     )
 
     w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N, 1)), e, v_prev)

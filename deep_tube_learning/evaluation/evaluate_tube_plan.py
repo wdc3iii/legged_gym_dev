@@ -31,6 +31,9 @@ nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
 
+Rv1 = 0
+Rv2 = 100
+
 
 def main():
     start = problem_dict[prob_str]["start"]
@@ -53,7 +56,10 @@ def main():
 
     Q = problem_dict[prob_str]["Q"]
     Qw = problem_dict[prob_str]["Qw"]
-    R = problem_dict[prob_str]["R_warm"] if track_warm else problem_dict[prob_str]["R"]
+    R = problem_dict[prob_str]["R"] if track_warm else problem_dict[prob_str]["R_nominal"]
+    R_nominal = problem_dict[prob_str]["R_nominal"]
+    Rv_first = problem_dict[prob_str]["Rv_first"] if Rv1 is None else Rv1
+    Rv_second = problem_dict[prob_str]["Rv_second"] if Rv2 is None else Rv2
     N = model_cfg.dataset.H_fwd
     H_rev = model_cfg.dataset.H_rev
     w_max = 1
@@ -63,8 +69,9 @@ def main():
     tube_ws_str = str(tube_ws).replace('.', '_')
     fn = f"data/tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
     sol, solver = solve_tube(
-        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max,
-        warm_start=warm_start, tube_ws=tube_ws, debug_filename=fn, track_warm=track_warm
+        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, R_nominal=R_nominal,
+        Rv_first=Rv_first, Rv_second=Rv_second, warm_start=warm_start, tube_ws=tube_ws,
+        debug_filename=fn, track_warm=track_warm
     )
 
     z_sol, v_sol, w_sol = extract_solution(sol, N, planning_model.n, planning_model.m)
@@ -106,31 +113,6 @@ def main():
     planning_model.plot_tube(ax, z_sol, w_sol)
     plt.axis("square")
     plt.show()
-
-    import torch
-    api = wandb.Api()
-    model_cfg, state_dict = wandb_model_load(api, f'{nn_path}_model:best')
-
-    H_fwd = model_cfg.dataset.H_fwd
-    H_rev = model_cfg.dataset.H_rev
-    # TODO: proper sizing
-    tube_oneshot_model = instantiate(model_cfg.model)(H_rev + 2 * (H_rev + H_fwd), H_fwd)
-
-    tube_oneshot_model.load_state_dict(state_dict)
-
-    tube_oneshot_model.to('cuda')
-    tube_oneshot_model.eval()
-    e = torch.zeros((H_rev, 1))
-    v_prev = torch.zeros((H_rev, planning_model.m))
-
-    data = torch.concatenate((e, torch.concatenate((v_prev, torch.from_numpy(v_sol))).reshape(-1, 1))).float()
-    w_torch = tube_oneshot_model(data.to('cuda').T).T
-    ca_out = tube_dynamics(ca.DM(z_sol), ca.DM(v_sol), ca.DM(w_sol), ca.DM(e.numpy()), ca.DM(v_prev.numpy()))
-    plt.figure()
-    plt.plot(w_sol)
-    plt.plot(w_torch.detach().cpu().numpy(), 'o')
-    plt.show()
-
 
     print(f"Complete! Writing to {fn}")
 

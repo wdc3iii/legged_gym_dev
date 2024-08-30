@@ -1,8 +1,10 @@
 clear; clc;
-% nm = 'cl_tube_gap_big_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
-% nm = 'cl_tube_right_wide_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
-nm = 'cl_tube_right_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
-% nm = 'cl_tube_gap_pl0dhg5j_nominal_NN_oneshot_evaluate_True';
+% nm = 'cl_tube_gap_pl0dhg5j_nominal_Rv_0_0_NN_oneshot_evaluate_True';
+% nm = 'cl_tube_gap_pl0dhg5j_nominal_Rv_10_0_NN_oneshot_evaluate_True';
+% nm = 'cl_tube_gap_pl0dhg5j_nominal_Rv_100_0_NN_oneshot_evaluate_True';
+% nm = 'cl_tube_gap_pl0dhg5j_nominal_Rv_0_10_NN_oneshot_evaluate_True';
+% nm = 'cl_tube_gap_pl0dhg5j_nominal_Rv_0_100_NN_oneshot_evaluate_True';
+nm = 'cl_tube_gap_pl0dhg5j_nominal_Rv_10_10_NN_oneshot_evaluate_True';
 
 set(groot, 'DefaultAxesFontSize', 17);  % Set default font size for axes labels and ticks
 set(groot, 'DefaultTextFontSize', 17);  % Set default font size for text objects

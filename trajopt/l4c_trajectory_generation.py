@@ -27,6 +27,8 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.Qw = p_dict['Qw']
         self.R = p_dict["R"] if track_nominal else p_dict["R_nominal"]
         self.R_nominal = p_dict["R_nominal"]
+        self.Rv_first = p_dict["Rv_first"]
+        self.Rv_second = p_dict["Rv_second"]
         self.w_max = w_max
         self.tube_ws = tube_ws
         self.warm_start = warm_start
@@ -43,12 +45,12 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         if self.warm_start == 'nominal' or self.track_nominal:
             self.nominal_solver, self.nominal_nlp_dict, self.nominal_nlp_opts = trajopt_solver(
                 self.planning_model, self.N, self.Q, self.R_nominal, self.Nobs, Qf=self.Qf,
-                max_iter=self.max_iter, debug_filename=None
+                Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename=None
             )
 
         self.solver, self.nlp_dict, self.nlp_opts = trajopt_tube_solver(
             self.planning_model, self.tube_dynamics, self.N, self.H_rev, self.Q, self.Qw, self.R, self.w_max, self.Nobs,
-            Qf=self.Qf, max_iter=self.max_iter, debug_filename=None
+            Qf=self.Qf, Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename=None
         )
 
     def reset_idx(self, idx, z, e_prev=None):

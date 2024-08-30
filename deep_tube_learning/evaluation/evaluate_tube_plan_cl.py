@@ -8,8 +8,8 @@ from deep_tube_learning.custom_sim import CustomSim
 
 
 # prob_str = 'right'
-prob_str = 'right_wide'
-# prob_str = 'gap'
+# prob_str = 'right_wide'
+prob_str = 'gap'
 # prob_str = 'gap_big'
 
 track_warm = True
@@ -32,9 +32,12 @@ tube_dyn = "NN_oneshot"
 nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # 128x128 softplus b=5
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
-time_it = False
+time_it = True
 H = 50
 max_iter = 200
+
+Rv1 = 10
+Rv2 = 10
 
 def arr2list(d):
     if type(d) is dict:
@@ -50,6 +53,11 @@ def arr2list(d):
 
 
 def main():
+    if Rv1 is not None:
+        problem_dict[prob_str]['Rv_first'] = Rv1
+    if Rv2 is not None:
+        problem_dict[prob_str]['Rv_second'] = Rv2
+
     model_name = f'{nn_path}_model:best'
 
     api = wandb.Api()
@@ -181,7 +189,7 @@ def main():
 
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
+    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),
