@@ -64,6 +64,7 @@ env_config:
     seed: ${seed}
     prob_stationary: 0.0005
     dN: 5
+    prob_rnd: 0.2
   curriculum:
     use_curriculum: True
     curriculum_steps: [2500, 5000, 7500, 10000, 12500, 15000, 17500]

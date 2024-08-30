@@ -62,8 +62,6 @@ class CustomSim:
             N=traj_cfg.N,
             freq_low=traj_cfg.freq_low,
             freq_high=traj_cfg.freq_high,
-            seed=traj_cfg.seed,
-            backend='torch',
             device=self.device,
             prob_stationary=traj_cfg.prob_stationary,
             dN=traj_cfg.dN,
