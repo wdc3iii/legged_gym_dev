@@ -4,7 +4,7 @@ import numpy as np
 import time
 from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
 from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
-from trajopt.tube_trajopt2 import *
+from trajopt.tube_trajopt import *
 
 
 class AbstractTrajectoryGenerator(ABC):

@@ -11,16 +11,16 @@ from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 problem_dict = {
     "gap": {"start": np.array([0.3, 0.3]), "goal": np.array([1.5, 1.5]),
             "obs": {'c': np.array([[1, 0.], [0.75, 1.5]]), 'r': np.array([0.5, 0.5])},
-            "vel_max": 0.2, "pos_max": 10, "dt": 0.1, "H": 100},
+            "Q": 10, "R": 10, "Qw": 0},
     "right": {"start": np.array([0.5, 0]), "goal": np.array([2, 0]),
               "obs": {'c': np.array([[1, 1.], [0.625, -0.625]]), 'r': np.array([0.5, 0.5])},
-              "vel_max": 1, "pos_max": 10, "dt": 0.1, "H": 75},
+            "Q": 10, "R": 10, "Qw": 0},
     "right_wide": {"start": np.array([0.5, 0]), "goal": np.array([2, 0]),
                    "obs": {'c': np.array([[1, 1.], [1.25, -1.25]]), 'r': np.array([0.5, 0.5])},
-                   "vel_max": 1, "pos_max": 10, "dt": 0.1, "H": 75},
+            "Q": 10, "R": 10, "Qw": 0},
     "gap_big": {"start": np.array([0., 0.]), "goal": np.array([3., 3.]),
             "obs": {'c': np.array([[2., 0.], [1.75, 3.]]), 'r': np.array([1., 1.])},
-            "vel_max": 1, "pos_max": 10, "dt": 0.1, "H": 100},
+            "Q": 10, "R": 10, "Qw": 0},
 }
 
 
@@ -126,11 +126,15 @@ def setup_trajopt_solver(pm, N, Nobs):
     z = ca.MX.sym("z", N + 1, pm.n)
     v = ca.MX.sym("v", N, pm.m)
 
-    return z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r
+    # Make params for cost function
+    p_z_cost = ca.MX.sym("p_z_cost", N + 1, pm.n)
+    p_v_cost = ca.MX.sym("p_z_cost", N, pm.m)
+
+    return z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c, p_obs_r
 
 
 def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=None):
-    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
+    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, _, _, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
 
     if Qf is None:
         Qf = Q
@@ -193,7 +197,7 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
 
 def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None,
                         max_iter=1000, debug_filename=None, z_init=None, v_init=None):
-    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
+    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N, 1)
     w_lb = ca.DM(N, 1)
     w_ub = ca.DM(np.ones((N, 1)) * w_max)
@@ -206,15 +210,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     Qf = ca.DM(Qf)
 
     # Define NLP
-    obj = quadratic_objective(w, Qw)
-    if z_init is None:
-        obj += quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(z[-1, :], Qf, goal=p_zf)
-    else:
-        obj += quadratic_objective(z[:-1, :], Q, goal=z_init[:-1, :]) + quadratic_objective(z[-1, :], Qf, goal=z_init[None, -1, :])
-    if v_init is None:
-        obj += quadratic_objective(v, R)
-    else:
-        obj += quadratic_objective(v, R, goal=v_init)
+    obj = quadratic_objective(z[:-1, :], Q, goal=p_z_cost[:-1, :]) + quadratic_objective(v, R, goal=p_v_cost) + quadratic_objective(z[-1, :], Qf, goal=p_z_cost[-1, :])
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c, p_obs_r, w=w)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
@@ -245,7 +241,9 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
         w_ub
     )
     p_nlp = ca.vertcat(
-        p_z0.T, p_zf.T, ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r,
+        p_z0.T, p_zf.T,
+        ca.reshape(p_z_cost, (N + 1) * pm.n, 1), ca.reshape(p_v_cost, N * pm.m, 1),
+        ca.reshape(p_obs_c, 2 * Nobs, 1), p_obs_r,
         e, ca.reshape(v_prev, H_rev * pm.m, 1)
     )
 
@@ -325,23 +323,46 @@ def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
         g_cols.extend(g_tube_dyn)
 
     obs_c_lst = [f'obs_{i}_x' for i in range(Nobs)] + [f'obs_{i}_y' for i in range(Nobs)]
-    p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + \
-             [f'obs_{i}_r' for i in range(Nobs)]
-
-    if not len(p_cols) == p.numel():
+    if p.numel() == 2 * pm.n + len(obs_c_lst) + Nobs:
+        p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + \
+                 [f'obs_{i}_r' for i in range(Nobs)]
+    elif p.numel() == 2 * pm.n + len(obs_c_lst) + Nobs + H_rev + H_rev * pm.m:
+        p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + obs_c_lst + \
+                 [f'obs_{i}_r' for i in range(Nobs)]
         e_cols = [f"e_{i}" for i in range(H_rev)]
         v_prev_str = np.array(["v_prev"] * (H_rev * pm.m), dtype='U13').reshape((H_rev, pm.m))
         for r in range(v_prev_str.shape[0]):
             for c in range(v_prev_str.shape[1]):
                 v_prev_str[r, c] = v_prev_str[r, c] + f"_{r}_{c}"
         p_cols += e_cols + list(np.reshape(v_prev_str, (-1, 1)).squeeze())
+    else:
+        z_cost = ["cost_" + s for s in np.reshape(z_str, ((N + 1) * pm.n,))]
+        v_cost = ["cost_" + s for s in np.reshape(v_str, (N * pm.m,))]
+        p_cols = [f'z_ic_{i}' for i in range(pm.n)] + [f'z_g_{i}' for i in range(pm.n)] + z_cost + v_cost + obs_c_lst + \
+                 [f'obs_{i}_r' for i in range(Nobs)]
+        e_cols = [f"e_{i}" for i in range(H_rev)]
+        v_prev_str = np.array(["v_prev"] * (H_rev * pm.m), dtype='U13').reshape((H_rev, pm.m))
+        for r in range(v_prev_str.shape[0]):
+            for c in range(v_prev_str.shape[1]):
+                v_prev_str[r, c] = v_prev_str[r, c] + f"_{r}_{c}"
+        p_cols += e_cols + list(np.reshape(v_prev_str, (-1, 1)).squeeze())
+
     assert len(x_cols) == x.numel() and len(g_cols) == g.numel() and len(p_cols) == p.numel()
     return x_cols, g_cols, p_cols
 
 
-def init_params(z0, zf, obs):
+def init_params(z0, zf, obs, z_cost=None, v_cost=None, e=None, v_prev=None):
     Nobs = len(obs['r'])
-    params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
+    if z_cost is None:
+        params = np.vstack([z0[:, None], zf[:, None], np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]])
+    else:
+        params = np.vstack([
+            z0[:, None], zf[:, None],
+            np.reshape(z_cost, (-1, 1)), np.reshape(v_cost, (-1, 1)),
+            np.reshape(obs['c'], (2 * Nobs, 1)), obs['r'][:, None]
+        ])
+    if e is not None:
+        params = np.vstack([params, e, v_prev.reshape(-1, 1)])
     return params
 
 
@@ -571,18 +592,18 @@ def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
 
         return g, g_lb, g_ub
 
-    return oneshot_nn_tube_dyn
+    return oneshot_nn_tube_dyn, H_fwd, H_rev
 
 
 def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10, nn_path=None, device='cuda'):
     if tube_dyn == 'l1':
-        return get_l1_tube_dynamics(scaling)
+        return get_l1_tube_dynamics(scaling), 0
     elif tube_dyn == 'l2':
-        return get_l2_tube_dynamics(scaling)
+        return get_l2_tube_dynamics(scaling), 0
     elif tube_dyn == 'l1_rolling':
-        return get_rolling_l1_tube_dynamics(scaling, window_size)
+        return get_rolling_l1_tube_dynamics(scaling, window_size), window_size
     elif tube_dyn == 'l2_rolling':
-        return get_rolling_l2_tube_dynamics(scaling, window_size)
+        return get_rolling_l2_tube_dynamics(scaling, window_size), window_size
     elif tube_dyn == 'NN_oneshot':
         return get_oneshot_nn_tube_dynamics(f'{nn_path}_model:best', device=device)
     else:

@@ -1,4 +1,4 @@
-from trajopt.tube_trajopt2 import *
+from trajopt.tube_trajopt import *
 import pickle
 from omegaconf import OmegaConf
 from deep_tube_learning.utils import unnormalize_dict
