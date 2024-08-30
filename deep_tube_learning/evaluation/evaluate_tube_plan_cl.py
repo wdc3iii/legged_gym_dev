@@ -1,18 +1,18 @@
-from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
-from trajopt.tube_trajopt import *
+from trajopt.tube_trajopt2 import *
 import pickle
 from omegaconf import OmegaConf
 from deep_tube_learning.utils import unnormalize_dict
 import time
 import torch
-from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
+from deep_tube_learning.custom_sim import CustomSim
+
 
 # prob_str = 'right'
 # prob_str = 'right_wide'
 # prob_str = 'gap'
 prob_str = 'gap_big'
 
-track_warm = False
+track_warm = True
 
 # warm_start = 'start'
 # warm_start = 'goal'
@@ -32,9 +32,22 @@ tube_dyn = "NN_oneshot"
 nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/932hlryb"  # 128x128 softplus b=5
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
-time_it = False
+time_it = True
+H = 50
+max_iter = 200
 
-def main(start, goal, obs, H):
+def arr2list(d):
+    if type(d) is dict:
+        return {key: arr2list(val) for key, val in d.items()}
+    elif type(d) is np.ndarray:
+        return [arr2list(v) for v in list(d)]
+    elif type(d) is np.float64:
+        return float(d)
+    else:
+        return d
+
+
+def main():
     model_name = f'{nn_path}_model:best'
 
     api = wandb.Api()
@@ -43,106 +56,93 @@ def main(start, goal, obs, H):
     run_id = model_cfg.dataset.wandb_experiment
     with open(f"../rom_tracking_data/{run_id}/config.pickle", 'rb') as f:
         dataset_cfg = pickle.load(f)
+    dataset_cfg = unnormalize_dict(dataset_cfg)
+    dataset_cfg['env_config']['env']['num_envs'] = 1
+    dataset_cfg['env_config']['trajectory_generator'] = {
+        'cls': 'ClosedLoopTrajectoryGenerator',
+        'H': H,
+        'dt_loop': dataset_cfg['env_config']['env']['model']['dt'],
+        'device': "cuda" if torch.cuda.is_available() else "cpu",
+        'prob_dict': {key: arr2list(val) for key, val in problem_dict[prob_str].items()},
+        'tube_dyn': tube_dyn,
+        'nn_path': nn_path,
+        'w_max': 1,
+        'warm_start': warm_start,
+        'nominal_ws': 'interpolate',
+        'track_nominal': track_warm,
+        'tube_ws': tube_ws,
+        'max_iter': max_iter
+    }
+    dataset_cfg['env_config']['domain_rand']['randomize_rom_distance'] = False
+
     dataset_cfg = OmegaConf.create(unnormalize_dict(dataset_cfg))
 
-    z_max = np.array([dataset_cfg.pos_max, dataset_cfg.pos_max])
-    v_max = np.array([dataset_cfg.vel_max, dataset_cfg.vel_max])
-    planning_model = CasadiSingleInt2D(dataset_cfg.env_config.rom.dt, -z_max, z_max, -v_max, v_max)
-    pm = SingleInt2D(
-        dataset_cfg.env_config.rom.dt, -z_max, z_max, -v_max, v_max, backend='torch'
-    )
-    dyn_cfg = dataset_cfg.env_config.env.model
-    model_class = globals()[dyn_cfg.cls]
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = model_class(
-        dt=dyn_cfg.dt,
-        z_min=torch.tensor(dyn_cfg.z_min, device=device),
-        z_max=torch.tensor(dyn_cfg.z_max, device=device),
-        v_min=torch.tensor(dyn_cfg.v_min, device=device),
-        v_max=torch.tensor(dyn_cfg.v_max, device=device),
-        n_robots=1,
-        backend='torch',
-        device=device
-    )
-    controller = instantiate(dataset_cfg.controller)(state_dependent_input_bound=model.clip_v_z)
+    # Define a new custom sim
+    env = CustomSim(dataset_cfg.env_config)
+    controller = instantiate(dataset_cfg.controller)(state_dependent_input_bound=env.model.clip_v_z)
 
-    Q = 10 * np.eye(2)
-    Qw = 0
-    R = 10 * np.eye(2)
-    N = model_cfg.dataset.H_fwd
-    H_rev = model_cfg.dataset.H_rev
-    w_max = 1
-
-    tube_dynamics = get_tube_dynamics(tube_dyn, nn_path=nn_path)
 
     tube_ws_str = str(tube_ws).replace('.', '_')
-    z_k = torch.zeros((H + 1, planning_model.n), device=device) * torch.nan
-    v_k = torch.zeros((H, planning_model.m), device=device) * torch.nan
-    e = np.zeros((H_rev, 1))
-    v_prev = np.zeros((H_rev, planning_model.m))
-    x = torch.zeros((1, z_k.shape[0], model.n), device=device) * torch.nan
-    u = torch.zeros((1, v_k.shape[0], model.m), device=device) * torch.nan
-    w_k = torch.zeros((H + 1, 1), device=device) * torch.nan
-    pz_x = torch.zeros_like(z_k, device=device) * torch.nan
-    z_k[0, :] = torch.from_numpy(start).float().to(device)
-    x[:, 0, :2] = torch.from_numpy(start).float().to(device)
-    x[:, 0, 2:] = 0
-    pz_x[0, :] = model.proj_z(x[:, 0, :])
+    z_k = torch.zeros((H + 1, env.traj_gen.planning_model.n), device=env.device) * torch.nan
+    v_k = torch.zeros((H, env.traj_gen.planning_model.m), device=env.device) * torch.nan
+    x = torch.zeros((1, z_k.shape[0], env.model.n), device=env.device) * torch.nan
+    w_k = torch.zeros((H + 1, 1), device=env.device) * torch.nan
+    pz_x = torch.zeros_like(z_k, device=env.device) * torch.nan
 
     # mats for visualizing later
-    z_vis = torch.zeros((H, *z_k.shape), device=device)
-    v_vis = torch.zeros((H, *v_k.shape), device=device)
-    pz_x_vis = torch.zeros((H, *pz_x.shape), device=device)
-    w_vis = torch.zeros((H, *w_k.shape), device=device)
-    z_sol_vis = torch.zeros((H, N + 1, planning_model.n), device=device)
-    v_sol_vis = torch.zeros((H, N, planning_model.m), device=device)
-    w_sol_vis = torch.zeros((H, N, 1), device=device)
+    z_vis = torch.zeros((H, *z_k.shape), device=env.device)
+    v_vis = torch.zeros((H, *v_k.shape), device=env.device)
+    pz_x_vis = torch.zeros((H, *pz_x.shape), device=env.device)
+    w_vis = torch.zeros((H, *w_k.shape), device=env.device)
+    z_sol_vis = torch.zeros((H, env.traj_gen.N + 1, env.traj_gen.planning_model.n), device=env.device)
+    v_sol_vis = torch.zeros((H, env.traj_gen.N, env.traj_gen.planning_model.m), device=env.device)
+    w_sol_vis = torch.zeros((H, env.traj_gen.N, 1), device=env.device)
     cv_vis = {}
     timing = np.zeros((H,))
+
+    env.reset()
+    z_k[0, :] = env.traj_gen.trajectory[:, 1, :]
+    x[:, 0, :] = env.get_states()
+    pz_x[0, :] = env.model.proj_z(x[:, 0, :])
+    w_k[0] = torch.linalg.norm(z_k[0, :] - pz_x[0, :])
+
+    obs = env.get_observations()
     t0 = time.perf_counter_ns()
 
-    sol, solver = solve_tube(
-        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max,
-        warm_start=warm_start, tube_ws=tube_ws, max_iter=200, track_warm=track_warm
-    )
+    for t in range(H):
+        # Step environment until rom steps
+        k = torch.clone(env.traj_gen.k.detach())
+        while torch.any(env.traj_gen.k == k):
+            actions = controller(obs.detach())
+            obs, _, _, dones, _ = env.step(actions.detach())
 
-    for k in range(H):
-        z_sol, v_sol, w_sol = extract_solution(sol, N, planning_model.n, planning_model.m)
-
-        # Decide fom action
-        xt = x[:, k, :]
-        for i in range(2):
-            ut = controller(
-                torch.concatenate((xt.squeeze(), torch.from_numpy(z_sol[0, :]).float().to(device), torch.from_numpy(v_sol[1, :]).float().to(device)))[None, :]
-            )
-            xt = model.f(xt, ut)
-        v_k[k, :] = torch.from_numpy(v_sol[0, :]).float().to(device)
-        z_k[k + 1, :] = pm.f(z_k[k, :][None, :], v_k[k, :][None, :])
-        x[:, k + 1, :] = xt
-        u[:, k, :] = ut
-        pz_x[k + 1, :] = model.proj_z(xt)
-        w_k[k + 1, :] = torch.from_numpy(w_sol[0, :]).float().to(device)
-
-        g_violation = compute_constraint_violation(solver, sol["g"])
-        g_dict = segment_constraint_violation(g_violation, solver["g_cols"])
+        # Save Data
+        base = torch.clone(env.root_states.detach())
+        d = torch.clone(dones.detach())
+        proj = env.rom.proj_z(base)
+        v_k[t, :] = env.traj_gen.v_trajectory[:, 0, :]
+        x[:, t + 1, :] = env.get_states()
+        z_k[t + 1, :] = env.traj_gen.get_trajectory()[:, 0, :]
+        pz_x[t + 1, :] = proj
+        w_k[t + 1] = env.traj_gen.w_trajectory[0].item()
 
         if not time_it:
 
             # Plot state space solution
             plt.subplot(3, 1, 1)
-            plt.plot(z_sol)
+            plt.plot(env.traj_gen.trajectory[0].cpu().numpy())
             plt.legend(["x", "y"])
             plt.xlabel("Node")
             plt.ylabel("State")
 
             plt.subplot(3, 1, 2)
-            plt.plot(v_sol)
+            plt.plot(env.traj_gen.v_trajectory[0].cpu().numpy())
             plt.legend(["v_x", "v_y"])
             plt.xlabel("Node")
             plt.ylabel("Input")
 
             plt.subplot(3, 1, 3)
-            plt.plot(w_sol)
+            plt.plot(env.traj_gen.w_trajectory)
             plt.legend(["w"])
             plt.xlabel("Node")
             plt.ylabel("Tube")
@@ -150,7 +150,7 @@ def main(start, goal, obs, H):
 
             # Plot constraint violation
             plt.figure()
-            for label, data in g_dict.items():
+            for label, data in env.traj_gen.g_dict.items():
                 plt.plot(data, label=label)
             plt.title("Constraint Violation")
             plt.legend()
@@ -158,38 +158,28 @@ def main(start, goal, obs, H):
 
             # Plot spacial solution
             fig, ax = plt.subplots()
-            plot_problem(ax, obs, start, goal)
-            planning_model.plot_tube(ax, z_k.cpu().numpy(), w_k.cpu().numpy(), 'k')
-            planning_model.plot_spacial(ax, z_k.cpu().numpy(), '.-k')
-            planning_model.plot_spacial(ax, pz_x.cpu().numpy(), '.-b')
-            planning_model.plot_spacial(ax, z_sol)
-            planning_model.plot_tube(ax, z_sol, w_sol)
+            plot_problem(ax, env.traj_gen.obs, env.traj_gen.start, env.traj_gen.goal)
+            env.traj_gen.planning_model.plot_tube(ax, z_k.cpu().numpy(), w_k.cpu().numpy(), 'k')
+            env.traj_gen.planning_model.plot_spacial(ax, z_k.cpu().numpy(), '.-k')
+            env.traj_gen.planning_model.plot_spacial(ax, pz_x.cpu().numpy(), '.-b')
+            env.traj_gen.planning_model.plot_spacial(ax, env.traj_gen.trajectory[0].cpu().numpy())
+            env.traj_gen.planning_model.plot_tube(ax, env.traj_gen.trajectory[0].cpu().numpy(), env.traj_gen.w_trajectory)
             plt.axis("square")
             plt.show()
 
-        z_vis[k] = torch.clone(z_k)
-        v_vis[k] = torch.clone(v_k)
-        pz_x_vis[k] = torch.clone(pz_x)
-        w_vis[k] = torch.clone(w_k)
-        z_sol_vis[k] = torch.clone(torch.from_numpy(z_sol).float())
-        v_sol_vis[k] = torch.clone(torch.from_numpy(v_sol).float())
-        w_sol_vis[k] = torch.clone(torch.from_numpy(w_sol).float())
-        cv_vis["cv" + str(k)] = g_dict.copy()
-        timing[k] = time.perf_counter_ns() - t0
+        z_vis[t] = torch.clone(z_k)
+        v_vis[t] = torch.clone(v_k)
+        pz_x_vis[t] = torch.clone(pz_x)
+        w_vis[t] = torch.clone(w_k)
+        z_sol_vis[t] = torch.clone(env.traj_gen.trajectory)
+        v_sol_vis[t] = torch.clone(env.traj_gen.v_trajectory)
+        w_sol_vis[t] = torch.clone(torch.from_numpy(env.traj_gen.w_trajectory).float()).to(env.device)
+        cv_vis["cv" + str(t)] = env.traj_gen.g_dict.copy()
+        timing[t] = time.perf_counter_ns() - t0
 
-        params = init_params(z_k[k + 1, :].detach().cpu().numpy(), goal, obs)
-        e[:-1] = e[1, :]
-        e[-1] = np.linalg.norm((z_k[k, :] - pz_x[k, :]).detach().cpu().numpy())
-        v_prev[:-1, :] = v_prev[1:, :]
-        v_prev[-1, :] = v_k[k, :].detach().cpu().numpy()
-        params = np.vstack([params, e, v_prev.reshape(-1, 1)])
-        x_init = init_decision_var(z_sol, v_sol, w=w_sol)
-
-        sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
-                               ubx=solver["ubx"])
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}.mat"
+    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_{tube_dyn}_{tube_ws_str}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),
@@ -200,11 +190,11 @@ def main(start, goal, obs, H):
         "w_sol": w_sol_vis.detach().cpu().numpy(),
         **cv_vis,
         "t": timing,
-        "z0": start,
-        "zf": goal,
-        "obs_x": obs['c'][0, :],
-        "obs_y": obs['c'][1, :],
-        "obs_r": obs['r'],
+        "z0": env.traj_gen.start,
+        "zf": env.traj_gen.goal,
+        "obs_x": env.traj_gen.obs['c'][0, :],
+        "obs_y": env.traj_gen.obs['c'][1, :],
+        "obs_r": env.traj_gen.obs['r'],
         "timing": timing
     })
 
@@ -212,9 +202,4 @@ def main(start, goal, obs, H):
 
 
 if __name__ == '__main__':
-    main(
-        problem_dict[prob_str]["start"],
-        problem_dict[prob_str]["goal"],
-        problem_dict[prob_str]["obs"],
-        problem_dict[prob_str]["H"]
-    )
+    main()

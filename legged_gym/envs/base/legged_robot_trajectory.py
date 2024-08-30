@@ -43,9 +43,9 @@ from legged_gym.utils.math import quat_apply_yaw
 from legged_gym.utils.helpers import class_to_dict, torch_rand_vec_float
 from .legged_robot_trajectory_config import LeggedRobotTrajectoryCfg
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle, ExtendedUnicycle,
-                                  ExtendedLateralUnicycle, ZeroTrajectoryGenerator,
-                                  CircleTrajectoryGenerator, SquareTrajectoryGenerator)
-from trajopt.trajectory_generation import TrajectoryGenerator
+                                  ExtendedLateralUnicycle)
+from trajopt.trajectory_generation import TrajectoryGenerator, CircleTrajectoryGenerator, ZeroTrajectoryGenerator, \
+    SquareTrajectoryGenerator
 from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, UniformWeightSamplerNoRamp
 
 
