@@ -1,6 +1,5 @@
 from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
-from trajopt.trajectory_generation import TrajectoryGenerator, ClosedLoopTrajectoryGenerator
-from trajopt.trajectory_generation import TrajectoryGenerator, ClosedLoopTrajectoryGenerator
+from trajopt.trajectory_generation import TrajectoryGenerator
 from deep_tube_learning.utils import *
 from omegaconf import DictConfig, ListConfig
 
@@ -53,11 +52,10 @@ class CustomSim:
 
     def _init_trajectory_generator(self):
         traj_cfg = self.cfg.trajectory_generator
-        traj_cls = globals()[traj_cfg.cls]
-        if traj_cls == TrajectoryGenerator:
+        if traj_cfg.cls == 'TrajectoryGenerator':
             t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high, backend='torch', device=self.device)
             weight_samp = globals()[traj_cfg.weight_samp_cls]()
-            self.traj_gen = traj_cls(
+            self.traj_gen = TrajectoryGenerator(
                 self.rom,
                 t_samp,
                 weight_samp,
@@ -70,7 +68,8 @@ class CustomSim:
                 dN=traj_cfg.dN,
                 prob_rnd=traj_cfg.prob_rnd
             )
-        elif traj_cls == ClosedLoopTrajectoryGenerator:
+        elif traj_cfg.cls == 'ClosedLoopTrajectoryGenerator':
+            from trajopt.l4c_trajectory_generation import ClosedLoopTrajectoryGenerator
             def list2arr(v):
                 if type(v) == list or type(v) == ListConfig:
                     return np.array(v)
@@ -79,7 +78,7 @@ class CustomSim:
                 else:
                     return v
             prob_dict = {k: list2arr(v) for k, v in traj_cfg.prob_dict.items()}
-            self.traj_gen = traj_cls(
+            self.traj_gen = ClosedLoopTrajectoryGenerator(
                 self.rom,
                 traj_cfg.H,
                 traj_cfg.dt_loop,
