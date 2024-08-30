@@ -56,3 +56,4 @@ env_config:
     seed: ${seed}
     prob_stationary: 0.0005
     dN: 1
+    prob_rnd: 0.1

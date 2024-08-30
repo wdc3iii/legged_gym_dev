@@ -17,7 +17,10 @@ problem_dict = {
               "vel_max": 1, "pos_max": 10, "dt": 0.1, "H": 75},
     "right_wide": {"start": np.array([0.5, 0]), "goal": np.array([2, 0]),
                    "obs": {'c': np.array([[1, 1.], [1.25, -1.25]]), 'r': np.array([0.5, 0.5])},
-                   "vel_max": 1, "pos_max": 10, "dt": 0.1, "H": 75}
+                   "vel_max": 1, "pos_max": 10, "dt": 0.1, "H": 75},
+    "gap_big": {"start": np.array([0., 0.]), "goal": np.array([3., 3.]),
+            "obs": {'c': np.array([[2., 0.], [1.75, 3.]]), 'r': np.array([1., 1.])},
+            "vel_max": 1, "pos_max": 10, "dt": 0.1, "H": 100},
 }
 
 
@@ -66,11 +69,11 @@ def single_obstacle_constraint(z, obs_c, obs_r, w=None):
     g = []
     g_lb = []
     g_ub = []
-    for k in range(z.shape[0]):
+    for k in range(1, z.shape[0]):
         if w is None:
             g_k, g_lb_k, g_ub_k = single_obstacle_constraint_k(z[k, :], obs_c, obs_r)
         else:
-            g_k, g_lb_k, g_ub_k = single_obstacle_constraint_k(z[k, :], obs_c, obs_r + w[k])
+            g_k, g_lb_k, g_ub_k = single_obstacle_constraint_k(z[k, :], obs_c, obs_r + w[k - 1])
         g.append(g_k)
         g_lb.append(g_lb_k)
         g_ub.append(g_ub_k)
@@ -191,9 +194,9 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, max_iter=1000, debug_filename=Non
 def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None,
                         max_iter=1000, debug_filename=None, z_init=None, v_init=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_obs_c, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
-    w = ca.MX.sym("w", N + 1, 1)
-    w_lb = ca.DM(N + 1, 1)
-    w_ub = ca.DM(np.ones((N + 1, 1)) * w_max)
+    w = ca.MX.sym("w", N, 1)
+    w_lb = ca.DM(N, 1)
+    w_ub = ca.DM(np.ones((N, 1)) * w_max)
     e = ca.MX.sym("e", H_rev, 1)
     v_prev = ca.MX.sym("v_prev", H_rev, pm.m)
 
@@ -300,7 +303,7 @@ def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
             np.reshape(v_str, (N * pm.m, 1))
         )).squeeze())
     else:
-        w_str = np.array(["w"] * (N + 1), dtype='U8').reshape((N + 1, 1))
+        w_str = np.array(["w"] * N, dtype='U8').reshape((N, 1))
         for r in range(w_str.shape[0]):
             w_str[r, 0] = w_str[r, 0] + f"_{r}"
         x_cols = list(np.vstack((
@@ -314,7 +317,7 @@ def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
         g_dyn_cols.extend(["dyn_" + st + f"_{k}" for st in pm.state_names])
     g_obs_cols = []
     for i in range(Nobs):
-        g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N + 1)])
+        g_obs_cols.extend([f"obs_{i}_{k}" for k in range(N)])
     g_tube_dyn = [f"tube_{k}" for k in range(N)]
     g_cols = g_dyn_cols + g_obs_cols + ["ic_" + st for st in pm.state_names]
 
@@ -355,7 +358,7 @@ def init_decision_var(z, v, w=None):
         x_init = np.vstack([
             np.reshape(z, ((N + 1) * n, 1), order='F'),
             np.reshape(v, (N * m, 1), order='F'),
-            np.reshape(w, ((N + 1) * 1, 1), order='F')
+            np.reshape(w, (N, 1), order='F')
         ])
     return x_init
 
@@ -366,7 +369,7 @@ def extract_solution(sol, N, n, m):
     z_sol = np.array(sol["x"][:z_ind, :].reshape((N + 1, n)))
     v_sol = np.array(sol["x"][z_ind:z_ind + v_ind, :].reshape((N, m)))
     if sol["x"].numel() > z_ind + v_ind:
-        w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N + 1, 1)))
+        w_sol = np.array(sol["x"][z_ind + v_ind:, :].reshape((N, 1)))
         return z_sol, v_sol, w_sol
     else:
         return z_sol, v_sol
@@ -434,9 +437,9 @@ def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None,
 
 def get_tube_warm_start(w_init, tube_dynamics, z, v, w, e, v_prev):
     if w_init == "evaluate":
-        return np.concatenate([np.array([[0]]), np.array(tube_dynamics(ca.DM(z), ca.DM(v), ca.DM(w), ca.DM(e), ca.DM(v_prev))[0])], axis=-1).T
+        return np.array(tube_dynamics(ca.DM(z), ca.DM(v), ca.DM(w), ca.DM(e), ca.DM(v_prev))[0]).T
     elif isinstance(w_init, (int, float)):
-        return np.ones((z.shape[0], 1)) * w_init
+        return np.ones((z.shape[0] - 1, 1)) * w_init
     raise ValueError(f"Tube warm start {w_init} not implemented. Must be evaluate or a double")
 
 
@@ -471,7 +474,7 @@ def solve_tube(
         max_iter=max_iter, debug_filename=debug_filename, z_init=z_goal, v_init=v_goal
     )
 
-    w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N + 1, 1)), e, v_prev)
+    w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N, 1)), e, v_prev)
 
     params = init_params(start, goal, obs)
 
@@ -490,7 +493,7 @@ def get_l1_tube_dynamics(scaling):
 
     def l1_tube_dyn(z, v, w, e, v_prev):
         fw = scaling * ca.sum2(ca.fabs(v))
-        g = (fw - w[1:]).T
+        g = (fw - w).T
         g_lb = ca.DM(*g.shape)
         g_ub = ca.DM(*g.shape)
 
@@ -503,7 +506,7 @@ def get_l2_tube_dynamics(scaling):
 
     def l2_tube_dyn(z, v, w, e, v_prev):
         fw = scaling * ca.sum2(v ** 2)
-        g = (fw - w[1:]).T
+        g = (fw - w).T
         g_lb = ca.DM(*g.shape)
         g_ub = ca.DM(*g.shape)
 
@@ -517,7 +520,7 @@ def get_rolling_l1_tube_dynamics(scaling, window_size):
     def l1_tube_dyn(z, v, w, e, v_prev):
         l1 = scaling * ca.sum2(ca.fabs(v))
         fw = [ca.sum1(l1[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(l1.numel())]
-        g = ca.horzcat(*fw) - w[1:].T
+        g = ca.horzcat(*fw) - w.T
         g_lb = ca.DM(*g.shape)
         g_ub = ca.DM(*g.shape)
 
@@ -531,7 +534,7 @@ def get_rolling_l2_tube_dynamics(scaling, window_size):
     def l2_tube_dyn(z, v, w, e, v_prev):
         l2 = scaling * ca.sum2(v ** 2)
         fw = [ca.sum1(l2[max(i - window_size + 1, 0):i + 1]) / min(window_size, i + 1) for i in range(l2.numel())]
-        g = ca.horzcat(*fw) - w[1:].T
+        g = ca.horzcat(*fw) - w.T
         g_lb = ca.DM(*g.shape)
         g_ub = ca.DM(*g.shape)
 
@@ -562,7 +565,7 @@ def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
         v_total = ca.vertcat(v_prev, v)
         tube_input = ca.horzcat(e.T, z[0, 2:], ca.reshape(v_total.T, 1, v_total.numel()))
         print(tube_input, fw(tube_input.T).T, w, "\n")
-        g = fw(tube_input.T).T - w[1:].T
+        g = fw(tube_input.T).T - w.T
         g_lb = ca.DM(*g.shape)
         g_ub = ca.DM(*g.shape)
 

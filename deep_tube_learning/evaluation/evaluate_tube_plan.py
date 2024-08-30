@@ -5,9 +5,10 @@ from omegaconf import OmegaConf
 from deep_tube_learning.utils import unnormalize_dict
 
 
-# prob_str = 'right'
+prob_str = 'right'
 # prob_str = 'right_wide'
-prob_str = 'gap'
+# prob_str = 'gap'
+# prob_str = 'gap_big'
 
 track_warm = False
 
@@ -26,7 +27,7 @@ tube_ws = "evaluate"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vv703y5s"  # 128x128 softplus b=5
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/932hlryb"  # 128x128 softplus b=5
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
 
@@ -122,7 +123,7 @@ def main(start, goal, obs):
     w_torch = tube_oneshot_model(data.to('cuda').T).T
     ca_out = tube_dynamics(ca.DM(z_sol), ca.DM(v_sol), ca.DM(w_sol), ca.DM(e.numpy()), ca.DM(v_prev.numpy()))
     plt.figure()
-    plt.plot(w_sol[1:])
+    plt.plot(w_sol)
     plt.plot(w_torch.detach().cpu().numpy(), 'o')
     plt.show()
 

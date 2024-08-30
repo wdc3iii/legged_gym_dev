@@ -17,8 +17,10 @@ def eval_model(delta_seed=1, num_robots=2):
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/st0soq8m"  # Double Single Int 0.3 v_max, 0.1 a_max on tracking, Hrev=10
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/6ndx7g2n"  # Double Single Int 0.3 v_max, 0.1 a_max on tracking, Hrev=25
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vv703y5s"  # Double Single Int 0.3 v_max, 0.1 a_max on tracking, Hrev=25, bigger time range
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/zbobbz4x"
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/932hlryb"  # trying older version
 
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # Hopper Single Int
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # Hopper Single Int
 
     model_name = f'{exp_name}_model:best'
 

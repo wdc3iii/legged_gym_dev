@@ -9,7 +9,8 @@ from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
 
 # prob_str = 'right'
 # prob_str = 'right_wide'
-prob_str = 'gap'
+# prob_str = 'gap'
+prob_str = 'gap_big'
 
 track_warm = False
 
@@ -28,7 +29,7 @@ tube_ws = "evaluate"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vv703y5s"  # 128x128 softplus b=5
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/932hlryb"  # 128x128 softplus b=5
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
 time_it = False
@@ -82,7 +83,6 @@ def main(start, goal, obs, H):
     x = torch.zeros((1, z_k.shape[0], model.n), device=device) * torch.nan
     u = torch.zeros((1, v_k.shape[0], model.m), device=device) * torch.nan
     w_k = torch.zeros((H + 1, 1), device=device) * torch.nan
-    w_k[0] = 0
     pz_x = torch.zeros_like(z_k, device=device) * torch.nan
     z_k[0, :] = torch.from_numpy(start).float().to(device)
     x[:, 0, :2] = torch.from_numpy(start).float().to(device)
@@ -96,7 +96,7 @@ def main(start, goal, obs, H):
     w_vis = torch.zeros((H, *w_k.shape), device=device)
     z_sol_vis = torch.zeros((H, N + 1, planning_model.n), device=device)
     v_sol_vis = torch.zeros((H, N, planning_model.m), device=device)
-    w_sol_vis = torch.zeros((H, N + 1, 1), device=device)
+    w_sol_vis = torch.zeros((H, N, 1), device=device)
     cv_vis = {}
     timing = np.zeros((H,))
     t0 = time.perf_counter_ns()
@@ -121,7 +121,7 @@ def main(start, goal, obs, H):
         x[:, k + 1, :] = xt
         u[:, k, :] = ut
         pz_x[k + 1, :] = model.proj_z(xt)
-        w_k[k + 1, :] = torch.from_numpy(w_sol[1, :]).float().to(device)
+        w_k[k + 1, :] = torch.from_numpy(w_sol[0, :]).float().to(device)
 
         g_violation = compute_constraint_violation(solver, sol["g"])
         g_dict = segment_constraint_violation(g_violation, solver["g_cols"])

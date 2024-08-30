@@ -7,7 +7,8 @@ from tqdm import tqdm
 from pathlib import Path
 import matplotlib.pyplot as plt
 from deep_tube_learning.utils import UniformWeightSamplerNoRamp, UniformSampleHoldDT, torch_rand_vec_float
-from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, TrajectoryGenerator
+from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
+from trajopt.trajectory_generation import TrajectoryGenerator
 import torch
 
 

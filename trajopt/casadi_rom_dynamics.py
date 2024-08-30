@@ -77,11 +77,11 @@ class CasadiRomDynamics(ABC):
         :param wt: tube width
         :param c: color/line type
         """
-        for i in range(xt.shape[0]):
-            if not np.isnan(wt[i]):
+        for i in range(1, xt.shape[0]):
+            if not np.isnan(wt[i - 1]):
                 xc = xt[i, 0]
                 yc = xt[i, 1]
-                circ = plt.Circle((xc, yc), wt[i], color=c, fill=False)
+                circ = plt.Circle((xc, yc), wt[i - 1], color=c, fill=False)
                 ax.add_patch(circ)
 
     def plot_ts(self, axs, xt, ut):

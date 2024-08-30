@@ -29,7 +29,8 @@
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 from .base_config import BaseConfig
-from trajopt.rom_dynamics import SingleInt2D, TrajectoryGenerator
+from trajopt.rom_dynamics import SingleInt2D
+from trajopt.trajectory_generation import TrajectoryGenerator
 from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler
 
 class LeggedRobotTrajectoryCfg(BaseConfig):

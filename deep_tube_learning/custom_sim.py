@@ -1,4 +1,5 @@
-from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, TrajectoryGenerator
+from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
+from trajopt.trajectory_generation import TrajectoryGenerator
 from deep_tube_learning.utils import *
 
 
@@ -66,6 +67,7 @@ class CustomSim:
             device=self.device,
             prob_stationary=traj_cfg.prob_stationary,
             dN=traj_cfg.dN,
+            prob_rnd=traj_cfg.prob_rnd
         )
 
     def step(self, action):

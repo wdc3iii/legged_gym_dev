@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler
 
 from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUnicycle,
-                                  ExtendedUnicycle, ExtendedLateralUnicycle, TrajectoryGenerator,
-                                  ZeroTrajectoryGenerator, SquareTrajectoryGenerator, CircleTrajectoryGenerator)
+                                  ExtendedUnicycle, ExtendedLateralUnicycle, ZeroTrajectoryGenerator, SquareTrajectoryGenerator, CircleTrajectoryGenerator)
+from trajopt.trajectory_generation import TrajectoryGenerator
 import torch
 
 
