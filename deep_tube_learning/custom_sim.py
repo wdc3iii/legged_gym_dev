@@ -66,7 +66,8 @@ class CustomSim:
                 device=self.device,
                 prob_stationary=traj_cfg.prob_stationary,
                 dN=traj_cfg.dN,
-                prob_rnd=traj_cfg.prob_rnd
+                prob_rnd=traj_cfg.prob_rnd,
+                noise_llh=traj_cfg.noise_llh
             )
         elif traj_cfg.cls == 'ClosedLoopTrajectoryGenerator':
             from trajopt.l4c_trajectory_generation import ClosedLoopTrajectoryGenerator

@@ -66,13 +66,14 @@ env_config:
     N: 10
     t_low: 0.5
     t_high: 5
-    freq_low: 0.01
-    freq_high: 2
+    freq_low: 0.1
+    freq_high: 3
     seed: ${seed}
     prob_stationary: 0.01
     dN: 1
     prob_rnd: 0.05
     noise_max_std: 0.1
+    noise_llh: 0.25
   domain_rand:
     randomize_rom_distance: True
     max_rom_distance: [ 1.0, 1.0 ]

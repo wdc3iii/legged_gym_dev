@@ -1,4 +1,7 @@
 import os
+
+from torch.nn.utils import clip_grad_norm_
+
 from deep_tube_learning.datasets import TubeDataset
 
 import hydra
@@ -108,6 +111,8 @@ def main(cfg):
             loss = loss_fn(outputs, targets, data)
 
             loss.backward()
+            if 'grad_clip' in cfg.keys():
+                clip_grad_norm_(model.parameters(), cfg.grad_clip)
             optimizer.step()
             lr_scheduler.step()
             epoch_loss += loss.item()

@@ -15,7 +15,9 @@ def eval_model(delta_seed=1, num_robots=2):
     # Experiment whose model to evaluate
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # Larger bounds
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
+
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/b0ein4nu"  # Recursive
 
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # Hopper Single Int
 
@@ -59,7 +61,7 @@ def eval_model(delta_seed=1, num_robots=2):
             e = np.linalg.norm(pz_x - z, axis=-1)
             for k in range(H):
                 data, ek = dataset._get_item_helper(ii, k + dataset.H_rev)
-                w[k, :] = model(data.to(device)).cpu().numpy()
+                w[k, :] = model(data[None, :].to(device)).cpu().numpy()
 
             fn = f"data/eval_{run_id[:-8] + exp_name[-8:]}_{ii}.mat"
             savemat(fn, {

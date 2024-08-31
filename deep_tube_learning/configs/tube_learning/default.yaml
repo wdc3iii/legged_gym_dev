@@ -17,11 +17,17 @@ optimizer:
   _partial_: true
   lr: ${lr}
 
+#lr_scheduler:
+#  _target_: torch.optim.lr_scheduler.StepLR
+#  _partial_: true
+#  step_size: 10000
+#  gamma: ${gamma}
 lr_scheduler:
-  _target_: torch.optim.lr_scheduler.StepLR
-  _partial_: true
-  step_size: 10000
-  gamma: ${gamma}
+  _target_: "torch.optim.lr_scheduler.LambdaLR"
+  lr_lambda:
+    _target_: "deep_tube_learning.utils.get_warmup_cosine_decay"
+    warmup_steps: 1000
+    max_steps: 10000
 
 model:
   _target_: deep_tube_learning.models.MLP

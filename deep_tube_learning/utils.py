@@ -342,3 +342,17 @@ class CheckPointManager:
 
     def _model_save(self, model_dict):
         torch.save(model_dict, f"{self.ckpt_path}/model.pth")
+
+
+def get_warmup_cosine_decay(warmup_steps, max_steps):
+
+    def lr_lambda(current_step: int):
+        if current_step < warmup_steps:
+            # Linear warm-up
+            return current_step / warmup_steps
+        else:
+            # Cosine decay
+            progress = (current_step - warmup_steps) / (max_steps - warmup_steps)
+            return 0.5 * (1 + np.cos(torch.pi * progress))
+
+    return lr_lambda

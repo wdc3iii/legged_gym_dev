@@ -53,7 +53,7 @@ class AbstractTrajectoryGenerator(ABC):
 class TrajectoryGenerator(AbstractTrajectoryGenerator):
 
     def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10,
-                 device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05, noise_max_std=0.1):
+                 device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05, noise_max_std=0.1, noise_llh=0.25):
         super().__init__(rom, N, dN, dt_loop, device)
 
         self.weights = torch.zeros((self.rom.n_robots, 4), device=self.device)
@@ -81,6 +81,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.rnd_inds = None
         self.rnd_inds_bool = torch.zeros((self.rom.n_robots,), device=self.device).bool()
         self.noise_max_std = torch.max(self.rom.v_max) * noise_max_std
+        self.noise_llh = noise_llh
 
     def resample(self, idx, z):
         if len(idx) > 0:
@@ -97,7 +98,10 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
             self.rnd_inds_bool[idx] = self.uniform(torch.tensor([0.0], device=self.device), torch.tensor([1.0], device=self.device),
                                                      (n, 1)).squeeze() < self.prob_rnd
             self.rnd_inds = torch.nonzero(self.rnd_inds_bool).reshape(-1,)
-            self.noise_std = self.uniform(torch.tensor([0.], device=self.device), self.noise_max_std, size=(self.rom.n_robots, self.rom.m))
+            self.noise_std[idx] = self.uniform(torch.tensor([0.], device=self.device), self.noise_max_std, size=(len(idx), self.rom.m))
+            mask = torch.rand(len(idx), device=self.device) > self.noise_llh
+            self.noise_std[idx[mask]] = 0
+
 
     def _resample_t_final(self, idx):
         self.t_final[idx] += self.t_sampler.sample(len(idx))
