@@ -7,13 +7,13 @@ epochs: 50
 dataset_name: "double_single_int"
 upload_to_wandb: True
 
-vel_max: 1.
-vel_min: -1.
+vel_max: 0.2
+vel_min: -0.2
 
-acc_max_model: 2.
-acc_min_model: -2.
-vel_max_model: 2.
-vel_min_model: -2.
+acc_max_model: 0.1
+acc_min_model: -0.1
+vel_max_model: 0.3
+vel_min_model: -0.3
 
 controller:
   _target_: deep_tube_learning.controllers.DoubleSingleTracking

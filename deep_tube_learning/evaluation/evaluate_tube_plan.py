@@ -26,13 +26,15 @@ tube_ws = "evaluate"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
-# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # 128x128 softplus b=5
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # Larger bounds
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/9k9j5mg7"  # Tightest bounds
+
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
 
-Rv1 = 0
-Rv2 = 100
+Rv1 = 10
+Rv2 = 10
 
 
 def main():
@@ -67,7 +69,7 @@ def main():
     tube_dynamics, _, _ = get_tube_dynamics(tube_dyn, nn_path=nn_path)
 
     tube_ws_str = str(tube_ws).replace('.', '_')
-    fn = f"data/tube_{prob_str}_{warm_start}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
+    fn = f"data/eval_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
     sol, solver = solve_tube(
         start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, R_nominal=R_nominal,
         Rv_first=Rv_first, Rv_second=Rv_second, warm_start=warm_start, tube_ws=tube_ws,

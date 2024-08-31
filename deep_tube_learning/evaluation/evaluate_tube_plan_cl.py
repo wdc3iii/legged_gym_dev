@@ -7,9 +7,9 @@ import torch
 from deep_tube_learning.custom_sim import CustomSim
 
 
-# prob_str = 'right'
+prob_str = 'right'
 # prob_str = 'right_wide'
-prob_str = 'gap'
+# prob_str = 'gap'
 # prob_str = 'gap_big'
 
 track_warm = True
@@ -28,12 +28,14 @@ tube_ws = "evaluate"
 # tube_dyn = "l1_rolling"
 # tube_dyn = "l2_rolling"
 tube_dyn = "NN_oneshot"
-# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/k1kfktrl"  # 128x128 ReLU
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # 128x128 softplus b=5
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # Larger bounds
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/9k9j5mg7"  # Tightest bounds
+
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
-time_it = True
-H = 50
+time_it = False
+H = 150
 max_iter = 200
 
 Rv1 = 10

@@ -102,6 +102,10 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.trajectory, self.v_trajectory, self.w_trajectory = extract_solution(sol, self.N, self.planning_model.n, self.planning_model.m)
         self.z_warm, self.v_warm = self.trajectory.copy(), self.v_trajectory.copy()
 
+        # Slide trajectories forward
+        self.z_warm[:-1, :] = self.z_warm[1:, :]
+        self.v_warm[:-1, :] = self.v_warm[1:, :]
+
         # Cycle error and inputs
         self.e[:-1] = self.e[1:, :] # Note the current error is unknown, as traj_gen does not have access to it
         self.v_prev[:-1, :] = self.v_prev[1:, :]

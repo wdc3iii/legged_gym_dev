@@ -1,9 +1,6 @@
 clear; clc;
-nm = 'tube_right_nominal_NN_oneshot_evaluate_True';
-% nm = 'tube_gap_big_nominal_NN_oneshot_evaluate_True';
-% nm = 'tube_right_wide_nominal_NN_oneshot_evaluate_True';
-% nm = 'tube_gap_nominal_NN_oneshot_evaluate_True';
-
+% nm = 'eval_tube_gap_c4izk9vs_nominal_Rv_10_10_NN_oneshot_evaluate_True';
+nm = 'eval_tube_gap_9k9j5mg7_nominal_Rv_10_10_NN_oneshot_evaluate_True'; 
 step_through = false;
 
 tbl = readtable(['data/' nm '.csv']);
