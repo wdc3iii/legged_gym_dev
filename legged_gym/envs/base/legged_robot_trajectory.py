@@ -120,6 +120,7 @@ class LeggedRobotTrajectory(BaseTask):
             prob_stationary=traj_cfg.prob_stationary,
             dN=traj_cfg.dN,
             prob_rnd=traj_cfg.prob_rnd,
+            noise_max_std=traj_cfg.noise_max_std,
         )
 
     def step(self, actions):

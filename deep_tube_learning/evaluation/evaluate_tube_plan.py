@@ -28,7 +28,7 @@ tube_ws = "evaluate"
 tube_dyn = "NN_oneshot"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # Larger bounds
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/9k9j5mg7"  # Tightest bounds
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
 
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 

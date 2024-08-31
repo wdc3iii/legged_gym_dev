@@ -1,9 +1,6 @@
 from abc import ABC, abstractmethod
 import torch
-import numpy as np
-import time
 from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
-from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
 
 
 class AbstractTrajectoryGenerator(ABC):
@@ -56,7 +53,7 @@ class AbstractTrajectoryGenerator(ABC):
 class TrajectoryGenerator(AbstractTrajectoryGenerator):
 
     def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10,
-                 device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05):
+                 device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05, noise_max_std=0.1):
         super().__init__(rom, N, dN, dt_loop, device)
 
         self.weights = torch.zeros((self.rom.n_robots, 4), device=self.device)
@@ -70,6 +67,9 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.sin_freq = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.sin_off = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.sin_mean = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
+        self.rnd_mag = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
+        self.rnd_mean = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
+        self.noise_std = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.t_sampler = t_sampler
         self.freq_low = freq_low
         self.freq_high = freq_high
@@ -78,7 +78,9 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.prob_stationary = prob_stationary
         self.stationary_inds = torch.zeros((self.rom.n_robots,), device=self.device).bool()
         self.prob_rnd = prob_rnd
+        self.rnd_inds = None
         self.rnd_inds_bool = torch.zeros((self.rom.n_robots,), device=self.device).bool()
+        self.noise_max_std = torch.max(self.rom.v_max) * noise_max_std
 
     def resample(self, idx, z):
         if len(idx) > 0:
@@ -87,6 +89,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
             self._resample_ramp_input(idx, z, v_min, v_max)
             self._resample_extreme_input(idx, v_min, v_max)
             self._resample_sinusoid_input(idx, v_min, v_max)
+            self._resample_rnd_input(idx, v_min, v_max)
             self._resample_t_final(idx)
             self._resample_weight(idx)
             n = torch.sum(idx) if idx.dtype == bool else len(idx)
@@ -94,6 +97,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
             self.rnd_inds_bool[idx] = self.uniform(torch.tensor([0.0], device=self.device), torch.tensor([1.0], device=self.device),
                                                      (n, 1)).squeeze() < self.prob_rnd
             self.rnd_inds = torch.nonzero(self.rnd_inds_bool).reshape(-1,)
+            self.noise_std = self.uniform(torch.tensor([0.], device=self.device), self.noise_max_std, size=(self.rom.n_robots, self.rom.m))
 
     def _resample_t_final(self, idx):
         self.t_final[idx] += self.t_sampler.sample(len(idx))
@@ -127,6 +131,10 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
             size=(len(idx), self.rom.m)
         )
 
+    def _resample_rnd_input(self, idx, v_min, v_max):
+        self.rnd_mag[idx, :] = self.uniform(torch.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx), self.rom.m))
+        self.rnd_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :], size=(len(idx), self.rom.m))
+
     def _const_input(self):
         return self.sample_hold_input
 
@@ -153,9 +161,11 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         # Get input to apply for trajectory
         v = self.get_input_t(self.t, self.trajectory[:, -1, :])
         v[self.stationary_inds, :] = 0
-        v_min, v_max = self.rom.compute_state_dependent_input_bounds(self.trajectory[self.rnd_inds, -1, :])
-        v[self.rnd_inds, :] = self.uniform(v_min, v_max, size=(len(self.rnd_inds), self.rom.m))
-        self.v[idx, :] = v[idx, :]
+        # v_min, v_max = self.rom.compute_state_dependent_input_bounds(self.trajectory[self.rnd_inds, -1, :])
+        v[self.rnd_inds, :] = self.uniform(-self.rnd_mag[self.rnd_inds, :], self.rnd_mag[self.rnd_inds, :], size=(len(self.rnd_inds), self.rom.m)) + self.rnd_mean[self.rnd_inds, :]
+        self.v[idx, :] = self.rom.clip_v_z(self.trajectory[idx, -1, :],
+            v[idx, :] + self.noise_std[idx, :] * torch.randn(len(idx), self.rom.m, device=self.device)
+        )
         z_next = self.rom.f(self.trajectory[idx, -1, :], self.v[idx, :])
         mask = self.stationary_inds[:, None] & self.rom.vel_inds
         z_next[mask[idx, :]] = 0

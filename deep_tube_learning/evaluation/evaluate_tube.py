@@ -15,7 +15,7 @@ def eval_model(delta_seed=1, num_robots=2):
     # Experiment whose model to evaluate
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # Larger bounds
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/9k9j5mg7"  # Tightest bounds
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
 
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # Hopper Single Int
 
