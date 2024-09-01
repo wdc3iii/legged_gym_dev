@@ -1,3 +1,5 @@
+import os
+
 import wandb
 import numpy as np
 import pandas as pd
@@ -667,6 +669,80 @@ def get_recursive_nn_tube_dynamics(model_name, device='cuda'):
     return recursive_nn_tube_dyn, H_fwd, H_rev
 
 
+def get_oneshot_nn_tube_dynamics_v2(model_name, device='cuda'):
+    api = wandb.Api()
+    if device == 'cpu':
+        model_cfg, state_dict = wandb_model_load_cpu(api, model_name)
+    else:
+        model_cfg, state_dict = wandb_model_load(api, model_name)
+
+    H_fwd = model_cfg.dataset.H_fwd
+    H_rev = model_cfg.dataset.H_rev
+    # TODO: proper sizing
+    tube_oneshot_model = instantiate(model_cfg.model)(H_rev + 2 * (H_rev + H_fwd), H_fwd)
+
+    tube_oneshot_model.load_state_dict(state_dict)
+
+    tube_oneshot_model.to(device)
+    tube_oneshot_model.eval()
+    fw = l4c.L4CasADi(tube_oneshot_model, device=device)
+
+    def oneshot_nn_tube_dyn(z, v, w, e, v_prev):
+        v_total = ca.vertcat(v_prev, v)
+        tube_input = ca.horzcat(e.T, z[0, 2:], ca.reshape(v_total.T, 1, v_total.numel()))  # Note this transpose to get ca.reshape and np.reshape to agree
+        print(tube_input, fw(tube_input.T).T, w, "\n")
+        g = fw(tube_input) - w.T
+        g_lb = ca.DM(*g.shape)
+        g_ub = ca.DM(*g.shape)
+
+        return g, g_lb, g_ub
+
+    return oneshot_nn_tube_dyn, H_fwd, H_rev
+
+def get_recursive_nn_tube_dynamics_v2(model_name, device='cuda'):
+    api = wandb.Api()
+    if device == 'cpu':
+        model_cfg, state_dict = wandb_model_load_cpu(api, model_name)
+    else:
+        model_cfg, state_dict = wandb_model_load(api, model_name)
+
+    H_fwd = model_cfg.dataset.H_fwd
+    H_rev = model_cfg.dataset.H_rev
+    # TODO: proper sizing
+    tube_recursive_model = instantiate(model_cfg.model)(H_rev + 2 * (H_rev + H_fwd), H_fwd)
+
+    tube_recursive_model.load_state_dict(state_dict)
+
+    tube_recursive_model.mlp.to(device)
+    tube_recursive_model.mlp.eval()
+    fw = l4c.L4CasADi(tube_recursive_model.mlp, device=device)
+
+    def recursive_nn_tube_dyn(z, v, w, e, v_prev):
+        v = ca.vertcat(v_prev, v)
+        all_data = []
+        for i in range(tube_recursive_model.H_fwd):
+            if i < tube_recursive_model.H_rev:
+                data = ca.horzcat(
+                    e[i:, :].T, w[0:i, :].T,
+                    ca.reshape(v[i:i + tube_recursive_model.H_rev, :].T, 1, tube_recursive_model.H_rev * v.shape[1]),
+                    ca.DM([i])
+                )
+            else:
+                data = ca.horzcat(
+                    w[i - tube_recursive_model.H_rev:i, :].T,
+                    ca.reshape(v[i:i + tube_recursive_model.H_rev, :].T, 1, tube_recursive_model.H_rev * v.shape[1]),
+                    ca.DM([i])
+                )
+            all_data.append(data)
+
+        g = fw(ca.vertcat(*all_data)).T - w.T
+        g_lb = ca.DM(*g.shape)
+        g_ub = ca.DM(*g.shape)
+
+        return g, g_lb, g_ub
+    return recursive_nn_tube_dyn, H_fwd, H_rev
+
+
 def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10, nn_path=None, device='cuda'):
     if tube_dyn == 'l1':
         return get_l1_tube_dynamics(scaling), 0
@@ -677,9 +753,15 @@ def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10, nn_path=None, devic
     elif tube_dyn == 'l2_rolling':
         return get_rolling_l2_tube_dynamics(scaling, window_size), window_size
     elif tube_dyn == 'NN_oneshot':
-        return get_oneshot_nn_tube_dynamics(f'{nn_path}_model:best', device=device)
+        if 'v2' in os.environ.get('CONDA_PREFIX'):
+            return get_oneshot_nn_tube_dynamics_v2(f'{nn_path}_model:best', device=device)
+        else:
+            return get_oneshot_nn_tube_dynamics(f'{nn_path}_model:best', device=device)
     elif tube_dyn == 'NN_recursive':
-        return get_recursive_nn_tube_dynamics(f'{nn_path}_model:best', device=device)
+        if 'v2' in os.environ.get('CONDA_PREFIX'):
+            return get_recursive_nn_tube_dynamics_v2(f'{nn_path}_model:best', device=device)
+        else:
+            return get_recursive_nn_tube_dynamics(f'{nn_path}_model:best', device=device)
     else:
         raise ValueError(f'NN Tube dynamics {tube_dyn} not implemented')
 

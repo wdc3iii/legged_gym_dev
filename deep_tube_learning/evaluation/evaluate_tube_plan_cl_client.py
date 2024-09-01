@@ -16,7 +16,7 @@ from deep_tube_learning.controllers import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
 
 
-prob_str = 'gap'
+prob_str = 'complex'
 H = 150
 
 def get_send(client_socket, server_address):
