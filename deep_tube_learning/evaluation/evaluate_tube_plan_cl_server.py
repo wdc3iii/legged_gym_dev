@@ -8,10 +8,6 @@ from deep_tube_learning.custom_sim import CustomSim
 import socket
 import struct
 
-# prob_str = 'right'
-# prob_str = 'right_wide'
-# prob_str = 'gap'
-# prob_str = 'gap_big'
 
 track_warm = True
 
@@ -21,7 +17,8 @@ tube_ws = "evaluate"
 
 # tube_dyn = "NN_oneshot"
 tube_dyn = "NN_recursive"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/rkm53z6t"  # Hopper
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/rkm53z6t"  # N = 50
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
 
 max_iter = 200
 
@@ -200,6 +197,8 @@ def main():
     })
 
     print(f"Complete! Writing to {fn}")
+    print(f"Time Solving Nominal: {env.traj_gen.t_solving_nominal:.4f} \tRate: {env.traj_gen.t_solving_nominal / H:.4f}")
+    print(f"Time Solving Tube:    {env.traj_gen.t_solving:.4f} \tRate: {env.traj_gen.t_solving / H:.4f}")
 
 
 if __name__ == '__main__':

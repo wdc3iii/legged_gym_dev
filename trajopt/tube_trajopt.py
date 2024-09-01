@@ -15,22 +15,29 @@ R = 0.1
 R_WARM = 10.
 RV_FIRST = 0.
 RV_SECOND = 0.
+TWALL = 10.
+MPC_RECOMPUTE_DK = 1
 problem_dict = {
     "gap": {"start": np.array([0.0, 0.0]), "goal": np.array([1.5, 1.5]),
             "obs": {'cx': np.array([1., 0.]), 'cy': np.array([0.75, 1.5]), 'r': np.array([0.5, 0.5])},
-            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
+            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "right": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
               "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.625, 0.625]), 'r': np.array([0.5, 0.5])},
-            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
+            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "right_wide": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
                    "obs": {'cx': np.array([1, 1.]), 'cy': np.array([-1.25, 1.25]), 'r': np.array([0.5, 0.5])},
-            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
+            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "gap_big": {"start": np.array([0., 0.]), "goal": np.array([3., 3.]),
             "obs": {'cx': np.array([2., 0.]), 'cy': np.array([1.75, 3.]), 'r': np.array([1., 1.])},
-            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
+            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "complex": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
             "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.25, 0.25, 0.2])},
-            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
+            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK}
 }
 
 
@@ -144,7 +151,7 @@ def setup_trajopt_solver(pm, N, Nobs):
     return z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r
 
 
-def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter=1000, debug_filename=None):
+def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter=1000, debug_filename=None, t_wall=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, _, _, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
 
     if Qf is None:
@@ -203,16 +210,30 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter
 
     if debug_filename is not None:
         nlp_opts['iteration_callback'] = SolverCallback('iter_callback', debug_filename, x_cols, g_cols, p_cols, {})
+    else:
+        nlp_opts['iteration_callback'] = None
 
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
 
     solver = {"solver": nlp_solver, "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx, "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols}
 
-    return solver, nlp_dict, nlp_opts
+    if t_wall is None:
+        return solver, nlp_dict, nlp_opts
+
+    t_lim_nlp_opts = nlp_opts.copy()
+    t_lim_nlp_opts["ipopt.max_wall_time"] = t_wall
+    t_lim_nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, t_lim_nlp_opts)
+
+    t_lim_solver = {
+        "solver": t_lim_nlp_solver, "callback": t_lim_nlp_opts['iteration_callback'],
+        "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx,
+        "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols
+    }
+    return solver, nlp_dict, nlp_opts, t_lim_solver, t_lim_nlp_opts
 
 
 def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None, Rv_first=0, Rv_second=0,
-                        max_iter=1000, debug_filename=None):
+                        max_iter=1000, debug_filename=None, t_wall=None):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N, 1)
     w_lb = ca.DM(N, 1)
@@ -307,7 +328,19 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
         "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols
     }
 
-    return solver, nlp_dict, nlp_opts
+    if t_wall is None:
+        return solver, nlp_dict, nlp_opts
+
+    t_lim_nlp_opts = nlp_opts.copy()
+    t_lim_nlp_opts["ipopt.max_wall_time"] = t_wall
+    t_lim_nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, t_lim_nlp_opts)
+
+    t_lim_solver = {
+        "solver": t_lim_nlp_solver, "callback": t_lim_nlp_opts['iteration_callback'],
+        "lbg": g_lb, "ubg": g_ub, "lbx": lbx, "ubx": ubx,
+        "g_cols": g_cols, "x_cols": x_cols, "p_cols": p_cols
+    }
+    return solver, nlp_dict, nlp_opts, t_lim_solver, t_lim_nlp_opts
 
 
 def generate_col_names(pm, N, Nobs, x, g, p, H_rev=0):
@@ -501,7 +534,7 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, Rv_first=0, Rv_seco
     sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
                            ubx=solver["ubx"])
 
-    if 'iteration_callback' in nlp_opts.keys():
+    if nlp_opts['iteration_callback'] is not None:
         nlp_opts['iteration_callback'].write_data(solver, params)
     return sol, solver
 

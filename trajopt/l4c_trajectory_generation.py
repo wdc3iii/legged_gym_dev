@@ -2,6 +2,7 @@ from trajopt.trajectory_generation import AbstractTrajectoryGenerator
 from trajopt.tube_trajopt import *
 from trajopt.casadi_rom_dynamics import CasadiSingleInt2D
 import torch
+import time
 
 
 class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
@@ -35,25 +36,30 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.nominal_ws = nominal_ws
         self.max_iter = max_iter
         self.track_nominal = track_nominal
+        self.t_wall = p_dict["t_wall"] if 't_wall' in p_dict.keys() else 10.0
 
         self.z_warm, self.v_warm = None, None
         self.nominal_z_warm, self.nominal_v_warm = None, None
         self.e = np.zeros((self.H_rev, 1))
         self.v_prev = np.zeros((self.H_rev, self.planning_model.m))
         self.g_dict = {}
+        self.t_solving_nominal = 0
+        self.t_solving = 0
 
         if self.warm_start == 'nominal' or self.track_nominal:
-            self.nominal_solver, self.nominal_nlp_dict, self.nominal_nlp_opts = trajopt_solver(
-                self.planning_model, self.N, self.Q, self.R_nominal, self.Nobs, Qf=self.Qf,
+            self.init_nominal_solver, self.nominal_nlp_dict, self.init_nominal_nlp_opts, self.nominal_solver, self.nominal_nlp_opts = trajopt_solver(
+                self.planning_model, self.N, self.Q, self.R_nominal, self.Nobs, Qf=self.Qf, t_wall=p_dict['t_wall'],
                 Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename=None
             )
 
-        self.solver, self.nlp_dict, self.nlp_opts = trajopt_tube_solver(
+        self.init_solver, self.nlp_dict, self.init_nlp_opts, self.solver, self.nlp_opts = trajopt_tube_solver(
             self.planning_model, self.tube_dynamics, self.N, self.H_rev, self.Q, self.Qw, self.R, self.w_max, self.Nobs,
-            Qf=self.Qf, Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename=None
+            Qf=self.Qf, Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename=None, t_wall=p_dict['t_wall']
         )
 
     def reset_idx(self, idx, z, e_prev=None):
+        self.t_solving_nominal = 0
+        self.t_solving = 0
         self.k[idx] = -1
         self.t[idx] = self.k[idx] * self.rom.dt
         self.trajectory[0, 1, :] = z
@@ -61,9 +67,10 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.nominal_z_warm, self.nominal_v_warm = None, None
         self.e = np.ones((self.H_rev, 1)) * np.linalg.norm(e_prev.detach().cpu().numpy())
         self.v_prev = np.zeros((self.H_rev, self.planning_model.m))
-        self.step_rom_idx(idx, e_prev=e_prev, increment_rom_time=True)
+        self.step_rom_idx(idx, e_prev=e_prev, increment_rom_time=True, limit_time=False)
 
-    def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False):
+
+    def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False, limit_time=True):
         z0 = self.trajectory[0, 1, :].cpu().numpy()
         self.e[-1] = np.linalg.norm(e_prev.detach().cpu().numpy())
         # Solve nominal ocp if necessary
@@ -73,11 +80,20 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
             nominal_params = init_params(z0, self.goal, self.obs)
             nominal_x_init = init_decision_var(self.nominal_z_warm, self.nominal_v_warm)
 
-            nominal_sol = self.nominal_solver["solver"](
-                x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
-                lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
-            )
+            if limit_time:
+                tic = time.perf_counter_ns()
+                nominal_sol = self.nominal_solver["solver"](
+                    x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
+                    lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
+                )
+                self.t_solving_nominal += (time.perf_counter_ns() - tic) / 1e9
+            else:
+                nominal_sol = self.init_nominal_solver["solver"](
+                    x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
+                    lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
+                )
             self.nominal_z_warm, self.nominal_v_warm = extract_solution(nominal_sol, self.N, self.planning_model.n, self.planning_model.m)
+
             z_cost, v_cost = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
             if self.warm_start == 'nominal':
                 self.z_warm, self.v_warm = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
@@ -95,11 +111,21 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         params = init_params(z0, self.goal, self.obs, z_cost=z_cost, v_cost=v_cost, e=self.e, v_prev=self.v_prev)
         w_warm = get_tube_warm_start(self.tube_ws, self.tube_dynamics, self.z_warm, self.v_warm, np.zeros((self.N, 1)), self.e, self.v_prev)
         x_init = init_decision_var(self.z_warm, self.v_warm, w=w_warm)
-        sol = self.solver["solver"](
-            x0=x_init, p=params, lbg=self.solver["lbg"], ubg=self.solver["ubg"],
-            lbx=self.solver["lbx"], ubx=self.solver["ubx"]
-        )
+
+        if limit_time:
+            tic = time.perf_counter_ns()
+            sol = self.solver["solver"](
+                x0=x_init, p=params, lbg=self.solver["lbg"], ubg=self.solver["ubg"],
+                lbx=self.solver["lbx"], ubx=self.solver["ubx"]
+            )
+            self.t_solving += (time.perf_counter_ns() - tic) / 1e9
+        else:
+            sol = self.init_solver["solver"](
+                x0=x_init, p=params, lbg=self.solver["lbg"], ubg=self.solver["ubg"],
+                lbx=self.solver["lbx"], ubx=self.solver["ubx"]
+            )
         self.trajectory, self.v_trajectory, self.w_trajectory = extract_solution(sol, self.N, self.planning_model.n, self.planning_model.m)
+
         self.z_warm, self.v_warm = self.trajectory.copy(), self.v_trajectory.copy()
 
         # Slide trajectories forward

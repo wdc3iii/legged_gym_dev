@@ -32,7 +32,8 @@ tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
 
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/07uwnu78"  # Recursive
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/07uwnu78"  # Recursive
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
 
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
