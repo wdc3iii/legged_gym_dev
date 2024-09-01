@@ -43,7 +43,8 @@ def arr2list(d):
 
 def get_send(server_socket, client_address):
     def send_z_v(z, v, done):
-        data = struct.pack('!Bffff', done, *z, *v)
+        data = struct.pack('!Bffff', done, *z.squeeze().tolist(), *v.squeeze().tolist())
+        # print("Sending z, v, d: ", z, v, done)
         server_socket.sendto(data, client_address)
     return send_z_v
 
@@ -52,7 +53,8 @@ def get_receive(server_socket, device):
     def receive_pz_x():
         data, _ = server_socket.recvfrom(8)
         zx, zy = struct.unpack('!ff', data)
-        return torch.tensor([zx, zy], device=device)
+        # print("recieved zx, zy: ", zx, zy)
+        return torch.tensor([[zx, zy]], device=device)
     return receive_pz_x
 
 
@@ -124,12 +126,12 @@ def main():
     v_k = torch.zeros((H, env.traj_gen.planning_model.m), device=env.device) * torch.nan
     x = torch.zeros((1, z_k.shape[0], env.model.n), device=env.device) * torch.nan
     w_k = torch.zeros((H + 1, 1), device=env.device) * torch.nan
-    pz_x = torch.zeros_like(z_k, device=env.device) * torch.nan
+    pz_x_k = torch.zeros_like(z_k, device=env.device) * torch.nan
 
     # mats for visualizing later
     z_vis = torch.zeros((H, *z_k.shape), device=env.device)
     v_vis = torch.zeros((H, *v_k.shape), device=env.device)
-    pz_x_vis = torch.zeros((H, *pz_x.shape), device=env.device)
+    pz_x_vis = torch.zeros((H, *pz_x_k.shape), device=env.device)
     w_vis = torch.zeros((H, *w_k.shape), device=env.device)
     z_sol_vis = torch.zeros((H, env.traj_gen.N + 1, env.traj_gen.planning_model.n), device=env.device)
     v_sol_vis = torch.zeros((H, env.traj_gen.N, env.traj_gen.planning_model.m), device=env.device)
@@ -140,8 +142,8 @@ def main():
     env.reset()
     z_k[0, :] = env.traj_gen.get_trajectory()[:, 0, :]
     x[:, 0, :] = env.get_states()
-    pz_x[0, :] = env.model.proj_z(x[:, 0, :])
-    w_k[0] = torch.linalg.norm(z_k[0, :] - pz_x[0, :])
+    pz_x_k[0, :] = env.model.proj_z(x[:, 0, :])
+    w_k[0] = torch.linalg.norm(z_k[0, :] - pz_x_k[0, :])
 
     t0 = time.perf_counter_ns()
 
@@ -151,7 +153,7 @@ def main():
         while torch.any(env.traj_gen.k == k):
             pz_x = receive_pz_x()
             obs, _, _, dones, _ = env.step(pz_x)
-            send_z_v(env.trajectory[:, 0, :], torch.clone(env.traj_gen.get_v_trajectory()[:, 0, :].detach()), False)
+            send_z_v(env.traj_gen.get_trajectory()[:, dataset_cfg.controller.N, :], torch.clone(env.traj_gen.get_v_trajectory()[:, dataset_cfg.controller.N, :].detach()), False)
 
         # Save Data
         base = torch.clone(env.root_states.detach())
@@ -160,12 +162,12 @@ def main():
         v_k[t, :] = env.traj_gen.v_trajectory[:, 0, :]
         x[:, t + 1, :] = env.get_states()
         z_k[t + 1, :] = env.traj_gen.get_trajectory()[:, 0, :]
-        pz_x[t + 1, :] = proj
+        pz_x_k[t + 1, :] = proj
         w_k[t + 1] = env.traj_gen.w_trajectory[0].item()
 
         z_vis[t] = torch.clone(z_k)
         v_vis[t] = torch.clone(v_k)
-        pz_x_vis[t] = torch.clone(pz_x)
+        pz_x_vis[t] = torch.clone(pz_x_k)
         w_vis[t] = torch.clone(w_k)
         z_sol_vis[t] = torch.clone(env.traj_gen.trajectory)
         v_sol_vis[t] = torch.clone(env.traj_gen.v_trajectory)
@@ -173,7 +175,7 @@ def main():
         cv_vis["cv" + str(t)] = env.traj_gen.g_dict.copy()
         timing[t] = time.perf_counter_ns() - t0
 
-    send_z_v([0., 0.], [0., 0.], True)
+    send_z_v(torch.tensor([[0., 0.]]), torch.tensor([[0., 0.]]), True)
     print("Closing Server Socket...")
     server_socket.close()
 

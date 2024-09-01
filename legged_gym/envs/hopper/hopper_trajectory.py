@@ -197,7 +197,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
         foot_pos = self.dof_pos[:, self.foot_joint_index]
         foot_vel = self.dof_vel[:, self.foot_joint_index]
-        contacts = torch.squeeze(self.contact_forces[:, self.feet_indices, 2] > 0.1)
+        contacts = torch.squeeze(self.contact_forces[:, self.feet_indices, 2] > 0.1, dim=1)
 
         not_contacts = torch.logical_not(contacts)
         contact_inds = torch.nonzero(contacts, as_tuple=False)
@@ -219,7 +219,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         # Compute wheel torques
         if "spindown" in control_type:
             self.torques[contact_inds, self.wheel_joint_indices] = -kd_spindown[contact_inds.squeeze(), :] * wheel_vel[contact_inds.squeeze()]
-            orient_inds = not_contact_inds.squeeze()
+            orient_inds = not_contact_inds.squeeze(dim=1)
         else:
             orient_inds = torch.arange(self.num_envs)
 

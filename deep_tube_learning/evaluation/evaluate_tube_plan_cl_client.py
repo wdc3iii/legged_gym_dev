@@ -16,12 +16,13 @@ from deep_tube_learning.controllers import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
 
 
-prob_str = 'complex'
-H = 3
+prob_str = 'gap'
+H = 150
 
 def get_send(client_socket, server_address):
     def send_pz_x(pz_x):
-        data = struct.pack('!ff', *pz_x)
+        # print("Sending pz_x: ", pz_x)
+        data = struct.pack('!ff', *pz_x.squeeze().tolist())
         client_socket.sendto(data, server_address)
     return send_pz_x
 
@@ -31,7 +32,8 @@ def get_receive(client_socket, device):
         data, _ = client_socket.recvfrom(17)
         terminated = struct.unpack('!B', data[0:1])[0]
         zx, zy, vx, vy = struct.unpack('!ffff', data[1:17])
-        return torch.tensor([zx, zy], device=device), torch.tensor([vx, vy], device=device), terminated
+        # print("Received: ", zx, zy, vx, vy)
+        return torch.tensor([[zx, zy]], device=device), torch.tensor([[vx, vy]], device=device), terminated
     return recieve_z_v
 
 
@@ -67,7 +69,7 @@ def main():
         api = wandb.Api()
         rl_cfg, state_dict = wandb_model_load(api, model_name)
     elif cfg.controller.type == 'rh':
-        cfg_dir = str(Path(__file__).parent / "configs" / "rl")
+        cfg_dir = str(Path(__file__).resolve().parents[1] / "configs" / "rl")
         GlobalHydra.instance().clear()
         with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
             rl_cfg = compose(config_name=cfg.controller.config_name)

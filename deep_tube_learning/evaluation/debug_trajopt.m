@@ -149,9 +149,5 @@ for it = 1:size(iters, 1)
     input_y_line.YData = squeeze(v(it, :, 2));
     tube_line.YData = w(it, :);
     drawnow
-    if step_through
-        pause
-    else
-        pause(0.1)
-    end
+    pause(0.1)
 end
