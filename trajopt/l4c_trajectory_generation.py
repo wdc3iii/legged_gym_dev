@@ -7,10 +7,12 @@ import time
 
 class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
 
-    def __init__(self, rom, H, dt_loop, device, p_dict, tube_dyn, nn_path=None,
-                 w_max=1, warm_start='nominal', nominal_ws="interpolate", track_nominal=True, tube_ws='evaluate', max_iter=200):
+    def __init__(self, rom, H, N, dt_loop, device, p_dict, tube_dyn, nn_path=None,
+                 w_max=1, mpc_dk=1, warm_start='nominal', nominal_ws="interpolate", track_nominal=True,
+                 tube_ws='evaluate', max_iter=200):
+        super().__init__(rom, N, 1, dt_loop, device)
         self.tube_dynamics, self.H_fwd, self.H_rev = get_tube_dynamics(tube_dyn, nn_path=nn_path)
-        super().__init__(rom, self.H_fwd, 1, dt_loop, device)
+        assert self.H_fwd >= self.N
         assert self.rom.n_robots == 1
         self.H = H
         self.planning_model = CasadiSingleInt2D(
@@ -37,6 +39,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.max_iter = max_iter
         self.track_nominal = track_nominal
         self.t_wall = p_dict["t_wall"] if 't_wall' in p_dict.keys() else 10.0
+        self.mpc_dk = mpc_dk
 
         self.z_warm, self.v_warm = None, None
         self.nominal_z_warm, self.nominal_v_warm = None, None
@@ -73,78 +76,84 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
     def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False, limit_time=True):
         z0 = self.trajectory[0, 1, :].cpu().numpy()
         self.e[-1] = np.linalg.norm(e_prev.detach().cpu().numpy())
-        # Solve nominal ocp if necessary
-        if self.track_nominal or (self.warm_start == 'nominal' and self.z_warm is None):
-            if self.nominal_z_warm is None:
-                self.nominal_z_warm, self.nominal_v_warm = get_warm_start(self.nominal_ws, z0, self.goal, self.N, self.planning_model)
-            nominal_params = init_params(z0, self.goal, self.obs)
-            nominal_x_init = init_decision_var(self.nominal_z_warm, self.nominal_v_warm)
+        if (self.k.item() + 1) % self.mpc_dk == 0:
+            # Solve nominal ocp if necessary
+            if self.track_nominal or (self.warm_start == 'nominal' and self.z_warm is None):
+                if self.nominal_z_warm is None:
+                    self.nominal_z_warm, self.nominal_v_warm = get_warm_start(self.nominal_ws, z0, self.goal, self.N, self.planning_model)
+                nominal_params = init_params(z0, self.goal, self.obs)
+                nominal_x_init = init_decision_var(self.nominal_z_warm, self.nominal_v_warm)
+
+                if limit_time:
+                    tic = time.perf_counter_ns()
+                    nominal_sol = self.nominal_solver["solver"](
+                        x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
+                        lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
+                    )
+                    self.t_solving_nominal += (time.perf_counter_ns() - tic) / 1e9
+                else:
+                    nominal_sol = self.init_nominal_solver["solver"](
+                        x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
+                        lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
+                    )
+                self.nominal_z_warm, self.nominal_v_warm = extract_solution(nominal_sol, self.N, self.planning_model.n, self.planning_model.m)
+
+                z_cost, v_cost = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
+                if self.warm_start == 'nominal':
+                    self.z_warm, self.v_warm = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
+            else:
+                z_cost, v_cost = None, None
+
+            if not self.track_nominal:
+                z_cost = np.repeat(self.goal[None, :], self.N + 1, axis=0)
+                v_cost = np.zeros((self.N, self.rom.m))
+            if self.z_warm is None:
+                self.z_warm, self.v_warm = get_warm_start(
+                    self.warm_start, z0, self.goal, self.N,self.planning_model, self.obs,
+                    self.Q, self.R, nominal_ws=self.nominal_ws
+                )
+            params = init_params(z0, self.goal, self.obs, z_cost=z_cost, v_cost=v_cost, e=self.e, v_prev=self.v_prev)
+            w_warm = get_tube_warm_start(self.tube_ws, self.tube_dynamics, self.z_warm, self.v_warm, np.zeros((self.N, 1)), self.e, self.v_prev)
+            x_init = init_decision_var(self.z_warm, self.v_warm, w=w_warm)
 
             if limit_time:
                 tic = time.perf_counter_ns()
-                nominal_sol = self.nominal_solver["solver"](
-                    x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
-                    lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
+                sol = self.solver["solver"](
+                    x0=x_init, p=params, lbg=self.solver["lbg"], ubg=self.solver["ubg"],
+                    lbx=self.solver["lbx"], ubx=self.solver["ubx"]
                 )
-                self.t_solving_nominal += (time.perf_counter_ns() - tic) / 1e9
+                self.t_solving += (time.perf_counter_ns() - tic) / 1e9
             else:
-                nominal_sol = self.init_nominal_solver["solver"](
-                    x0=nominal_x_init, p=nominal_params, lbg=self.nominal_solver["lbg"], ubg=self.nominal_solver["ubg"],
-                    lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
+                sol = self.init_solver["solver"](
+                    x0=x_init, p=params, lbg=self.solver["lbg"], ubg=self.solver["ubg"],
+                    lbx=self.solver["lbx"], ubx=self.solver["ubx"]
                 )
-            self.nominal_z_warm, self.nominal_v_warm = extract_solution(nominal_sol, self.N, self.planning_model.n, self.planning_model.m)
+            self.trajectory, self.v_trajectory, self.w_trajectory = extract_solution(sol, self.N, self.planning_model.n, self.planning_model.m)
+            self.z_warm, self.v_warm = self.trajectory.copy(), self.v_trajectory.copy()
 
-            z_cost, v_cost = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
-            if self.warm_start == 'nominal':
-                self.z_warm, self.v_warm = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
+            self.trajectory = torch.from_numpy(self.trajectory[None, :, :]).float().to(self.device)
+            self.v_trajectory = torch.from_numpy(self.v_trajectory[None, :, :]).float().to(self.device)
+
+            g_violation = compute_constraint_violation(self.solver, sol["g"])
+            self.g_dict = segment_constraint_violation(g_violation, self.solver["g_cols"])
+
+            if self.nlp_opts['iteration_callback'] is not None:
+                self.nlp_opts['iteration_callback'].write_data(self.solver, params)
         else:
-            z_cost, v_cost = None, None
-
-        if not self.track_nominal:
-            z_cost = np.repeat(self.goal[None, :], self.N + 1, axis=0)
-            v_cost = np.zeros((self.N, self.rom.m))
-        if self.z_warm is None:
-            self.z_warm, self.v_warm = get_warm_start(
-                self.warm_start, z0, self.goal, self.N,self.planning_model, self.obs,
-                self.Q, self.R, nominal_ws=self.nominal_ws
-            )
-        params = init_params(z0, self.goal, self.obs, z_cost=z_cost, v_cost=v_cost, e=self.e, v_prev=self.v_prev)
-        w_warm = get_tube_warm_start(self.tube_ws, self.tube_dynamics, self.z_warm, self.v_warm, np.zeros((self.N, 1)), self.e, self.v_prev)
-        x_init = init_decision_var(self.z_warm, self.v_warm, w=w_warm)
-
-        if limit_time:
-            tic = time.perf_counter_ns()
-            sol = self.solver["solver"](
-                x0=x_init, p=params, lbg=self.solver["lbg"], ubg=self.solver["ubg"],
-                lbx=self.solver["lbx"], ubx=self.solver["ubx"]
-            )
-            self.t_solving += (time.perf_counter_ns() - tic) / 1e9
-        else:
-            sol = self.init_solver["solver"](
-                x0=x_init, p=params, lbg=self.solver["lbg"], ubg=self.solver["ubg"],
-                lbx=self.solver["lbx"], ubx=self.solver["ubx"]
-            )
-        self.trajectory, self.v_trajectory, self.w_trajectory = extract_solution(sol, self.N, self.planning_model.n, self.planning_model.m)
-
-        self.z_warm, self.v_warm = self.trajectory.copy(), self.v_trajectory.copy()
+            self.trajectory[:, :-1, :] = torch.clone(self.trajectory[:, 1:, :])
+            self.trajectory[:, -1, :] = self.rom.f(self.trajectory[:, -2, :], self.v_trajectory[:, -1, :])
+            self.v_trajectory[:, :-1, :] = torch.clone(self.v_trajectory[:, 1:, :])
+            self.w_trajectory[:-1, :] = self.w_trajectory[1:, :]
 
         # Slide trajectories forward
         self.z_warm[:-1, :] = self.z_warm[1:, :]
+        self.z_warm[-1, :] = self.rom.f(torch.from_numpy(self.z_warm[None, -2, :]).float().to(self.device), torch.from_numpy(self.v_warm[None, -1, :]).float().to(self.device)).cpu().numpy()
         self.v_warm[:-1, :] = self.v_warm[1:, :]
 
         # Cycle error and inputs
         self.e[:-1] = self.e[1:, :] # Note the current error is unknown, as traj_gen does not have access to it
         self.v_prev[:-1, :] = self.v_prev[1:, :]
-        self.v_prev[-1, :] = self.v_trajectory[0, :]
-
-        self.trajectory = torch.from_numpy(self.trajectory[None, :, :]).float().to(self.device)
-        self.v_trajectory = torch.from_numpy(self.v_trajectory[None, :, :]).float().to(self.device)
-
-        g_violation = compute_constraint_violation(self.solver, sol["g"])
-        self.g_dict = segment_constraint_violation(g_violation, self.solver["g_cols"])
-
-        if self.nlp_opts['iteration_callback'] is not None:
-            self.nlp_opts['iteration_callback'].write_data(self.solver, params)
+        self.v_prev[-1, :] = self.v_trajectory[:, 0, :].cpu().numpy()
 
         self.k[idx] += 1
         if increment_rom_time:

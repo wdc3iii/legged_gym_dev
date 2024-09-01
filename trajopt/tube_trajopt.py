@@ -679,7 +679,7 @@ def get_recursive_nn_tube_dynamics(model_name, device='cuda'):
     def recursive_nn_tube_dyn(z, v, w, e, v_prev):
         v = ca.vertcat(v_prev, v)
         all_data = []
-        for i in range(tube_recursive_model.H_fwd):
+        for i in range(w.shape[0]):
             if i < tube_recursive_model.H_rev:
                 data = ca.horzcat(
                     e[i:, :].T, w[0:i, :].T,
@@ -753,7 +753,7 @@ def get_recursive_nn_tube_dynamics_v2(model_name, device='cuda'):
     def recursive_nn_tube_dyn(z, v, w, e, v_prev):
         v = ca.vertcat(v_prev, v)
         all_data = []
-        for i in range(tube_recursive_model.H_fwd):
+        for i in range(w.shape[0]):
             if i < tube_recursive_model.H_rev:
                 data = ca.horzcat(
                     e[i:, :].T, w[0:i, :].T,

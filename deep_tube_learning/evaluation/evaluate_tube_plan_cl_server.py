@@ -21,7 +21,8 @@ nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/rkm53z
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
 
 max_iter = 200
-
+N = 25
+mpc_dk = 2
 Rv1 = 10
 Rv2 = 10
 
@@ -96,12 +97,14 @@ def main():
     dataset_cfg['env_config']['trajectory_generator'] = {
         'cls': 'ClosedLoopTrajectoryGenerator',
         'H': H,
+        'N': N,
         'dt_loop': dataset_cfg['env_config']['env']['model']['dt'],
         'device': "cuda" if torch.cuda.is_available() else "cpu",
         'prob_dict': {key: arr2list(val) for key, val in problem_dict[prob_str].items()},
         'tube_dyn': tube_dyn,
         'nn_path': nn_path,
         'w_max': 1,
+        'mpc_dk': mpc_dk,
         'warm_start': warm_start,
         'nominal_ws': 'interpolate',
         'track_nominal': track_warm,
@@ -177,7 +180,7 @@ def main():
     server_socket.close()
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
+    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),

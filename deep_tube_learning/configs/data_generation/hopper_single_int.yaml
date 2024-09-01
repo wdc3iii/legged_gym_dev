@@ -15,15 +15,15 @@ vel_min: -0.2
 controller:
   type: 'rh'
   # Below for option 'rh'
-  config_name: "hopper_single_int_oneshot.yaml"
+  config_name: "hopper_single_int.yaml"
   K_p: -0.1
   K_v: -0.3
-  K_ff: 0.0
+  K_ff: 0.1
   clip_pos: 0.5
   clip_vel: 1.
   clip_vel_des: 0.2
   clip_ang: 0.2
-  N: 8
+  N: 1
 
 env_config:
   env:
