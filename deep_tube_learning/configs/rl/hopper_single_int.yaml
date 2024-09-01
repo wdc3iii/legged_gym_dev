@@ -55,16 +55,18 @@ env_config:
   trajectory_generator:
     cls: 'TrajectoryGenerator'
     t_samp_cls: 'UniformSampleHoldDT'
-    weight_samp_cls: 'UniformWeightSamplerNoRamp'
+    weight_samp_cls: 'UniformWeightSampler'
     N: 10
-    t_low: 1
-    t_high: 2
-    freq_low: 0.01
-    freq_high: 2
+    t_low: 0.5
+    t_high: 5
+    freq_low: 0.1
+    freq_high: 3
     seed: ${seed}
-    prob_stationary: 0.0005
-    dN: 5
-    prob_rnd: 0.2
+    prob_stationary: 0.01
+    dN: 1
+    prob_rnd: 0.05
+    noise_max_std: 0.1
+    noise_llh: 0.25
   curriculum:
     use_curriculum: True
     curriculum_steps: [2500, 5000, 7500, 10000, 12500, 15000, 17500]

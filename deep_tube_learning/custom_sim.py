@@ -1,4 +1,4 @@
-from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D
+from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, ZeroInt2D
 from trajopt.trajectory_generation import TrajectoryGenerator
 from deep_tube_learning.utils import *
 from omegaconf import DictConfig, ListConfig
@@ -31,7 +31,9 @@ class CustomSim:
         self.root_states = torch.zeros((self.num_envs, self.model.n), device=self.device)
         self.trajectory = torch.zeros(self.num_envs, self.traj_gen.N, self.rom.n, dtype=torch.float, device=self.device,
                                       requires_grad=False)
-        self.max_rom_distance = torch.tensor(self.cfg.domain_rand.max_rom_distance, device=self.device)
+        self.max_rom_distance = torch.zeros((self.rom.n,), device=self.device)
+        if self.cfg.domain_rand.randomize_rom_distance:
+            self.max_rom_distance = torch.tensor(self.cfg.domain_rand.max_rom_distance, device=self.device)
         self.zero_rom_dist_llh = self.cfg.domain_rand.zero_rom_dist_llh
         self.root_state_noise_lower = torch.tensor(self.cfg.init_state.default_noise_lower, device=self.device)
         self.root_state_noise_upper = torch.tensor(self.cfg.init_state.default_noise_upper, device=self.device)

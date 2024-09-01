@@ -2,7 +2,7 @@ defaults:
   - default_hopper
   - _self_
 
-epochs: 20
+epochs: 50
 
 dataset_name: "hopper_single_int"
 wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/fcoard3m"
@@ -15,7 +15,7 @@ vel_min: -0.2
 controller:
   type: 'rh'
   # Below for option 'rh'
-  config_name: "hopper_single_int.yaml"
+  config_name: "hopper_single_int_oneshot.yaml"
   K_p: -0.1
   K_v: -0.3
   K_ff: 0.0
@@ -47,13 +47,15 @@ env_config:
   trajectory_generator:
     cls: 'TrajectoryGenerator'
     t_samp_cls: 'UniformSampleHoldDT'
-    weight_samp_cls: 'UniformWeightSamplerNoRamp'
+    weight_samp_cls: 'UniformWeightSampler'
     N: 10
     t_low: 0.5
     t_high: 5
-    freq_low: 0.01
-    freq_high: 2
+    freq_low: 0.1
+    freq_high: 3
     seed: ${seed}
-    prob_stationary: 0.0005
+    prob_stationary: 0.01
     dN: 1
-    prob_rnd: 0.1
+    prob_rnd: 0.05
+    noise_max_std: 0.1
+    noise_llh: 0.25

@@ -33,7 +33,7 @@ env_config:
     randomize_inv_base_mass: False
     push_robots: False
     randomize_rom_distance: True
-    max_rom_dist: [1., 1.]
+    max_rom_distance: [1., 1.]
     rigid_shape_properties:
       randomize_restitution: False
       randomize_compliance: False

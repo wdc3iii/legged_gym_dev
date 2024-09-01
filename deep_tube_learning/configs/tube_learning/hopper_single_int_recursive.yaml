@@ -1,0 +1,41 @@
+defaults:
+  - default
+  - _self_
+
+num_epochs: 1000
+experiment_name: "deep_tube_learning"
+lr: 5e-4
+
+dataset:
+  _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
+  wandb_experiment: "hopper_single_int_ey96t918"
+  H_fwd: 50
+  H_rev: 25
+loss:
+  _target_: deep_tube_learning.losses.VectorTubeLoss
+  alpha: 0.9
+
+lr_scheduler:
+  _target_: "torch.optim.lr_scheduler.LambdaLR"
+  _partial_: True
+  lr_lambda:
+    _target_: "deep_tube_learning.utils.get_warmup_cosine_decay"
+    warmup_steps: 500
+    max_steps: 10000
+
+
+grad_clip: 1e1
+
+model:
+  _target_: deep_tube_learning.models.RecursiveMLP
+  _partial_: true
+  num_units: 128
+  num_layers: 2
+  activation:
+    _target_: torch.nn.Softplus
+    beta: 5
+  stop_grad: True
+
+model_evaluation:
+  _target_: deep_tube_learning.utils.evaluate_scalar_tube_oneshot
+  _partial_: true

@@ -439,3 +439,31 @@ class ExtendedLateralUnicycle(ExtendedUnicycle):
                             device=self.device)
 
 
+class ZeroInt2D(RomDynamics):
+    n = 2   # [x, y]
+    m = 2   # [vx, vy]
+
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
+        super().__init__(dt, z_min, z_max, v_min, v_max, n_robots=n_robots, backend=backend, device=device)
+        self.vel_inds = self.const_mat([False, False])
+
+    def f(self, x, u):
+        return u
+
+    def proj_z(self, x):
+        return x[..., :2]
+
+    def des_pose_vel(self, z, v):
+        return self.stack((z, self.arctan2(v[:, 1], v[:, 0])[:, None])), self.stack((v, self.zero_mat(v.shape[0], 1)))
+
+    def clip_v_z(self, z, v):
+        return v
+
+    def plot_ts(self, axs, xt, ut):
+        super().plot_ts(axs, xt, ut)
+        axs[0].legend(['x', 'y'])
+        axs[1].legend(['vx', 'vy'])
+
+    def get_weighting_vector(self, reward_weighting):
+        return torch.tensor([reward_weighting.position, reward_weighting.position], dtype=torch.float32,
+                            device=self.device)
