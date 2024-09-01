@@ -213,8 +213,8 @@ def main():
     })
 
     print(f"Complete! Writing to {fn}")
-    print(f"Time Solving Nominal: {env.traj_gen.t_solving_nominal} \tRate: {env.traj_gen.t_solving_nominal / H}")
-    print(f"Time Solving Tube: {env.traj_gen.t_solving}\tRate: {env.traj_gen.t_solving / H}")
+    print(f"Time Solving Nominal: {env.traj_gen.t_solving_nominal:.4f} \tRate: {env.traj_gen.t_solving_nominal / H:.4f}")
+    print(f"Time Solving Tube:    {env.traj_gen.t_solving:.4f} \tRate: {env.traj_gen.t_solving / H:.4f}")
 
 if __name__ == '__main__':
     main()
