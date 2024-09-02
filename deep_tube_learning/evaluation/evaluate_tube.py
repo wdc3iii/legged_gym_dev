@@ -20,7 +20,8 @@ def eval_model(delta_seed=1, num_robots=2):
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/b0ein4nu"  # Recursive
 
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # Hopper Single Int
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y87jn2r7"  # H2H
 
     model_name = f'{exp_name}_model:best'
 

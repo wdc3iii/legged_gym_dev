@@ -19,10 +19,10 @@ tube_ws = "evaluate"
 tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/rkm53z6t"  # N = 50
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y87jn2r7"  # H2H
 
 max_iter = 200
-N = 25
+N = 10
 mpc_dk = 1
 Rv1 = 10
 Rv2 = 10

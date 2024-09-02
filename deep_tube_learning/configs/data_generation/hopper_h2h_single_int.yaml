@@ -28,7 +28,7 @@ controller:
 env_config:
   env:
     num_envs: 8192
-    episode_length_s: 20
+    episode_length_s: 80
   rom:
     dt: 0.4
     cls: 'SingleInt2D'
@@ -49,13 +49,13 @@ env_config:
     t_samp_cls: 'UniformSampleHoldDT'
     weight_samp_cls: 'UniformWeightSampler'
     N: 10
-    t_low: 0.5
-    t_high: 5
-    freq_low: 0.1
-    freq_high: 3
+    t_low: 2
+    t_high: 10
+    freq_low: 0.01
+    freq_high: 2
     seed: ${seed}
     prob_stationary: 0.01
     dN: 1
     prob_rnd: 0.05
-    noise_max_std: 0.1
+    noise_max_std: 0.05
     noise_llh: 0.25

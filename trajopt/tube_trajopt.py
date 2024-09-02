@@ -15,7 +15,7 @@ R = 0.1
 R_WARM = 1.
 RV_FIRST = 0.
 RV_SECOND = 0.
-TWALL = 0.3
+TWALL = 10.
 MPC_RECOMPUTE_DK = 1
 problem_dict = {
     "gap": {"name": "gap", "start": np.array([0.0, 0.0]), "goal": np.array([1.5, 1.5]),
