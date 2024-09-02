@@ -5,7 +5,9 @@ clear; clc;
 
 % Hopper N = 50 (model training horizon)
 % nm = 'cl_tube_complex_ipopt_jtu9xrfq_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
-nm = 'cl_tube_complex_snopt_jtu9xrfq_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
+% nm = 'cl_tube_complex_snopt_jtu9xrfq_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
+% nm = 'cl_tube_right_snopt_jtu9xrfq_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
+nm = 'cl_tube_gap_snopt_jtu9xrfq_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
 
 set(groot, 'DefaultAxesFontSize', 17);  % Set default font size for axes labels and ticks
 set(groot, 'DefaultTextFontSize', 17);  % Set default font size for text objects

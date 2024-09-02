@@ -71,3 +71,4 @@ deep_tube_learning/wandb/*
 
 # Snopt
 *.out
+*fort.*
