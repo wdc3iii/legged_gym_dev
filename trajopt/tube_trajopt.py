@@ -23,7 +23,7 @@ problem_dict = {
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "right": {"name": "right", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
-              "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.625, 0.625]), 'r': np.array([0.5, 0.5])},
+              "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.52, 0.52]), 'r': np.array([0.5, 0.5])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "right_wide": {"name": "right_wide", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),

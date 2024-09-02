@@ -112,6 +112,8 @@ def main():
         'tube_ws': tube_ws,
         'max_iter': max_iter
     }
+    # dataset_cfg['env_config']['rom']['v_max'] = [0.15, 0.15]
+    # dataset_cfg['env_config']['rom']['v_min'] = [-0.15, -0.15]
     dataset_cfg['env_config']['domain_rand']['randomize_rom_distance'] = False
     dataset_cfg['env_config']['domain_rand']['zero_rom_dist_llh'] = 1.0
     dataset_cfg['env_config']['init_state']['default_noise_lower'] = [0.0, 0.0]
