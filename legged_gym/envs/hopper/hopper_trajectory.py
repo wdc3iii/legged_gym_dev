@@ -40,6 +40,7 @@ from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log
     euler_angles_to_matrix, matrix_to_quaternion
 
 from trajopt.rom_dynamics import SingleInt2D
+from trajopt.trajectory_generation import TrajectoryGeneratorH2H
 from deep_tube_learning.controllers import RaibertHeuristic
 
 
@@ -180,6 +181,16 @@ class HopperTrajectory(LeggedRobotTrajectory):
 
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
+
+    def _post_physics_step_callback(self):
+        """ Callback called before computing terminations, rewards, and observations
+            Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
+        """
+        # TODO: only step roms if contact has occurred
+        if type(self.traj_gen) is TrajectoryGeneratorH2H:
+            contacts = torch.squeeze(self.contact_forces[:, self.feet_indices, 2] > 0.1, dim=1)
+            self.traj_gen.update_made_contact(contacts)
+        super()._post_physics_step_callback()
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.

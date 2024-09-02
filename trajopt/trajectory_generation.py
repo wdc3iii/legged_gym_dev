@@ -193,6 +193,33 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         for t in range(self.N * self.dN):
             self.step_rom_idx(idx, increment_rom_time=True)
 
+class TrajectoryGeneratorH2H(TrajectoryGenerator):
+
+    def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10,
+                 device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05, noise_max_std=0.1, noise_llh=0.25):
+        super().__init__(
+            rom, t_sampler, weight_sampler, dt_loop=dt_loop, N=N, freq_low=freq_low, freq_high=freq_high, device=device,
+            prob_stationary=prob_stationary, dN=dN, prob_rnd=prob_rnd, noise_max_std=noise_max_std, noise_llh=noise_llh
+        )
+        self.in_contact = torch.zeros((self.rom.n_robots,), dtype=torch.bool, device=self.device)
+        self.made_contact = torch.zeros((self.rom.n_robots,), dtype=torch.bool, device=self.device)
+
+    def step_idx(self, idx, e_prev=None, dt_tol=1e-5):
+        # first, remask for envs which need a rom step
+        masked_idx = idx[self.made_contact[idx]]
+        if len(masked_idx):
+            self.step_rom_idx(masked_idx, e_prev=e_prev)
+        self.t[idx] += self.dt_loop
+
+    def reset_idx(self, idx, z, e_prev=None):
+        self.made_contact[idx] = False
+        self.in_contact[idx] = False
+        super().reset_idx(idx, z, e_prev=e_prev)
+
+    def update_made_contact(self, in_contact_k):
+        self.made_contact = torch.logical_and(in_contact_k, torch.logical_not(self.in_contact))
+        self.in_contact = torch.clone(in_contact_k.detach())
+
 
 class CircleTrajectoryGenerator(TrajectoryGenerator):
 
