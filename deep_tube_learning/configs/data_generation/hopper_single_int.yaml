@@ -16,8 +16,8 @@ controller:
   type: 'rh'
   # Below for option 'rh'
   config_name: "hopper_single_int.yaml"
-  K_p: -0.1
-  K_v: -0.3
+  K_p: -0.15
+  K_v: -0.4
   K_ff: 0.1
   clip_pos: 0.5
   clip_vel: 1.

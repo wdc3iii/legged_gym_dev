@@ -1,5 +1,5 @@
 import os
-
+import torch
 import wandb
 import numpy as np
 import pandas as pd
@@ -12,30 +12,30 @@ from deep_tube_learning.utils import wandb_model_load, wandb_model_load_cpu
 Q = 10.
 QW = 0.
 R = 0.1
-R_WARM = 10.
+R_WARM = 1.
 RV_FIRST = 0.
 RV_SECOND = 0.
 TWALL = 10.
 MPC_RECOMPUTE_DK = 1
 problem_dict = {
-    "gap": {"start": np.array([0.0, 0.0]), "goal": np.array([1.5, 1.5]),
+    "gap": {"name": "gap", "start": np.array([0.0, 0.0]), "goal": np.array([1.5, 1.5]),
             "obs": {'cx': np.array([1., 0.]), 'cy': np.array([0.75, 1.5]), 'r': np.array([0.5, 0.5])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
-    "right": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
+    "right": {"name": "right", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
               "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.625, 0.625]), 'r': np.array([0.5, 0.5])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
-    "right_wide": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
+    "right_wide": {"name": "right_wide", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
                    "obs": {'cx': np.array([1, 1.]), 'cy': np.array([-1.25, 1.25]), 'r': np.array([0.5, 0.5])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
-    "gap_big": {"start": np.array([0., 0.]), "goal": np.array([3., 3.]),
+    "gap_big": {"name": "gap_big", "start": np.array([0., 0.]), "goal": np.array([3., 3.]),
             "obs": {'cx': np.array([2., 0.]), 'cy': np.array([1.75, 3.]), 'r': np.array([1., 1.])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
-    "complex": {"start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
-            "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.25, 0.25, 0.2])},
+    "complex": {"name": "complex", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
+            "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.2, 0.2, 0.15])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK}
 }
@@ -301,7 +301,6 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     }
     nlp_opts = {
         "ipopt.linear_solver": "mumps",
-        # "ipopt.linear_solver": "ma27",  # Library loading failure
         "ipopt.sb": "yes",
         "ipopt.max_iter": max_iter,
         "ipopt.tol": 1e-4,
@@ -317,7 +316,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     }
 
     if debug_filename is not None:
-        nlp_opts['iteration_callback'] = SolverCallback('iter_callback', debug_filename, x_cols, g_cols, p_cols, {})
+        nlp_opts['iteration_callback'] = SolverCallback('iter_callback', x_cols, g_cols, p_cols, {})
     else:
         nlp_opts['iteration_callback'] = None
     nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, nlp_opts)
@@ -514,9 +513,9 @@ def get_warm_start(warm_start, start, goal, N, planning_model, obs=None, Q=None,
     return z_init, v_init
 
 
-def get_tube_warm_start(w_init, tube_dynamics, z, v, w, e, v_prev):
+def get_tube_warm_start(w_init, tube_dynamics, z, v, e, v_prev):
     if w_init == "evaluate":
-        return np.array(tube_dynamics(ca.DM(z), ca.DM(v), ca.DM(w), ca.DM(e), ca.DM(v_prev))[0]).T
+        return tube_dynamics(z, v, e, v_prev).cpu().numpy()
     elif isinstance(w_init, (int, float)):
         return np.ones((z.shape[0] - 1, 1)) * w_init
     raise ValueError(f"Tube warm start {w_init} not implemented. Must be evaluate or a double")
@@ -656,7 +655,16 @@ def get_oneshot_nn_tube_dynamics(model_name, device='cuda'):
 
         return g, g_lb, g_ub
 
-    return oneshot_nn_tube_dyn, H_fwd, H_rev
+    def eval_oneshot_nn_tube_dyn(z, v, e, v_prev):
+        v = torch.from_numpy(v).float().to(device)
+        e = torch.from_numpy(e).float().to(device)
+        v_prev = torch.from_numpy(v_prev).float().to(device)
+        v = torch.concatenate((v_prev, v))
+        v_total = torch.concatenate((v_prev, v))
+        tube_input = ca.horzcat(e.T, torch.reshape(v_total, (1, v_total.numel())))  # Note this transpose to get ca.reshape and np.reshape to agree
+        return tube_oneshot_model(tube_input)
+
+    return oneshot_nn_tube_dyn, H_fwd, H_rev, eval_oneshot_nn_tube_dyn
 
 def get_recursive_nn_tube_dynamics(model_name, device='cuda'):
     api = wandb.Api()
@@ -699,7 +707,31 @@ def get_recursive_nn_tube_dynamics(model_name, device='cuda'):
         g_ub = ca.DM(*g.shape)
 
         return g, g_lb, g_ub
-    return recursive_nn_tube_dyn, H_fwd, H_rev
+
+    def eval_nn_tube_dyn(z, v, e, v_prev):
+        w = torch.zeros((v.shape[0], 1), device=device)
+        v = torch.from_numpy(v).float().to(device)
+        e = torch.from_numpy(e).float().to(device)
+        v_prev = torch.from_numpy(v_prev).float().to(device)
+        v = torch.concatenate((v_prev, v))
+        for i in range(w.shape[0]):
+            if i < tube_recursive_model.H_rev:
+                data = torch.concatenate((
+                    e[i:, :].T, w[0:i, :].T,
+                    torch.reshape(v[i:i + tube_recursive_model.H_rev, :], (1, tube_recursive_model.H_rev * v.shape[1])),
+                    torch.tensor([[i]], device=device).float()
+                ), dim=1)
+            else:
+                data = torch.concatenate((
+                    w[i - tube_recursive_model.H_rev:i, :].T,
+                    torch.reshape(v[i:i + tube_recursive_model.H_rev, :], (1, tube_recursive_model.H_rev * v.shape[1])),
+                    torch.tensor([[i]], device=device)
+                ), dim=1)
+            w[i] = tube_recursive_model.mlp(data)
+
+        return w
+
+    return recursive_nn_tube_dyn, H_fwd, H_rev, eval_nn_tube_dyn
 
 
 def get_oneshot_nn_tube_dynamics_v2(model_name, device='cuda'):
@@ -730,7 +762,16 @@ def get_oneshot_nn_tube_dynamics_v2(model_name, device='cuda'):
 
         return g, g_lb, g_ub
 
-    return oneshot_nn_tube_dyn, H_fwd, H_rev
+    def eval_oneshot_nn_tube_dyn(z, v, e, v_prev):
+        v = torch.from_numpy(v).float().to(device)
+        e = torch.from_numpy(e).float().to(device)
+        v_prev = torch.from_numpy(v_prev).float().to(device)
+        v = torch.concatenate((v_prev, v))
+        v_total = torch.concatenate((v_prev, v))
+        tube_input = ca.horzcat(e.T, torch.reshape(v_total, (1, v_total.numel())))  # Note this transpose to get ca.reshape and np.reshape to agree
+        return tube_oneshot_model(tube_input)
+
+    return oneshot_nn_tube_dyn, H_fwd, H_rev, eval_oneshot_nn_tube_dyn
 
 def get_recursive_nn_tube_dynamics_v2(model_name, device='cuda'):
     api = wandb.Api()
@@ -773,7 +814,31 @@ def get_recursive_nn_tube_dynamics_v2(model_name, device='cuda'):
         g_ub = ca.DM(*g.shape)
 
         return g, g_lb, g_ub
-    return recursive_nn_tube_dyn, H_fwd, H_rev
+
+    def eval_nn_tube_dyn(z, v, e, v_prev):
+        w = torch.zeros((v.shape[0],), device=device)
+        v = torch.from_numpy(v).float().to(device)
+        e = torch.from_numpy(e).float().to(device)
+        v_prev = torch.from_numpy(v_prev).float().to(device)
+        v = torch.concatenate((v_prev, v))
+        for i in range(w.shape[0]):
+            if i < tube_recursive_model.H_rev:
+                data = torch.concatenate((
+                    e[i:, :].T, w[0:i, :].T,
+                    torch.reshape(v[i:i + tube_recursive_model.H_rev, :], (1, tube_recursive_model.H_rev * v.shape[1])),
+                    torch.tensor([i], device=device).float()
+                ), dim=1)
+            else:
+                data = torch.concatenate((
+                    w[i - tube_recursive_model.H_rev:i, :].T,
+                    torch.reshape(v[i:i + tube_recursive_model.H_rev, :], (1, tube_recursive_model.H_rev * v.shape[1])),
+                    torch.tensor([i], device=device)
+                ), dim=1)
+            w[i] = tube_recursive_model.mlp(data)
+
+        return w
+
+    return recursive_nn_tube_dyn, H_fwd, H_rev, eval_nn_tube_dyn
 
 
 def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10, nn_path=None, device='cuda'):
@@ -801,10 +866,9 @@ def get_tube_dynamics(tube_dyn, scaling=0.5, window_size=10, nn_path=None, devic
 
 class SolverCallback(ca.Callback):
 
-    def __init__(self, name, debug_filename, x_cols, g_cols, p_cols, opts):
+    def __init__(self, name, x_cols, g_cols, p_cols, opts):
         ca.Callback.__init__(self)
 
-        self.filename = debug_filename
         self.cols = ["iter"] + x_cols + g_cols
         self.g_cols = g_cols
         self.x_cols = x_cols
@@ -858,7 +922,7 @@ class SolverCallback(ca.Callback):
 
         return [0]
 
-    def write_data(self, solver, params):
+    def write_data(self, solver, params, filename):
         new_cols = ["lb_" + s for s in self.g_cols] + ["ub_" + s for s in self.g_cols] + ["lb_" + s for s in self.x_cols] + ["ub_" + s for s in self.x_cols]
         new_df = pd.DataFrame(np.zeros((self.df.shape[0], len(new_cols))), columns=new_cols)
         self.df = pd.concat([self.df, new_df], axis=1)
@@ -868,4 +932,6 @@ class SolverCallback(ca.Callback):
         self.df.loc[0, ["ub_" + s for s in self.x_cols]] = np.array(solver["ubx"]).squeeze()
         self.df.loc[0, self.p_cols] = params.squeeze()
 
-        self.df.to_csv(self.filename, index=False)
+        self.df.to_csv(filename, index=False)
+        self.df = pd.DataFrame(columns=self.cols)
+        self.it = 0

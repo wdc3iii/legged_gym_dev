@@ -272,6 +272,6 @@ class SquareTrajectoryGenerator(TrajectoryGenerator):
             raise ValueError("Only SingleInt2D and DoubleInt2D are supported")
         return v
 
-    def reset_idx(self, idx, z):
+    def reset_idx(self, idx, z, e_prev=None):
         z[:, self.rom.vel_inds] = 0
         super().reset_idx(idx, z)

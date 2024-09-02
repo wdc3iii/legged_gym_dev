@@ -11,7 +11,9 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                  w_max=1, mpc_dk=1, warm_start='nominal', nominal_ws="interpolate", track_nominal=True,
                  tube_ws='evaluate', max_iter=200):
         super().__init__(rom, N, 1, dt_loop, device)
-        self.tube_dynamics, self.H_fwd, self.H_rev = get_tube_dynamics(tube_dyn, nn_path=nn_path)
+        self.tube_dyn_str = tube_dyn
+        self.nn_path = nn_path
+        self.tube_dynamics, self.H_fwd, self.H_rev, self.eval_tube = get_tube_dynamics(tube_dyn, nn_path=nn_path)
         assert self.H_fwd >= self.N
         assert self.rom.n_robots == 1
         self.H = H
@@ -20,7 +22,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
             self.rom.z_min.cpu().numpy(), self.rom.z_max.cpu().numpy(),
             self.rom.v_min.cpu().numpy(), self.rom.v_max.cpu().numpy()
         )
-
+        self.prob_str = p_dict['name']
         self.start = p_dict['start']
         self.goal = p_dict['goal']
         self.obs = p_dict['obs']
@@ -41,7 +43,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.t_wall = p_dict["t_wall"] if 't_wall' in p_dict.keys() else 10.0
         self.mpc_dk = mpc_dk
 
-        self.z_warm, self.v_warm = None, None
+        self.z_warm, self.v_warm, self.w_warm = None, None, None
         self.nominal_z_warm, self.nominal_v_warm = None, None
         self.e = np.zeros((self.H_rev, 1))
         self.v_prev = np.zeros((self.H_rev, self.planning_model.m))
@@ -57,7 +59,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
 
         self.init_solver, self.nlp_dict, self.init_nlp_opts, self.solver, self.nlp_opts = trajopt_tube_solver(
             self.planning_model, self.tube_dynamics, self.N, self.H_rev, self.Q, self.Qw, self.R, self.w_max, self.Nobs,
-            Qf=self.Qf, Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename=None, t_wall=p_dict['t_wall']
+            Qf=self.Qf, Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename="", t_wall=p_dict['t_wall']
         )
 
     def reset_idx(self, idx, z, e_prev=None):
@@ -99,7 +101,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                 self.nominal_z_warm, self.nominal_v_warm = extract_solution(nominal_sol, self.N, self.planning_model.n, self.planning_model.m)
 
                 z_cost, v_cost = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
-                if self.warm_start == 'nominal':
+                if self.warm_start == 'nominal' and self.z_warm is None:
                     self.z_warm, self.v_warm = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
             else:
                 z_cost, v_cost = None, None
@@ -113,8 +115,9 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                     self.Q, self.R, nominal_ws=self.nominal_ws
                 )
             params = init_params(z0, self.goal, self.obs, z_cost=z_cost, v_cost=v_cost, e=self.e, v_prev=self.v_prev)
-            w_warm = get_tube_warm_start(self.tube_ws, self.tube_dynamics, self.z_warm, self.v_warm, np.zeros((self.N, 1)), self.e, self.v_prev)
-            x_init = init_decision_var(self.z_warm, self.v_warm, w=w_warm)
+            if self.w_warm is None:
+                self.w_warm = get_tube_warm_start(self.tube_ws, self.eval_tube, self.z_warm, self.v_warm, self.e, self.v_prev)
+            x_init = init_decision_var(self.z_warm, self.v_warm, w=self.w_warm)
 
             if limit_time:
                 tic = time.perf_counter_ns()
@@ -129,7 +132,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                     lbx=self.solver["lbx"], ubx=self.solver["ubx"]
                 )
             self.trajectory, self.v_trajectory, self.w_trajectory = extract_solution(sol, self.N, self.planning_model.n, self.planning_model.m)
-            self.z_warm, self.v_warm = self.trajectory.copy(), self.v_trajectory.copy()
+            self.z_warm, self.v_warm, self.w_warm = self.trajectory.copy(), self.v_trajectory.copy(), self.w_trajectory.copy()
 
             self.trajectory = torch.from_numpy(self.trajectory[None, :, :]).float().to(self.device)
             self.v_trajectory = torch.from_numpy(self.v_trajectory[None, :, :]).float().to(self.device)
@@ -138,7 +141,9 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
             self.g_dict = segment_constraint_violation(g_violation, self.solver["g_cols"])
 
             if self.nlp_opts['iteration_callback'] is not None:
-                self.nlp_opts['iteration_callback'].write_data(self.solver, params)
+                fn = f"data/cl_tube_{self.prob_str}_{self.nn_path[-8:]}_{self.warm_start}_Rv_{self.Rv_first}_{self.Rv_second}_N_{self.N}_dk_{self.mpc_dk}_{self.tube_dyn_str}_{self.tube_ws}_{self.track_nominal}_k{self.k.item()}.csv"
+                self.nlp_opts['iteration_callback'].write_data(self.solver, params, fn)
+                print(f"Writing {self.k}: {fn}")
         else:
             self.trajectory[:, :-1, :] = torch.clone(self.trajectory[:, 1:, :])
             self.trajectory[:, -1, :] = self.rom.f(self.trajectory[:, -2, :], self.v_trajectory[:, -1, :])
@@ -149,6 +154,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.z_warm[:-1, :] = self.z_warm[1:, :]
         self.z_warm[-1, :] = self.rom.f(torch.from_numpy(self.z_warm[None, -2, :]).float().to(self.device), torch.from_numpy(self.v_warm[None, -1, :]).float().to(self.device)).cpu().numpy()
         self.v_warm[:-1, :] = self.v_warm[1:, :]
+        self.w_warm[:-1, :] = self.w_warm[1:, :]
 
         # Cycle error and inputs
         self.e[:-1] = self.e[1:, :] # Note the current error is unknown, as traj_gen does not have access to it

@@ -7,8 +7,8 @@ from deep_tube_learning.utils import unnormalize_dict
 
 # prob_str = 'right'
 # prob_str = 'right_wide'
-# prob_str = 'gap'
-prob_str = 'complex'
+prob_str = 'gap'
+# prob_str = 'complex'
 # prob_str = 'gap_big'
 
 track_warm = True
@@ -33,7 +33,8 @@ tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
 
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/07uwnu78"  # Recursive
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
 
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 

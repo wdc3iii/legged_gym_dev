@@ -96,7 +96,7 @@ def data_creation_main(cfg):
     num_robots = env_cfg.env.num_envs
     rom_n = env.rom.n
     rom_m = env.rom.m
-    max_rom_ep_length = int(cfg.env_config.env.episode_length_s / env.rom.dt)
+    max_rom_ep_length = int(cfg.env_config.env.episode_length_s / env.rom.dt) - 5
     for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
         # Data structures
         x = torch.zeros((num_robots, max_rom_ep_length + 1, x_n), device=env.device)  # Epochs, steps, states
@@ -114,6 +114,7 @@ def data_creation_main(cfg):
         z[:, 0, :] = env.traj_gen.trajectory[:, 0, :]
 
         # Loop over time steps
+        ii = 0
         for t in range(max_rom_ep_length):
             # Step environment until rom steps
             k = torch.clone(env.traj_gen.k.detach())
@@ -137,6 +138,11 @@ def data_creation_main(cfg):
             # Save Data
             base = torch.clone(env.root_states.detach())
             d = torch.clone(dones.detach())
+            if torch.any(d):
+                fail = torch.nonzero(d)
+                print(fail)
+                if ii == 0:
+                    ii = fail[0].item()
             proj = env.rom.proj_z(base)
             done[:, t] = d  # Termination should not be used for tube training
             v[:, t, :] = env.traj_gen.v
@@ -146,14 +152,15 @@ def data_creation_main(cfg):
             pz_x[:, t + 1, :] = proj
 
         # Plot the trajectories after the loop
+        ii = 0
         plt.figure()
-        plt.plot(v[0, :, :].cpu().numpy())
+        plt.plot(v[ii, :, :].cpu().numpy())
         plt.show()
         fig, ax = plt.subplots(1, 2)
-        ax[0].plot(z[0, :, :].cpu().numpy())
-        ax[0].plot(pz_x[0, :, :].cpu().numpy())
-        env.rom.plot_spacial(ax[1], z[0, :, :].cpu().numpy(), '.-k')
-        env.rom.plot_spacial(ax[1], pz_x[0, :, :].cpu().numpy())
+        ax[0].plot(z[ii, :, :].cpu().numpy())
+        ax[0].plot(pz_x[ii, :, :].cpu().numpy())
+        env.rom.plot_spacial(ax[1], z[ii, :, :].cpu().numpy(), '.-k')
+        env.rom.plot_spacial(ax[1], pz_x[ii, :, :].cpu().numpy())
         plt.show()
 
         # Log Data
