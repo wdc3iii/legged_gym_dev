@@ -22,7 +22,7 @@ tube_dyn = "NN_recursive"
 nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
 
 max_iter = 200
-N = 50
+N = 25
 mpc_dk = 1
 Rv1 = 10
 Rv2 = 10

@@ -50,6 +50,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.g_dict = {}
         self.t_solving_nominal = 0
         self.t_solving = 0
+        self.z0 = None
 
         if self.warm_start == 'nominal' or self.track_nominal:
             self.init_nominal_solver, self.nominal_nlp_dict, self.init_nominal_nlp_opts, self.nominal_solver, self.nominal_nlp_opts = trajopt_solver(
@@ -63,6 +64,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         )
 
     def reset_idx(self, idx, z, e_prev=None):
+        self.z0 = z.cpu().numpy().squeeze()
         self.t_solving_nominal = 0
         self.t_solving = 0
         self.k[idx] = -1
@@ -76,14 +78,14 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
 
 
     def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False, limit_time=True):
-        z0 = self.trajectory[0, 1, :].cpu().numpy()
+        # z0 = self.trajectory[0, 1, :].cpu().numpy()
         self.e[-1] = np.linalg.norm(e_prev.detach().cpu().numpy())
         if (self.k.item() + 1) % self.mpc_dk == 0:
             # Solve nominal ocp if necessary
             if self.track_nominal or (self.warm_start == 'nominal' and self.z_warm is None):
                 if self.nominal_z_warm is None:
-                    self.nominal_z_warm, self.nominal_v_warm = get_warm_start(self.nominal_ws, z0, self.goal, self.N, self.planning_model)
-                nominal_params = init_params(z0, self.goal, self.obs)
+                    self.nominal_z_warm, self.nominal_v_warm = get_warm_start(self.nominal_ws, self.z0, self.goal, self.N, self.planning_model)
+                nominal_params = init_params(self.z0, self.goal, self.obs)
                 nominal_x_init = init_decision_var(self.nominal_z_warm, self.nominal_v_warm)
 
                 if limit_time:
@@ -111,10 +113,10 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                 v_cost = np.zeros((self.N, self.rom.m))
             if self.z_warm is None:
                 self.z_warm, self.v_warm = get_warm_start(
-                    self.warm_start, z0, self.goal, self.N,self.planning_model, self.obs,
+                    self.warm_start, self.z0, self.goal, self.N,self.planning_model, self.obs,
                     self.Q, self.R, nominal_ws=self.nominal_ws
                 )
-            params = init_params(z0, self.goal, self.obs, z_cost=z_cost, v_cost=v_cost, e=self.e, v_prev=self.v_prev)
+            params = init_params(self.z0, self.goal, self.obs, z_cost=z_cost, v_cost=v_cost, e=self.e, v_prev=self.v_prev)
             if self.w_warm is None:
                 self.w_warm = get_tube_warm_start(self.tube_ws, self.eval_tube, self.z_warm, self.v_warm, self.e, self.v_prev)
             x_init = init_decision_var(self.z_warm, self.v_warm, w=self.w_warm)
@@ -150,6 +152,8 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
             self.v_trajectory[:, :-1, :] = torch.clone(self.v_trajectory[:, 1:, :])
             self.w_trajectory[:-1, :] = self.w_trajectory[1:, :]
 
+        z0_torch = torch.from_numpy(self.z0).float().to(self.device)
+        self.z0 = self.rom.f(z0_torch, self.rom.clip_v_z(z0_torch, self.v_trajectory[:, 0, :])).cpu().numpy().squeeze()
         # Slide trajectories forward
         self.z_warm[:-1, :] = self.z_warm[1:, :]
         self.z_warm[-1, :] = self.rom.f(torch.from_numpy(self.z_warm[None, -2, :]).float().to(self.device), torch.from_numpy(self.v_warm[None, -1, :]).float().to(self.device)).cpu().numpy()

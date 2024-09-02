@@ -72,12 +72,12 @@ def main():
     H_rev = model_cfg.dataset.H_rev
     w_max = 1
 
-    tube_dynamics, _, _ = get_tube_dynamics(tube_dyn, nn_path=nn_path)
+    tube_dynamics, _, _, eval_tube = get_tube_dynamics(tube_dyn, nn_path=nn_path)
 
     tube_ws_str = str(tube_ws).replace('.', '_')
     fn = f"data/eval_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
     sol, solver = solve_tube(
-        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, R_nominal=R_nominal,
+        start, goal, obs, planning_model, tube_dynamics, eval_tube, N, H_rev, Q, Qw, R, w_max, R_nominal=R_nominal,
         Rv_first=Rv_first, Rv_second=Rv_second, warm_start=warm_start, tube_ws=tube_ws,
         debug_filename=fn, track_warm=track_warm
     )

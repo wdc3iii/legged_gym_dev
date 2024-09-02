@@ -37,7 +37,7 @@ tube_dyn = "NN_recursive"
 nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/07uwnu78"  # Recursive
 
 time_it = True
-H = 150
+H = 10
 N = 25
 mpc_dk = 5
 max_iter = 200

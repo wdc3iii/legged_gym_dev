@@ -15,7 +15,7 @@ R = 0.1
 R_WARM = 1.
 RV_FIRST = 0.
 RV_SECOND = 0.
-TWALL = 10.
+TWALL = 0.3
 MPC_RECOMPUTE_DK = 1
 problem_dict = {
     "gap": {"name": "gap", "start": np.array([0.0, 0.0]), "goal": np.array([1.5, 1.5]),
@@ -35,7 +35,7 @@ problem_dict = {
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "complex": {"name": "complex", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
-            "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.2, 0.2, 0.15])},
+            "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.25, 0.25, 0.2])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK}
 }
@@ -308,8 +308,8 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
         # "ipopt.print_level": 5,
         # "ipopt.output_file": "data/ipopt_output.txt",
         # "ipopt.file_print_level": 8,
-        "ipopt.jacobian_approximation": "exact",  # "exact" (default) or "finite-difference-values"
-        "ipopt.gradient_approximation": "exact",  # "exact" (default) or "finite-difference-values"
+        # "ipopt.jacobian_approximation": "exact",  # "exact" (default) or "finite-difference-values"
+        # "ipopt.gradient_approximation": "exact",  # "exact" (default) or "finite-difference-values"
         # "ipopt.max_wall_time": 0.1,
         # "ipopt.constr_viol_tol": 1e-1,
         "ipopt.hessian_approximation": "limited-memory"  # Seems to help get constraint violation down, now mostly dual infeasibility remains
@@ -332,6 +332,9 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
 
     t_lim_nlp_opts = nlp_opts.copy()
     t_lim_nlp_opts["ipopt.max_wall_time"] = t_wall
+    t_lim_nlp_opts["ipopt.mu_init"] = 1e-4
+    t_lim_nlp_opts["ipopt.barrier_tol_factor"] = 1e6
+    t_lim_nlp_opts["ipopt.mu_strategy"] = "monotone"
     t_lim_nlp_solver = ca.nlpsol("trajectory_generator", "ipopt", nlp_dict, t_lim_nlp_opts)
 
     t_lim_solver = {
@@ -539,7 +542,7 @@ def solve_nominal(start, goal, obs, planning_model, N, Q, R, Rv_first=0, Rv_seco
 
 
 def solve_tube(
-        start, goal, obs, planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Qf=None, R_nominal=None,
+        start, goal, obs, planning_model, tube_dynamics, eval_tube, N, H_rev, Q, Qw, R, w_max, Qf=None, R_nominal=None,
         Rv_first=0, Rv_second=0, warm_start='start', nominal_ws='interpolate', tube_ws=0, debug_filename=None, max_iter=1000, track_warm=False
 ):
     if R_nominal is None:
@@ -554,7 +557,7 @@ def solve_tube(
         Rv_first=Rv_first, Rv_second=Rv_second, max_iter=max_iter, debug_filename=debug_filename
     )
 
-    w_init = get_tube_warm_start(tube_ws, tube_dynamics, z_init, v_init, np.zeros((N, 1)), e, v_prev)
+    w_init = get_tube_warm_start(tube_ws, eval_tube, z_init, v_init, e, v_prev)
 
     if track_warm:
         z_cost = z_init.copy()
@@ -569,7 +572,7 @@ def solve_tube(
                            ubx=solver["ubx"])
 
     if nlp_opts['iteration_callback'] is not None:
-        nlp_opts['iteration_callback'].write_data(solver, params)
+        nlp_opts['iteration_callback'].write_data(solver, params, debug_filename)
     return sol, solver
 
 

@@ -6,17 +6,8 @@ clear; clc;
 % nm = 'cl_tube_complex_07uwnu78_nominal_Rv_10_10_N_10_NN_recursive_evaluate_True'; % N = 10 MPC horizon FAILS
 
 % Hopper N = 50 (model training horizon)
-% nm = 'cl_tube_complex_rkm53z6t_nominal_Rv_10_10_NN_recursive_evaluate_True';
-% nm = 'cl_tube_gap_rkm53z6t_nominal_Rv_10_10_NN_recursive_evaluate_True';
-% nm = 'cl_tube_gap_rkm53z6t_nominal_Rv_10_10_N_25_dk_2_NN_recursive_evaluate_True';
-% nm = 'eval_tube_complex_jtu9xrfq_nominal_Rv_10_10_NN_recursive_evaluate_True';
-% nm = 'cl_tube_gap_jtu9xrfq_nominal_Rv_10_10_N_50_dk_1_NN_recursive_evaluate_True';
 % nm = 'cl_tube_complex_jtu9xrfq_nominal_Rv_10_10_N_50_dk_1_NN_recursive_evaluate_True';
-% nm = 'cl_tube_complex_jtu9xrfq_nominal_Rv_10_10_N_50_dk_5_NN_recursive_evaluate_True';
-% Hopper N = 10 (model training horizon)
-% nm = 'cl_tube_complex_nqkkk3af_nominal_Rv_10_10_NN_recursive_evaluate_True';
-% nm = 'cl_tube_gap_nqkkk3af_nominal_Rv_10_10_NN_recursive_evaluate_True';
-nm = 'cl_tube_complex_jtu9xrfq_nominal_Rv_10_10_N_50_dk_1_NN_recursive_evaluate_True';
+nm = 'cl_tube_complex_jtu9xrfq_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
 
 set(groot, 'DefaultAxesFontSize', 17);  % Set default font size for axes labels and ticks
 set(groot, 'DefaultTextFontSize', 17);  % Set default font size for text objects
