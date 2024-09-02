@@ -12,30 +12,19 @@ prob_str = 'gap'
 # prob_str = 'gap_big'
 
 track_warm = True
-
-# warm_start = 'start'
-# warm_start = 'goal'
-# warm_start = 'interpolate'
 warm_start = 'nominal'
-
-# tube_ws = 0
-# tube_ws = 0.5
 tube_ws = "evaluate"
 
-# tube_dyn = 'l1'
-# tube_dyn = "l2"
-# tube_dyn = "l1_rolling"
-# tube_dyn = "l2_rolling"
+# solver_str = "ipopt"
+solver_str = 'snopt'
+
 # tube_dyn = "NN_oneshot"
 tube_dyn = "NN_recursive"
-# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # Larger bounds
-# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
-# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
 
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/07uwnu78"  # Recursive
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
-# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y87jn2r7"  # H2H
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # 128x128 softplus b=5 hopper
 
@@ -76,11 +65,11 @@ def main():
     tube_dynamics, _, _, eval_tube = get_tube_dynamics(tube_dyn, nn_path=nn_path)
 
     tube_ws_str = str(tube_ws).replace('.', '_')
-    fn = f"data/eval_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
+    fn = f"data/eval_tube_{prob_str}_{solver_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_{tube_dyn}_{tube_ws_str}_{track_warm}.csv"
     sol, solver = solve_tube(
         start, goal, obs, planning_model, tube_dynamics, eval_tube, N, H_rev, Q, Qw, R, w_max, R_nominal=R_nominal,
         Rv_first=Rv_first, Rv_second=Rv_second, warm_start=warm_start, tube_ws=tube_ws,
-        debug_filename=fn, track_warm=track_warm
+        debug_filename=fn, track_warm=track_warm, solver_str=solver_str
     )
 
     z_sol, v_sol, w_sol = extract_solution(sol, N, planning_model.n, planning_model.m)

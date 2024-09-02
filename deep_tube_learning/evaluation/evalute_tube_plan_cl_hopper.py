@@ -5,7 +5,7 @@ __conda_setup="$('/home/wcompton/miniforge3/bin/conda' 'shell.bash' 'hook' 2> /d
 # Start server process
 server_process = subprocess.Popen([
     'bash', '-c',
-    '__conda_setup=\"$(\'/home/wcompton/miniforge3/bin/conda\' \'shell.bash\' \'hook\' 2> /dev/null)\" && eval \"$__conda_setup\" && source /home/wcompton/miniforge3/etc/profile.d/mamba.sh && mamba activate deep_tubes_dev && python evaluate_tube_plan_cl_server.py'
+    '__conda_setup=\"$(\'/home/wcompton/miniforge3/bin/conda\' \'shell.bash\' \'hook\' 2> /dev/null)\" && eval \"$__conda_setup\" && source /home/wcompton/miniforge3/etc/profile.d/mamba.sh && mamba activate deep_tubes_dev && export SNOPT_LICENSE=/home/wcompton/Repos/snopt/snopt7.lic && python evaluate_tube_plan_cl_server.py'
 ])
 
 # Start client process

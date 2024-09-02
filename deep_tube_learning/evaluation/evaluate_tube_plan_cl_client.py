@@ -15,8 +15,8 @@ from deep_tube_learning.utils import update_args_from_hydra, update_cfgs_from_hy
 from deep_tube_learning.controllers import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
 
-prob_str = 'right'
-# prob_str = 'gap'
+# prob_str = 'right'
+prob_str = 'complex'
 H = 150
 
 def get_send(client_socket, server_address):

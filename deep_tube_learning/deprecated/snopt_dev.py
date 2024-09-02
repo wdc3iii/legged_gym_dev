@@ -8,10 +8,12 @@ g = x[0] + x[1] - 1
 nlp = {'x': x, 'f': obj, 'g': g}
 
 # Create the solver instance, specifying SNOPT
-opts = {'nlpsol': 'snopt'}  # Ensure SNOPT is specified
+opts = {'snopt': {}}  # Ensure SNOPT is specified
 solver = ca.nlpsol('solver', 'snopt', nlp, opts)
 
 # Solve the problem
-sol = solver(x0=[0.5, 0.5], lbg=0, ubg=0)
+sol = solver(x0=[0.1, 0.1], lbg=0, ubg=0)
 
 print(sol['x'])
+
+# solver.print_options()

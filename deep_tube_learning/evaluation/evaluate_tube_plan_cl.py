@@ -24,6 +24,9 @@ warm_start = 'nominal'
 # tube_ws = 0.5
 tube_ws = "evaluate"
 
+# solver_str = "ipopt"
+solver_str = "snopt"
+
 # tube_dyn = 'l1'
 # tube_dyn = "l2"
 # tube_dyn = "l1_rolling"
@@ -37,9 +40,9 @@ tube_dyn = "NN_recursive"
 nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/07uwnu78"  # Recursive
 
 time_it = True
-H = 10
+H = 100
 N = 25
-mpc_dk = 5
+mpc_dk = 1
 max_iter = 200
 
 Rv1 = 10
@@ -89,7 +92,8 @@ def main():
         'nominal_ws': 'interpolate',
         'track_nominal': track_warm,
         'tube_ws': tube_ws,
-        'max_iter': max_iter
+        'max_iter': max_iter,
+        'solver_str': solver_str
     }
     dataset_cfg['env_config']['domain_rand']['randomize_rom_distance'] = False
 
@@ -196,7 +200,7 @@ def main():
 
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
+    fn = f"data/cl_tube_{prob_str}_{solver_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),

@@ -68,3 +68,6 @@ deep_tube_learning/wandb/*
 
 # Matlab
 *.asv
+
+# Snopt
+*.out

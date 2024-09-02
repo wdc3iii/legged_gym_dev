@@ -9,7 +9,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
 
     def __init__(self, rom, H, N, dt_loop, device, p_dict, tube_dyn, nn_path=None,
                  w_max=1, mpc_dk=1, warm_start='nominal', nominal_ws="interpolate", track_nominal=True,
-                 tube_ws='evaluate', max_iter=200):
+                 tube_ws='evaluate', max_iter=200, solver_str='ipopt'):
         super().__init__(rom, N, 1, dt_loop, device)
         self.tube_dyn_str = tube_dyn
         self.nn_path = nn_path
@@ -60,7 +60,8 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
 
         self.init_solver, self.nlp_dict, self.init_nlp_opts, self.solver, self.nlp_opts = trajopt_tube_solver(
             self.planning_model, self.tube_dynamics, self.N, self.H_rev, self.Q, self.Qw, self.R, self.w_max, self.Nobs,
-            Qf=self.Qf, Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename="", t_wall=p_dict['t_wall']
+            Qf=self.Qf, Rv_first=self.Rv_first, Rv_second=self.Rv_second, max_iter=self.max_iter, debug_filename="",
+            t_wall=p_dict['t_wall'], solver_str=solver_str
         )
 
     def reset_idx(self, idx, z, e_prev=None):

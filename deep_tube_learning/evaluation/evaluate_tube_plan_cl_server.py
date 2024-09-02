@@ -10,19 +10,20 @@ import struct
 
 
 track_warm = True
-
 warm_start = 'nominal'
-
 tube_ws = "evaluate"
+# solver_str = 'ipopt'
+solver_str = 'snopt'
 
 # tube_dyn = "NN_oneshot"
 tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/rkm53z6t"  # N = 50
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/nqkkk3af"  # N = 10
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y87jn2r7"  # H2H
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
 max_iter = 200
-N = 10
+N = 25
 mpc_dk = 1
 Rv1 = 10
 Rv2 = 10
@@ -110,7 +111,8 @@ def main():
         'nominal_ws': 'interpolate',
         'track_nominal': track_warm,
         'tube_ws': tube_ws,
-        'max_iter': max_iter
+        'max_iter': max_iter,
+        'solver_str': solver_str
     }
     # dataset_cfg['env_config']['rom']['v_max'] = [0.15, 0.15]
     # dataset_cfg['env_config']['rom']['v_min'] = [-0.15, -0.15]
@@ -183,7 +185,7 @@ def main():
     server_socket.close()
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
+    fn = f"data/cl_tube_{prob_str}_{solver_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),

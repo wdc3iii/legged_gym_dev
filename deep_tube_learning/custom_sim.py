@@ -96,7 +96,8 @@ class CustomSim:
                 nominal_ws=traj_cfg.nominal_ws,
                 track_nominal=traj_cfg.track_nominal,
                 tube_ws=traj_cfg.tube_ws,
-                max_iter=traj_cfg.max_iter
+                max_iter=traj_cfg.max_iter,
+                solver_str=traj_cfg.solver_str
             )
         else:
             raise ValueError(f"Trajectory generator{traj_cfg.cls} not supported.")
