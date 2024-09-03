@@ -200,7 +200,7 @@ class SingleInt2D(RomDynamics):
         return self.stack((z, self.arctan2(v[:, 1], v[:, 0])[:, None])), self.stack((v, self.zero_mat(v.shape[0], 1)))
 
     def clip_v_z(self, z, v):
-        return v
+        return self.maximum(self.minimum(v, self.v_max), self.v_min)
 
     def plot_ts(self, axs, xt, ut):
         super().plot_ts(axs, xt, ut)

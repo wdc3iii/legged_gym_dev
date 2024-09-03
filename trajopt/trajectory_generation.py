@@ -52,7 +52,7 @@ class AbstractTrajectoryGenerator(ABC):
 
 class TrajectoryGenerator(AbstractTrajectoryGenerator):
 
-    def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10, alpha_max=10,
+    def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10, alpha_max=5,
                  device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05, noise_max_std=0.1, noise_llh=0.25):
         super().__init__(rom, N, dN, dt_loop, device)
 
@@ -94,6 +94,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
             self._resample_extreme_input(idx, v_min, v_max)
             self._resample_ramp_input(idx, z, v_min, v_max)
             self._resample_sinusoid_input(idx, v_min, v_max)
+            self._resample_exp_input(idx, v_min, v_max)
             self._resample_rnd_input(idx, v_min, v_max)
             self._resample_t_final(idx)
             self._resample_weight(idx)
@@ -142,13 +143,15 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         )
 
     def _resample_exp_input(self, idx, v_min, v_max):
-        self.exp_c = self.v[idx, :]
+        self.exp_c[idx, :] = self.v[idx, :]
+        m1, m2 = torch.nonzero(self.exp_c[idx, :] == 0, as_tuple=True)
+        self.exp_c[idx[m1], m2] += 0.1 * self.uniform(v_min, v_max, size=(len(idx), self.rom.m))[m1, m2]
         self.exp_alpha[idx, :] = self.uniform(-self.alpha_max, self.alpha_max, (len(idx), self.rom.m))
         self.exp_t_start[idx] = self.t_final[idx]
 
     def _resample_rnd_input(self, idx, v_min, v_max):
         self.rnd_mag[idx, :] = self.uniform(torch.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx), self.rom.m))
-        self.rnd_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :], size=(len(idx), self.rom.m))
+        self.rnd_mean[idx, :] = self.uniform(v_min + self.rnd_mag[idx, :], v_max - self.rnd_mag[idx, :], size=(len(idx), self.rom.m))
 
     def _const_input(self):
         return self.sample_hold_input

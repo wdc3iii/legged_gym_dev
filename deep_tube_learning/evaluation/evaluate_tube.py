@@ -13,15 +13,9 @@ from deep_tube_learning.utils import wandb_model_load, wandb_load_artifact, unno
 
 def eval_model(delta_seed=1, num_robots=2):
     # Experiment whose model to evaluate
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pl0dhg5j"  # Larger bounds
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c4izk9vs"  # Tighter bounds
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/002384lb"  # Tightest bounds
-
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/b0ein4nu"  # Recursive
-
-    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0i2o675r"  # Hopper Single Int
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/efctig2n"
+    # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
     model_name = f'{exp_name}_model:best'
 
