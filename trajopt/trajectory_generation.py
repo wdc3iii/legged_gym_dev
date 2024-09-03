@@ -56,7 +56,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
                  device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05, noise_max_std=0.1, noise_llh=0.25):
         super().__init__(rom, N, dN, dt_loop, device)
 
-        self.weights = torch.zeros((self.rom.n_robots, 4), device=self.device)
+        self.weights = torch.zeros((self.rom.n_robots, self.rom.m, 4), device=self.device)
         self.t_final = torch.zeros((self.rom.n_robots,), device=self.device)
         self.sample_hold_input = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.extreme_input = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
@@ -107,7 +107,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.t_final[idx] += self.t_sampler.sample(len(idx))
 
     def _resample_weight(self, idx):
-        self.weights[idx, :] = self.weight_sampler.sample(len(idx))
+        self.weights[idx, :, :] = self.weight_sampler.sample(len(idx))
 
     def _resample_const_input(self, idx, v_min, v_max):
         self.sample_hold_input[idx, :] = self.uniform(v_min, v_max, size=(len(idx), self.rom.m))
@@ -155,10 +155,10 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
     def get_input_t(self, t, z):
         idx = torch.nonzero(t > self.t_final).reshape((-1,))
         self.resample(idx, z)
-        return self.weights[:, 0][:, None] * self.rom.clip_v_z(z, self._const_input()) + \
-            self.weights[:, 1][:, None] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
-            self.weights[:, 2][:, None] * self.rom.clip_v_z(z, self._extreme_input()) + \
-            self.weights[:, 3][:, None] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
+        return self.weights[:, :, 0] * self.rom.clip_v_z(z, self._const_input()) + \
+            self.weights[:, :, 1] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
+            self.weights[:, :, 2] * self.rom.clip_v_z(z, self._extreme_input()) + \
+            self.weights[:, :, 3] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
 
 
     def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False):

@@ -56,7 +56,7 @@ class CustomSim:
         traj_cfg = self.cfg.trajectory_generator
         if traj_cfg.cls == 'TrajectoryGenerator':
             t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high, backend='torch', device=self.device)
-            weight_samp = globals()[traj_cfg.weight_samp_cls]()
+            weight_samp = globals()[traj_cfg.weight_samp_cls](self.rom.m)
             self.traj_gen = TrajectoryGenerator(
                 self.rom,
                 t_samp,
