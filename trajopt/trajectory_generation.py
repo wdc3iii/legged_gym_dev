@@ -57,10 +57,10 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         super().__init__(rom, N, dN, dt_loop, device)
 
         self.weights = torch.zeros((self.rom.n_robots, self.rom.m, 5), device=self.device)
-        self.t_final = torch.zeros((self.rom.n_robots,), device=self.device)
+        self.t_final = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.sample_hold_input = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.extreme_input = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
-        self.ramp_t_start = torch.zeros((self.rom.n_robots,), device=self.device)
+        self.ramp_t_start = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.ramp_v_start = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.ramp_v_end = self.uniform(self.rom.v_min, self.rom.v_max, size=(self.rom.n_robots, self.rom.m))
         self.sin_mag = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
@@ -69,7 +69,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.sin_mean = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.exp_c = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.exp_alpha = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
-        self.exp_t_start = torch.zeros((self.rom.n_robots,), device=self.device)
+        self.exp_t_start = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.rnd_mag = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.rnd_mean = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.noise_std = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
@@ -82,83 +82,87 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.prob_stationary = prob_stationary
         self.stationary_inds = torch.zeros((self.rom.n_robots,), device=self.device).bool()
         self.prob_rnd = prob_rnd
-        self.rnd_inds = None
-        self.rnd_inds_bool = torch.zeros((self.rom.n_robots,), device=self.device).bool()
+        self.rnd_inds_bool = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device).bool()
         self.noise_max_std = torch.max(self.rom.v_max) * noise_max_std
         self.noise_llh = noise_llh
+        self.single_ind_match_up = torch.randint(0, self.rom.m, size=(self.rom.n_robots,), device=self.device)
+        self.tmp = None
 
-    def resample(self, idx, z):
-        if len(idx) > 0:
-            v_min, v_max = self.rom.compute_state_dependent_input_bounds(z[idx, :])
-            self._resample_const_input(idx, v_min, v_max)
-            self._resample_extreme_input(idx, v_min, v_max)
-            self._resample_ramp_input(idx, z, v_min, v_max)
-            self._resample_sinusoid_input(idx, v_min, v_max)
-            self._resample_exp_input(idx, v_min, v_max)
-            self._resample_rnd_input(idx, v_min, v_max)
-            self._resample_t_final(idx)
-            self._resample_weight(idx)
-            n = torch.sum(idx) if idx.dtype == bool else len(idx)
-            self.stationary_inds[idx] = self.uniform(torch.tensor([0.0], device=self.device), torch.tensor([1.0], device=self.device), (n, 1)).squeeze() < self.prob_stationary
-            self.rnd_inds_bool[idx] = self.uniform(torch.tensor([0.0], device=self.device), torch.tensor([1.0], device=self.device),
-                                                     (n, 1)).squeeze() < self.prob_rnd
-            self.rnd_inds = torch.nonzero(self.rnd_inds_bool).reshape(-1,)
-            self.noise_std[idx] = self.uniform(torch.tensor([0.], device=self.device), self.noise_max_std, size=(len(idx), self.rom.m))
-            mask = torch.rand(len(idx), device=self.device) > self.noise_llh
-            self.noise_std[idx[mask]] = 0
+    def resample(self, idx_r, idx_i, z):
+        n = len(idx_r)
+        if n > 0:
+            self.tmp = torch.arange(len(idx_r), device=self.device)
+            single_r = idx_r[idx_i == self.single_ind_match_up[idx_r]]
+            v_min, v_max = self.rom.compute_state_dependent_input_bounds(z[idx_r, :])
+            self._resample_const_input(idx_r, idx_i, v_min, v_max)
+            self._resample_extreme_input(idx_r, idx_i, v_min, v_max)
+            self._resample_ramp_input(idx_r, idx_i, z, v_min, v_max)
+            self._resample_sinusoid_input(idx_r, idx_i, v_min, v_max)
+            self._resample_exp_input(idx_r, idx_i, v_min, v_max)
+            self._resample_rnd_input(idx_r, idx_i, v_min, v_max)
+            self._resample_t_final(idx_r, idx_i)
+            self._resample_weight(idx_r, idx_i)
+            if len(single_r) > 0:
+                self.stationary_inds[single_r] = self.uniform(torch.tensor([0.0], device=self.device), torch.tensor([1.0], device=self.device), (len(single_r),)) < self.prob_stationary
+            self.rnd_inds_bool[idx_r, idx_i] = self.uniform(torch.tensor([0.0], device=self.device), torch.tensor([1.0], device=self.device),(n,)) < self.prob_rnd
+            self.rnd_inds_r, self.rnd_inds_i = torch.nonzero(self.rnd_inds_bool, as_tuple=True)
+            self.noise_std[idx_r, idx_i] = self.uniform(torch.tensor([0.], device=self.device), self.noise_max_std, size=(len(idx_r),))
+            mask = torch.rand((len(idx_r),), device=self.device) > self.noise_llh
+            self.noise_std[idx_r[mask], idx_i[mask]] = 0
 
 
-    def _resample_t_final(self, idx):
-        self.t_final[idx] += self.t_sampler.sample(len(idx))
+    def _resample_t_final(self, idx_r, idx_i):
+        self.t_final[idx_r, idx_i] += self.t_sampler.sample(len(idx_r))
 
-    def _resample_weight(self, idx):
-        self.weights[idx, :, :] = self.weight_sampler.sample(len(idx))
+    def _resample_weight(self, idx_r, idx_i):
+        self.weights[idx_r, idx_i, :] = self.weight_sampler.sample(len(idx_r))[self.tmp, idx_i, :]
 
-    def _resample_const_input(self, idx, v_min, v_max):
-        self.sample_hold_input[idx, :] = self.uniform(v_min, v_max, size=(len(idx), self.rom.m))
+    def _resample_const_input(self, idx_r, idx_i, v_min, v_max):
+        self.sample_hold_input[idx_r, idx_i] = self.uniform(v_min, v_max, size=(len(idx_r), self.rom.m))[self.tmp, idx_i]
 
-    def _resample_ramp_input(self, idx, z, v_min, v_max):
-        self.ramp_v_start[idx, :] = self.rom.clip_v_z(z[idx, :], self.ramp_v_end[idx, :])
-        self.ramp_v_end[idx, :] = self.uniform(v_min, v_max, size=(len(idx), self.rom.m))
-        self.ramp_t_start[idx] = self.t_final[idx]
-        mask = torch.rand(len(idx), device=self.device) < 0.1
-        self.ramp_v_end[idx[mask], :] = self.extreme_input[idx[mask], :]
+    def _resample_ramp_input(self, idx_r, idx_i, z, v_min, v_max):
+        self.ramp_v_start[idx_r, idx_i] = self.rom.clip_v_z(z[idx_r, :], self.ramp_v_end[idx_r, :])[self.tmp, idx_i]
+        self.ramp_v_end[idx_r, idx_i] = self.uniform(v_min, v_max, size=(len(idx_r), self.rom.m))[self.tmp, idx_i]
+        self.ramp_t_start[idx_r, idx_i] = self.t_final[idx_r, idx_i]
+        mask = torch.rand(len(idx_r), device=self.device) < 0.1
+        self.ramp_v_end[idx_r[mask], idx_i[mask]] = self.extreme_input[idx_r[mask], idx_i[mask]]
 
-    def _resample_extreme_input(self, t_mask,v_min, v_max):
+    def _resample_extreme_input(self, idx_r, idx_i, v_min, v_max):
         arr = torch.concatenate((v_min[:, :, None], torch.zeros_like(v_min, device=self.device)[:, :, None], v_max[:, :, None]), dim=-1)
         mask = torch.arange(3, device=self.device)[None, None, :] == torch.randint(0, 3, (*v_min.shape, 1), device=self.device)
-        self.extreme_input[t_mask, :] = arr[mask].reshape(v_min.shape)
+        self.extreme_input[idx_r, idx_i] = arr[mask].reshape(-1, self.rom.m)[self.tmp, idx_i]
 
-    def _resample_sinusoid_input(self, idx, v_min, v_max):
-        self.sin_mag[idx, :] = self.uniform(torch.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx), self.rom.m))
-        self.sin_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :], size=(len(idx), self.rom.m))
-        self.sin_freq[idx, :] = self.uniform(
+    def _resample_sinusoid_input(self, idx_r, idx_i, v_min, v_max):
+        self.sin_mag[idx_r, idx_i] = self.uniform(torch.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx_r), self.rom.m))[self.tmp, idx_i]
+        self.sin_mean[idx_r, idx_i] = self.uniform(self.rom.v_min[None, :] + self.sin_mag, self.rom.v_min[None, :]-self.sin_mag, size=self.sin_mag.shape)[idx_r, idx_i]
+        self.sin_freq[idx_r, idx_i] = self.uniform(
             torch.tensor([self.freq_low], device=self.device),
             torch.tensor([self.freq_high], device=self.device),
-            size=(len(idx), self.rom.m))
-        self.sin_off[idx, :] = self.uniform(
+            size=(len(idx_r),)
+        )
+        self.sin_off[idx_r, idx_i] = self.uniform(
             torch.tensor([-torch.pi], device=self.device),
             torch.tensor([torch.pi], device=self.device),
-            size=(len(idx), self.rom.m)
+            size=(len(idx_r),)
         )
 
-    def _resample_exp_input(self, idx, v_min, v_max):
-        self.exp_c[idx, :] = self.v[idx, :]
-        m1, m2 = torch.nonzero(self.exp_c[idx, :] == 0, as_tuple=True)
-        self.exp_c[idx[m1], m2] += 0.1 * self.uniform(v_min, v_max, size=(len(idx), self.rom.m))[m1, m2]
-        self.exp_alpha[idx, :] = self.uniform(-self.alpha_max, self.alpha_max, (len(idx), self.rom.m))
-        self.exp_t_start[idx] = self.t_final[idx]
+    def _resample_exp_input(self, idx_r, idx_i, v_min, v_max):
+        self.exp_c[idx_r, idx_i] = self.v[idx_r, idx_i]
+        m1, m2 = torch.nonzero(self.exp_c == 0, as_tuple=True)
+        self.exp_c[m1, m2] += 0.1 * self.uniform(self.rom.v_min, self.rom.v_max, size=self.exp_c.shape)[m1, m2]
+        self.exp_alpha[idx_r, idx_i] = self.uniform(-self.alpha_max, self.alpha_max, (len(idx_r), self.rom.m))[self.tmp, idx_i]
+        self.exp_t_start[idx_r, idx_i] = self.t_final[idx_r, idx_i]
 
-    def _resample_rnd_input(self, idx, v_min, v_max):
-        self.rnd_mag[idx, :] = self.uniform(torch.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx), self.rom.m))
-        self.rnd_mean[idx, :] = self.uniform(v_min + self.rnd_mag[idx, :], v_max - self.rnd_mag[idx, :], size=(len(idx), self.rom.m))
+    def _resample_rnd_input(self, idx_r, idx_i, v_min, v_max):
+        self.rnd_mag[idx_r, idx_i] = self.uniform(torch.zeros_like(self.rom.v_max), (self.rom.v_max - self.rom.v_min) / 2, size=(len(idx_r), self.rom.m))[self.tmp, idx_i]
+        self.rnd_mean[idx_r, idx_i] = self.uniform(self.rom.v_min[None, :] + self.rnd_mag, self.rom.v_max - self.rnd_mag, size=self.rnd_mag.shape)[idx_r, idx_i]
 
     def _const_input(self):
         return self.sample_hold_input
 
     def _ramp_input_t(self, t):
         return self.ramp_v_start + \
-            (self.ramp_v_end - self.ramp_v_start) * ((t - self.ramp_t_start) / (self.t_final - self.ramp_t_start))[:, None]
+            (self.ramp_v_end - self.ramp_v_start) * ((t[:, None] - self.ramp_t_start) / (self.t_final - self.ramp_t_start))
 
     def _extreme_input(self):
         return self.extreme_input
@@ -167,11 +171,11 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         return self.sin_mag * torch.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
 
     def _exp_input_t(self, t):
-        return self.exp_c * torch.exp(self.exp_alpha * (t - self.exp_t_start)[:, None])
+        return self.exp_c * torch.exp(self.exp_alpha * (t[:, None] - self.exp_t_start))
 
     def get_input_t(self, t, z):
-        idx = torch.nonzero(t > self.t_final).reshape((-1,))
-        self.resample(idx, z)
+        idx_r, idx_i = torch.nonzero(t[:, None] > self.t_final, as_tuple=True)
+        self.resample(idx_r, idx_i, z)
         return self.weights[:, :, 0] * self.rom.clip_v_z(z, self._const_input()) + \
             self.weights[:, :, 1] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
             self.weights[:, :, 2] * self.rom.clip_v_z(z, self._extreme_input()) + \
@@ -184,7 +188,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         v = self.get_input_t(self.t, self.trajectory[:, -1, :])
         v[self.stationary_inds, :] = 0
         # v_min, v_max = self.rom.compute_state_dependent_input_bounds(self.trajectory[self.rnd_inds, -1, :])
-        v[self.rnd_inds, :] = self.uniform(-self.rnd_mag[self.rnd_inds, :], self.rnd_mag[self.rnd_inds, :], size=(len(self.rnd_inds), self.rom.m)) + self.rnd_mean[self.rnd_inds, :]
+        v[self.rnd_inds_r, self.rnd_inds_i] = self.uniform(-self.rnd_mag[self.rnd_inds_r, self.rnd_inds_i], self.rnd_mag[self.rnd_inds_r, self.rnd_inds_i], size=(len(self.rnd_inds_r),)) + self.rnd_mean[self.rnd_inds_r, self.rnd_inds_i]
         self.v[idx, :] = self.rom.clip_v_z(self.trajectory[idx, -1, :],
             v[idx, :] + self.noise_std[idx, :] * torch.randn(len(idx), self.rom.m, device=self.device)
         )
@@ -205,8 +209,10 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.trajectory[idx, -1, :] = z[idx, :]
         self.k[idx] = -self.N * self.dN
         self.t[idx] = self.k[idx] * self.rom.dt
-        self.t_final[idx] = self.k[idx] * self.rom.dt
-        self.resample(idx, z)
+        self.t_final[idx, :] = self.k[idx, None] * self.rom.dt
+        idx_r = torch.repeat_interleave(idx[None, :], self.rom.m, dim=0).flatten()
+        idx_i = torch.repeat_interleave(torch.arange(self.rom.m, device=self.device)[:, None], len(idx), dim=1).flatten()
+        self.resample(idx_r, idx_i, z)
 
         for t in range(self.N * self.dN):
             self.step_rom_idx(idx, increment_rom_time=True)
