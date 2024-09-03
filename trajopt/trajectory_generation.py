@@ -52,11 +52,11 @@ class AbstractTrajectoryGenerator(ABC):
 
 class TrajectoryGenerator(AbstractTrajectoryGenerator):
 
-    def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10,
+    def __init__(self, rom, t_sampler, weight_sampler, dt_loop=0.02, N=4, freq_low=0.01, freq_high=10, alpha_max=10,
                  device='cuda', prob_stationary=.01, dN=1, prob_rnd=0.05, noise_max_std=0.1, noise_llh=0.25):
         super().__init__(rom, N, dN, dt_loop, device)
 
-        self.weights = torch.zeros((self.rom.n_robots, self.rom.m, 4), device=self.device)
+        self.weights = torch.zeros((self.rom.n_robots, self.rom.m, 5), device=self.device)
         self.t_final = torch.zeros((self.rom.n_robots,), device=self.device)
         self.sample_hold_input = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.extreme_input = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
@@ -67,12 +67,16 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.sin_freq = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.sin_off = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.sin_mean = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
+        self.exp_c = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
+        self.exp_alpha = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
+        self.exp_t_start = torch.zeros((self.rom.n_robots,), device=self.device)
         self.rnd_mag = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.rnd_mean = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.noise_std = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.t_sampler = t_sampler
         self.freq_low = freq_low
         self.freq_high = freq_high
+        self.alpha_max = alpha_max
         self.weight_sampler = weight_sampler
         self.v = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
         self.prob_stationary = prob_stationary
@@ -137,6 +141,11 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
             size=(len(idx), self.rom.m)
         )
 
+    def _resample_exp_input(self, idx, v_min, v_max):
+        self.exp_c = self.v[idx, :]
+        self.exp_alpha[idx, :] = self.uniform(-self.alpha_max, self.alpha_max, (len(idx), self.rom.m))
+        self.exp_t_start[idx] = self.t_final[idx]
+
     def _resample_rnd_input(self, idx, v_min, v_max):
         self.rnd_mag[idx, :] = self.uniform(torch.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx), self.rom.m))
         self.rnd_mean[idx, :] = self.uniform(v_min + self.sin_mag[idx, :], v_max - self.sin_mag[idx, :], size=(len(idx), self.rom.m))
@@ -154,13 +163,17 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
     def _sinusoid_input_t(self, t):
         return self.sin_mag * torch.sin(self.sin_freq * t[:, None] + self.sin_off) + self.sin_mean
 
+    def _exp_input_t(self, t):
+        return self.exp_c * torch.exp(self.exp_alpha * (t - self.exp_t_start)[:, None])
+
     def get_input_t(self, t, z):
         idx = torch.nonzero(t > self.t_final).reshape((-1,))
         self.resample(idx, z)
         return self.weights[:, :, 0] * self.rom.clip_v_z(z, self._const_input()) + \
             self.weights[:, :, 1] * self.rom.clip_v_z(z, self._ramp_input_t(t)) + \
             self.weights[:, :, 2] * self.rom.clip_v_z(z, self._extreme_input()) + \
-            self.weights[:, :, 3] * self.rom.clip_v_z(z, self._sinusoid_input_t(t))
+            self.weights[:, :, 3] * self.rom.clip_v_z(z, self._sinusoid_input_t(t)) + \
+            self.weights[:, :, 4] * self.rom.clip_v_z(z, self._exp_input_t(t))
 
 
     def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False):

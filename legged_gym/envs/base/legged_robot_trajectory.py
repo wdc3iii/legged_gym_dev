@@ -47,7 +47,7 @@ from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUni
 from trajopt.trajectory_generation import (TrajectoryGenerator, TrajectoryGeneratorH2H, CircleTrajectoryGenerator, \
                                            ZeroTrajectoryGenerator, SquareTrajectoryGenerator)
 from deep_tube_learning.utils import (UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, \
-                                      UniformWeightSamplerNoRamp, UniformWeightSamplerBiasRampExtreme)
+                                      UniformWeightSamplerNoRamp, UniformWeightSamplerBiasRampExtremeExp)
 
 
 class LeggedRobotTrajectory(BaseTask):

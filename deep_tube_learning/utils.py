@@ -45,7 +45,7 @@ class UniformSampleHoldDT:
 
 class UniformWeightSampler:
 
-    def __init__(self, m, dim=4, device='cuda'):
+    def __init__(self, m, dim=5, device='cuda'):
         self.device = device
         self.dim = dim
         self.m = m
@@ -71,7 +71,7 @@ class UniformWeightSamplerNoRamp(UniformWeightSampler):
         return new_weights / torch.sum(new_weights, dim=-1, keepdim=True)
 
 
-class UniformWeightSamplerBiasRampExtreme(UniformWeightSampler):
+class UniformWeightSamplerBiasRampExtremeExp(UniformWeightSampler):
 
     def sample(self, num_samples: int):
         new_weights = super().sample(num_samples)
