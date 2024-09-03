@@ -67,6 +67,17 @@ class UniformWeightSamplerNoRamp(UniformWeightSampler):
 
     def sample(self, num_samples: int):
         new_weights = super().sample(num_samples)
+        new_weights[:, :, 2] = 0
+        return new_weights / torch.sum(new_weights, dim=-1, keepdim=True)
+
+
+class UniformWeightSamplerBiasRampExtreme(UniformWeightSampler):
+
+    def sample(self, num_samples: int):
+        new_weights = super().sample(num_samples)
+        m1, m2 = torch.nonzero(torch.rand((num_samples, self.m), device=self.device) < 0.1, as_tuple=True)
+        new_weights[m1, m2, 0] = 0
+        new_weights[m1, m2, 3] = 0
         return new_weights / torch.sum(new_weights, dim=-1, keepdim=True)
 
 
