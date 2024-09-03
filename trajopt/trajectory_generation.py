@@ -87,8 +87,8 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         if len(idx) > 0:
             v_min, v_max = self.rom.compute_state_dependent_input_bounds(z[idx, :])
             self._resample_const_input(idx, v_min, v_max)
-            self._resample_ramp_input(idx, z, v_min, v_max)
             self._resample_extreme_input(idx, v_min, v_max)
+            self._resample_ramp_input(idx, z, v_min, v_max)
             self._resample_sinusoid_input(idx, v_min, v_max)
             self._resample_rnd_input(idx, v_min, v_max)
             self._resample_t_final(idx)
@@ -116,6 +116,8 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.ramp_v_start[idx, :] = self.rom.clip_v_z(z[idx, :], self.ramp_v_end[idx, :])
         self.ramp_v_end[idx, :] = self.uniform(v_min, v_max, size=(len(idx), self.rom.m))
         self.ramp_t_start[idx] = self.t_final[idx]
+        mask = torch.rand(len(idx), device=self.device) < 0.1
+        self.ramp_v_end[idx[mask], :] = self.extreme_input[idx[mask], :]
 
     def _resample_extreme_input(self, t_mask,v_min, v_max):
         arr = torch.concatenate((v_min[:, :, None], torch.zeros_like(v_min, device=self.device)[:, :, None], v_max[:, :, None]), dim=-1)
