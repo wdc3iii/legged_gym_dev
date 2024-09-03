@@ -8,8 +8,8 @@ lr: 5e-4
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-#  wandb_experiment: "hopper_single_int_tdjkzhav"
-  wandb_experiment: "hopper_single_int_3wmguwfk"  # H2H
+  wandb_experiment: "hopper_single_int_2t6nlscm"
+#  wandb_experiment: "hopper_single_int_3wmguwfk"  # H2H
   H_fwd: 25
   H_rev: 25
 loss:

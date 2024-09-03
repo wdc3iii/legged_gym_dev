@@ -45,38 +45,57 @@ class UniformSampleHoldDT:
 
 class UniformWeightSampler:
 
-    def __init__(self, dim=4, seed=42):
+    def __init__(self, m, dim=4, device='cuda'):
         self.dim = dim
+        self.m = m
+        self.device = device
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim), device='cuda')
-        return new_weights / torch.sum(new_weights, axis=-1, keepdims=True)
+        new_weights = torch.rand(size=(num_samples, self.m, self.dim), device=self.device)
+        return new_weights / torch.sum(new_weights, dim=-1, keepdim=True)
+
+class UniformWeightSamplerBiasExtreme:
+
+    def __init__(self, m, dim=4, device='cuda'):
+        self.m = m
+        self.dim = dim
+        self.device = device
+
+    def sample(self, num_samples: int):
+        new_weights = torch.rand(size=(num_samples, self.m, self.dim), device=self.device) + 1e-6
+        mask1 = torch.rand(size=(num_samples, self.m), device='cuda') < 0.05
+        mask2 = torch.rand(size=(num_samples, self.m), device='cuda') < 0.05
+        m11, m12 = mask1.nonzero(as_tuple=True)
+        m21, m22 = mask2.nonzero(as_tuple=True)
+        new_weights[m11, m12, 0] = 0; new_weights[m11, m12, 1] = 0; new_weights[m11, m12, 3] = 0
+        new_weights[m21, m22, 0] = 0; new_weights[m21, m22, 2] = 0; new_weights[m21, m22, 3] = 0
+        return new_weights / torch.sum(new_weights, dim=-1, keepdim=True)
 
 
 class UniformWeightSamplerNoExtreme:
 
-    def __init__(self, dim=4, seed=42, device='cuda'):
-        self.rng = np.random.RandomState(seed)
+    def __init__(self, m, dim=4, device='cuda'):
         self.dim = dim
+        self.m = m
         self.device = device
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim), device=self.device)
-        new_weights[:, 2] = 0
-        return new_weights / np.sum(new_weights, axis=-1, keepdims=True)
+        new_weights = torch.rand(size=(num_samples, self.m, self.dim), device=self.device)
+        new_weights[:, :, 2] = 0
+        return new_weights / torch.sum(new_weights, dim=-1, keepdim=True)
 
 
 class UniformWeightSamplerNoRamp:
 
-    def __init__(self, dim=4, seed=42, device='cuda'):
-        self.rng = np.random.RandomState(seed)
+    def __init__(self, m, dim=4, device='cuda'):
+        self.m = m
         self.dim = dim
         self.device = device
 
     def sample(self, num_samples: int):
-        new_weights = torch.rand(size=(num_samples, self.dim), device=self.device)
-        new_weights[:, 1] = 0
-        return new_weights / torch.sum(new_weights, axis=-1, keepdims=True)
+        new_weights = torch.rand(size=(num_samples, self.m, self.dim), device=self.device)
+        new_weights[:, :, 1] = 0
+        return new_weights / torch.sum(new_weights, dim=-1, keepdim=True)
 
 
 def quat2yaw(quat):

@@ -338,6 +338,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
         t_lim_nlp_opts["snopt"]["Major iterations limit"] = 10
         t_lim_nlp_opts["snopt"]["Minor iterations limit"] = 20
         t_lim_nlp_opts["snopt"]["Time limit"] = t_wall
+        t_lim_nlp_opts["snopt"]["Warm start"] = "Warm"
     elif solver_str == "ipopt":
         t_lim_nlp_opts["ipopt.max_wall_time"] = t_wall
         t_lim_nlp_opts["ipopt.mu_init"] = 1e-3

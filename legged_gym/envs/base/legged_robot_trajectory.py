@@ -46,7 +46,7 @@ from trajopt.rom_dynamics import (SingleInt2D, DoubleInt2D, Unicycle, LateralUni
                                   ExtendedLateralUnicycle)
 from trajopt.trajectory_generation import (TrajectoryGenerator, TrajectoryGeneratorH2H, CircleTrajectoryGenerator, \
                                            ZeroTrajectoryGenerator, SquareTrajectoryGenerator)
-from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, UniformWeightSamplerNoRamp
+from deep_tube_learning.utils import UniformSampleHoldDT, UniformWeightSampler, UniformWeightSamplerNoExtreme, UniformWeightSamplerNoRamp, UniformWeightSamplerBiasExtreme
 
 
 class LeggedRobotTrajectory(BaseTask):
@@ -107,7 +107,7 @@ class LeggedRobotTrajectory(BaseTask):
         traj_cfg = self.cfg.trajectory_generator
         traj_cls = globals()[traj_cfg.cls]
         t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high, backend='torch', device=self.device)
-        weight_samp = globals()[traj_cfg.weight_samp_cls]()
+        weight_samp = globals()[traj_cfg.weight_samp_cls](self.rom.m)
         self.traj_gen = traj_cls(
             self.rom,
             t_samp,
