@@ -13,8 +13,8 @@ Q = 10.
 QW = 0.
 R = 0.1
 R_WARM = 1.
-RV_FIRST = 0.
-RV_SECOND = 0.
+RV_FIRST = 10.
+RV_SECOND = 10.
 TWALL = 0.1
 MPC_RECOMPUTE_DK = 1
 problem_dict = {
@@ -37,7 +37,11 @@ problem_dict = {
     "complex": {"name": "complex", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
             "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.25, 0.25, 0.2])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
-            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK}
+            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
+    "none": {"name": "gap", "start": np.array([0.0, 0.0]), "goal": np.array([0.5, 0.]),
+            "obs": {'cx': np.array([]), 'cy': np.array([]), 'r': np.array([])},
+            "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
+            "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
 }
 
 
@@ -315,7 +319,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     else:
         raise ValueError(f"solver {solver_str} not supported.")
 
-    if debug_filename is not None:
+    if debug_filename is not None and solver_str != "snopt":
         nlp_opts['iteration_callback'] = SolverCallback('iter_callback', x_cols, g_cols, p_cols, {})
     else:
         nlp_opts['iteration_callback'] = None
@@ -335,7 +339,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     if solver_str == "snopt":
         t_lim_nlp_opts["snopt"]["Major feasibility tolerance"] = 1e-6
         t_lim_nlp_opts["snopt"]["Major optimality tolerance"] = 1e-3
-        t_lim_nlp_opts["snopt"]["Major iterations limit"] = 10
+        t_lim_nlp_opts["snopt"]["Major iterations limit"] = 20
         t_lim_nlp_opts["snopt"]["Minor iterations limit"] = 20
         t_lim_nlp_opts["snopt"]["Time limit"] = t_wall
     elif solver_str == "ipopt":

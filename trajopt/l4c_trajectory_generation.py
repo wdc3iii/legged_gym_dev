@@ -51,6 +51,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.t_solving_nominal = 0
         self.t_solving = 0
         self.z0 = None
+        self.run_data = {}
 
         if self.warm_start == 'nominal' or self.track_nominal:
             self.init_nominal_solver, self.nominal_nlp_dict, self.init_nominal_nlp_opts, self.nominal_solver, self.nominal_nlp_opts = trajopt_solver(
@@ -76,11 +77,16 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.e = np.ones((self.H_rev, 1)) * np.linalg.norm(e_prev.detach().cpu().numpy())
         self.v_prev = np.zeros((self.H_rev, self.planning_model.m))
         self.step_rom_idx(idx, e_prev=e_prev, increment_rom_time=True, limit_time=False)
+        self.run_data = {}
 
 
     def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False, limit_time=True):
+        data = {}
         # z0 = self.trajectory[0, 1, :].cpu().numpy()
         self.e[-1] = np.linalg.norm(e_prev.detach().cpu().numpy())
+        print("\n\n\n\n\n\ne: ", self.e, "\n\n\n\n\n\n\n")
+        data["e"] = np.copy(self.e)
+        data["v_prev"] = np.copy(self.v_prev)
         if (self.k.item() + 1) % self.mpc_dk == 0:
             # Solve nominal ocp if necessary
             if self.track_nominal or (self.warm_start == 'nominal' and self.z_warm is None):
@@ -88,7 +94,11 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                     self.nominal_z_warm, self.nominal_v_warm = get_warm_start(self.nominal_ws, self.z0, self.goal, self.N, self.planning_model)
                 nominal_params = init_params(self.z0, self.goal, self.obs)
                 nominal_x_init = init_decision_var(self.nominal_z_warm, self.nominal_v_warm)
-
+                data["nom_ws_z"] = np.copy(self.nominal_z_warm)
+                data["nom_ws_v"] = np.copy(self.nominal_v_warm)
+                # plt.plot(self.nominal_z_warm)
+                # plt.xlabel(f'{self.k.item()}')
+                # plt.show()
                 if limit_time:
                     tic = time.perf_counter_ns()
                     nominal_sol = self.nominal_solver["solver"](
@@ -102,6 +112,8 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                         lbx=self.nominal_solver["lbx"], ubx=self.nominal_solver["ubx"]
                     )
                 self.nominal_z_warm, self.nominal_v_warm = extract_solution(nominal_sol, self.N, self.planning_model.n, self.planning_model.m)
+                data["nom_sol_z"] = np.copy(self.nominal_z_warm)
+                data["nom_sol_v"] = np.copy(self.nominal_v_warm)
 
                 z_cost, v_cost = self.nominal_z_warm.copy(), self.nominal_v_warm.copy()
                 if self.warm_start == 'nominal' and self.z_warm is None:
@@ -122,6 +134,11 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                 self.w_warm = get_tube_warm_start(self.tube_ws, self.eval_tube, self.z_warm, self.v_warm, self.e, self.v_prev)
             x_init = init_decision_var(self.z_warm, self.v_warm, w=self.w_warm)
 
+            data["z_cost"] = np.copy(z_cost)
+            data["v_cost"] = np.copy(v_cost)
+            data["ws_z"] = np.copy(self.z_warm)
+            data["ws_v"] = np.copy(self.v_warm)
+            data["ws_w"] = np.copy(self.w_warm)
             if limit_time:
                 tic = time.perf_counter_ns()
                 sol = self.solver["solver"](
@@ -136,13 +153,18 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
                 )
             self.trajectory, self.v_trajectory, self.w_trajectory = extract_solution(sol, self.N, self.planning_model.n, self.planning_model.m)
             self.z_warm, self.v_warm, self.w_warm = self.trajectory.copy(), self.v_trajectory.copy(), self.w_trajectory.copy()
+            data["sol_z"] = np.copy(self.trajectory)
+            data["sol_v"] = np.copy(self.v_trajectory)
+            data["sol_w"] = np.copy(self.w_trajectory)
 
             self.trajectory = torch.from_numpy(self.trajectory[None, :, :]).float().to(self.device)
             self.v_trajectory = torch.from_numpy(self.v_trajectory[None, :, :]).float().to(self.device)
 
             g_violation = compute_constraint_violation(self.solver, sol["g"])
             self.g_dict = segment_constraint_violation(g_violation, self.solver["g_cols"])
+            data["g_violation"] = self.g_dict.copy()
 
+            # print debugging info
             if self.nlp_opts['iteration_callback'] is not None:
                 fn = f"data/cl_tube_{self.prob_str}_{self.nn_path[-8:]}_{self.warm_start}_Rv_{self.Rv_first}_{self.Rv_second}_N_{self.N}_dk_{self.mpc_dk}_{self.tube_dyn_str}_{self.tube_ws}_{self.track_nominal}_k{self.k.item()}.csv"
                 self.nlp_opts['iteration_callback'].write_data(self.solver, params, fn)
@@ -152,7 +174,12 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
             self.trajectory[:, -1, :] = self.rom.f(self.trajectory[:, -2, :], self.v_trajectory[:, -1, :])
             self.v_trajectory[:, :-1, :] = torch.clone(self.v_trajectory[:, 1:, :])
             self.w_trajectory[:-1, :] = self.w_trajectory[1:, :]
+            data["sol_z"] = np.copy(self.trajectory)
+            data["sol_v"] = np.copy(self.v_trajectory)
+            data["sol_w"] = np.copy(self.w_trajectory)
 
+        # Write data to file
+        self.run_data[f"run{self.k.item()}"] = data
         z0_torch = torch.from_numpy(self.z0).float().to(self.device)
         self.z0 = self.rom.f(z0_torch, self.rom.clip_v_z(z0_torch, self.v_trajectory[:, 0, :])).cpu().numpy().squeeze()
         # Slide trajectories forward
@@ -169,3 +196,7 @@ class ClosedLoopTrajectoryGenerator(AbstractTrajectoryGenerator):
         self.k[idx] += 1
         if increment_rom_time:
             self.t[idx] += self.rom.dt
+
+    def write_data(self, fn):
+        from scipy.io import savemat
+        savemat(fn, self.run_data)

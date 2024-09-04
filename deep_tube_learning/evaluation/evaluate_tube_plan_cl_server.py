@@ -18,7 +18,7 @@ solver_str = 'snopt'
 # tube_dyn = "NN_oneshot"
 tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/efctig2n"
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/4hez6ius"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
 max_iter = 200

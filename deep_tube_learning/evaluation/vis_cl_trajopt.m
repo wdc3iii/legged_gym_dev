@@ -1,10 +1,10 @@
 clear; clc;
-% Double Int
+recent = true;
 
 % Hopper N = 50 (model training horizon)
 % nm = 'cl_tube_gap_snopt_jtu9xrfq_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
 % nm = 'cl_tube_gap_snopt_efctig2n_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
-nm = 'cl_tube_complex_snopt_efctig2n_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
+nm = 'cl_tube_complex_snopt_4hez6ius_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
 
 set(groot, 'DefaultAxesFontSize', 17);  % Set default font size for axes labels and ticks
 set(groot, 'DefaultTextFontSize', 17);  % Set default font size for text objects
@@ -17,7 +17,17 @@ set(groot, 'DefaultLineMarkerSize', 15)
 
 vis_debug = false;
 write_video = false;
-load(['data/' nm '.mat']);
+if recent
+    fileList = dir('data/');
+    fileList = fileList(~[fileList.isdir] & ~ismember({fileList.name}, {'.', '..'}));
+    [~, idx] = max([fileList.datenum]);
+    mostRecentFile = fileList(idx);
+    load(['data/' mostRecentFile.name])
+    disp(['data/' mostRecentFile.name])
+else
+    load(['data/' nm '.mat']);
+    disp(['data/' nm '.mat'])
+end
 
 max_tube = max(w, [], 'all');
 x_lim = [
@@ -47,6 +57,7 @@ t = tiledlayout(2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 nexttile(1);
 % subplot(2,2,1)
 hold on;
+plot(z_sim(:, 1), z_sim(:, 2), LineWidth=3)
 
 % Plot problem
 plot(z0(1), z0(2), 'go')
