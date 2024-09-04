@@ -141,6 +141,9 @@ def main():
     finally:
         from scipy.io import savemat
         tag = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+        fn = f"evaluation/data/{tag}_inner_file.mat"
+        cl_traj_gen.write_data(fn)
+        print("Saving: ", fn)
         fn = f"evaluation/data/{tag}_outer_file.mat"
         print("Saving: ", fn)
         savemat(fn, {
@@ -162,9 +165,7 @@ def main():
             "data": data,
             "z_sim": z_sim
         })
-        fn = f"evaluation/data/{tag}_inner_file.mat"
-        cl_traj_gen.write_data(fn)
-        print("Saving: ", fn)
+
         client_socket.close()
 
 

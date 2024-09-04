@@ -163,6 +163,8 @@ def data_creation_main(cfg):
         env.rom.plot_spacial(ax[1], pz_x[ii, :, :].cpu().numpy())
         plt.show()
 
+        # print(x[0, :, 2])
+
         # Log Data
         with open(f"{data_path}/epoch_{epoch}.pickle", "wb") as f:
             if cfg.save_debugging_data:
