@@ -14,7 +14,7 @@ from deep_tube_learning.utils import wandb_model_load, wandb_load_artifact, unno
 def eval_model(delta_seed=1, num_robots=2):
     # Experiment whose model to evaluate
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"  # Hopper with ff
-    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/4hez6ius"
+    exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yhwtziw1"
     # exp_name = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
     model_name = f'{exp_name}_model:best'

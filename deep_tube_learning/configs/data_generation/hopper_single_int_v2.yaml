@@ -99,7 +99,7 @@ env_config:
     max_rom_distance: [ 1., 1. ]
     zero_rom_distance_likelihood: 0.25
     randomize_com: True
-    max_rnd_com_dist: 0.005
+    max_rnd_com_dist: 0.002
     rigid_shape_properties:
       randomize_restitution: False
       restitution_range: [ 0.9, 1.0 ]

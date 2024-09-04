@@ -8,7 +8,7 @@ lr: 5e-4
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-  wandb_experiment: "hopper_single_int_l0j9tot9"
+  wandb_experiment: "hopper_single_int_7omt9y8a"  # 5mm CoM rnd
 #  wandb_experiment: "hopper_single_int_3wmguwfk"  # H2H
   H_fwd: 50
   H_rev: 25
