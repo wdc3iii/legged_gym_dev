@@ -35,6 +35,8 @@ from isaacgym import gymtorch, gymapi, gymutil
 
 import torch
 from typing import Dict
+import shutil
+from xml.etree import ElementTree as ElTree
 
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
@@ -793,7 +795,27 @@ class LeggedRobotTrajectory(BaseTask):
         env_upper = gymapi.Vec3(0., 0., 0.)
         self.actor_handles = []
         self.envs = []
+        asset_file_tmp = 'robot_tmp.urdf'
+        tmp_urdf_path = os.path.join(asset_root, asset_file_tmp)
+        shutil.copyfile(asset_path, tmp_urdf_path)
+        d_com = self.cfg.domain_rand.max_rnd_com_dist
         for i in range(self.num_envs):
+            if self.cfg.domain_rand.randomize_com:
+                tree = ElTree.parse(tmp_urdf_path)
+                root = tree.getroot()
+                for link in root.findall('link'):
+                    if link.get('name') == 'torso':
+                        inertial = link.find('inertial')
+                        origin = inertial.find('origin')
+                        if origin is not None:
+                            # Set new x and y values for the torso link origin
+                            x = torch_rand_float(-d_com, d_com, (1, 1), device=self.device).item()
+                            y = torch_rand_float(-d_com, d_com, (1, 1), device=self.device).item()
+                            origin.set('xyz', f'{x} {y} 0')  # Example values for x and y
+                tree.write(tmp_urdf_path)
+                rb_asset = self.gym.load_asset(self.sim, asset_root, asset_file_tmp, asset_options)
+            else:
+                rb_asset = self.robot_asset
             # create env instance
             env_handle = self.gym.create_env(self.sim, env_lower, env_upper, int(np.sqrt(self.num_envs)))
             pos = self.env_origins[i].clone()
@@ -801,8 +823,8 @@ class LeggedRobotTrajectory(BaseTask):
             start_pose.p = gymapi.Vec3(*pos)
 
             rigid_shape_props = self._process_rigid_shape_props(self.rigid_shape_props_asset, i)
-            self.gym.set_asset_rigid_shape_properties(self.robot_asset, rigid_shape_props)
-            actor_handle = self.gym.create_actor(env_handle, self.robot_asset, start_pose, self.cfg.asset.name, i,
+            self.gym.set_asset_rigid_shape_properties(rb_asset, rigid_shape_props)
+            actor_handle = self.gym.create_actor(env_handle, rb_asset, start_pose, self.cfg.asset.name, i,
                                                  self.cfg.asset.self_collisions, 0)
             dof_props = self._process_dof_props(self.dof_props_asset, i)
             self.gym.set_actor_dof_properties(env_handle, actor_handle, dof_props)
