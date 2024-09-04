@@ -377,7 +377,7 @@ class HopperTrajectory(LeggedRobotTrajectory):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
 
-        self.root_states[push_idx, 7:13] = torch_rand_vec_float(-self.max_vel, self.max_vel,
+        self.root_states[push_idx, 7:13] += torch_rand_vec_float(-self.max_vel, self.max_vel,
                                                                 (len(push_idx), 6), device=self.device)
 
         env_ids_int32 = push_idx.to(dtype=torch.int32)

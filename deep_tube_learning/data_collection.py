@@ -163,6 +163,28 @@ def data_creation_main(cfg):
         env.rom.plot_spacial(ax[1], pz_x[ii, :, :].cpu().numpy())
         plt.show()
 
+        # ii = 1
+        # plt.figure()
+        # plt.plot(v[ii, :, :].cpu().numpy())
+        # plt.show()
+        # fig, ax = plt.subplots(1, 2)
+        # ax[0].plot(z[ii, :, :].cpu().numpy())
+        # ax[0].plot(pz_x[ii, :, :].cpu().numpy())
+        # env.rom.plot_spacial(ax[1], z[ii, :, :].cpu().numpy(), '.-k')
+        # env.rom.plot_spacial(ax[1], pz_x[ii, :, :].cpu().numpy())
+        # plt.show()
+        # ii = 2
+        #
+        # plt.figure()
+        # plt.plot(v[ii, :, :].cpu().numpy())
+        # plt.show()
+        # fig, ax = plt.subplots(1, 2)
+        # ax[0].plot(z[ii, :, :].cpu().numpy())
+        # ax[0].plot(pz_x[ii, :, :].cpu().numpy())
+        # env.rom.plot_spacial(ax[1], z[ii, :, :].cpu().numpy(), '.-k')
+        # env.rom.plot_spacial(ax[1], pz_x[ii, :, :].cpu().numpy())
+        # plt.show()
+
         # print(x[0, :, 2])
 
         # Log Data

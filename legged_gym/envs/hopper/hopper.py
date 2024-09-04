@@ -333,8 +333,8 @@ class Hopper(LeggedRobot):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
 
-        self.root_states[push_idx, 7:13] = torch_rand_vec_float(-self.max_vel, self.max_vel,
-                                                        (len(push_idx), 6), device=self.device)
+        self.root_states[push_inds, 7:13] += torch_rand_vec_float(-self.max_vel, self.max_vel,
+                                                        (len(push_inds), 6), device=self.device)
 
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                              gymtorch.unwrap_tensor(self.root_states),
