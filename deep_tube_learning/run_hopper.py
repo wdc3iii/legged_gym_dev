@@ -31,7 +31,7 @@ def get_receive(client_socket):
 
 def main():
     # Read the setup file
-    with open('/home/wcompton/Repos/ARCHER_hopper/ControlStack/config/gains.yaml') as f:
+    with open('/home/noelcs/repos/ARCHER_hopper/ControlStack/config/gains.yaml') as f:
         data = yaml.safe_load(f)
 
     # Initialize Socket Connection
@@ -48,6 +48,9 @@ def main():
     # Setup problem
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     p_dict = problem_dict[data["MPC"]["prob_str"]]
+    p_dict['obs']['cx'] = np.array(data['Simulator']['obsx'])
+    p_dict['obs']['cy'] = np.array(data['Simulator']['obsy'])
+    p_dict['obs']['r'] = np.array(data['Simulator']['obsr'])
     v_max = data["MPC"]["rom"]["v_max"]
     rom = SingleInt2D(
         data["MPC"]["rom"]["dt"],

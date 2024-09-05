@@ -31,6 +31,10 @@ Kd = 10
 
 time_it = True
 
+v_max = 0.2
+p_max = 1e9
+dt = 0.1
+
 
 def main(start, goal, obs, vel_max, pos_max, dt):
     z_max = np.array([pos_max, pos_max])
@@ -194,7 +198,7 @@ if __name__ == '__main__':
         problem_dict[prob_str]["start"],
         problem_dict[prob_str]["goal"],
         problem_dict[prob_str]["obs"],
-        problem_dict[prob_str]["vel_max"],
-        problem_dict[prob_str]["pos_max"],
-        problem_dict[prob_str]["dt"]
+        v_max,
+        p_max,
+        dt
     )
