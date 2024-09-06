@@ -339,7 +339,7 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
     if solver_str == "snopt":
         t_lim_nlp_opts["snopt"]["Major feasibility tolerance"] = 1e-6
         t_lim_nlp_opts["snopt"]["Major optimality tolerance"] = 1e-3
-        t_lim_nlp_opts["snopt"]["Major iterations limit"] = 6
+        t_lim_nlp_opts["snopt"]["Major iterations limit"] = 4
         t_lim_nlp_opts["snopt"]["Minor iterations limit"] = 20
         t_lim_nlp_opts["snopt"]["Time limit"] = t_wall
     elif solver_str == "ipopt":
