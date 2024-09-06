@@ -9,8 +9,8 @@ wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/fcoar
 curriculum: 7
 upload_to_wandb: True
 
-vel_max: 0.2
-vel_min: -0.2
+vel_max: 0.3
+vel_min: -0.3
 
 controller:
   type: 'rh'
@@ -21,7 +21,7 @@ controller:
   K_ff: 0.2
   clip_pos: 0.5
   clip_vel: 1.
-  clip_vel_des: 0.2
+  clip_vel_des: 0.3
   clip_ang: 0.4
   N: 1
 
