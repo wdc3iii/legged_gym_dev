@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 from hydra.utils import instantiate
 from deep_tube_learning.utils import wandb_model_load, wandb_load_artifact, unnormalize_dict
 
-
+save_tag = "os"
+"""Assumes all models trained on the same dataset"""
 def eval_model(delta_seed=1, num_robots=2):
     # Experiment whose model to evaluate
     # exp_names = [  # Recursive, 2mm, 0.2
@@ -39,9 +40,9 @@ def eval_model(delta_seed=1, num_robots=2):
         "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vybkmgzm",
         "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/09u49gp1"
     ]
+
     api = wandb.Api()
-    model_name = f'{exp_names[0]}_model:best'
-    model_cfg, state_dict = wandb_model_load(api, model_name)
+    model_cfg, state_dict = wandb_model_load(api, f'{exp_names[0]}_model:best')
 
     run_id = model_cfg.dataset.wandb_experiment
     with open(f"../rom_tracking_data/{run_id}/config.pickle", 'rb') as f:
@@ -54,56 +55,37 @@ def eval_model(delta_seed=1, num_robots=2):
     dataset_cfg.save_debugging_data = True
     dataset_cfg.env_config.domain_rand.max_rom_dist = [0.1, 0.1]
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     epoch_data = data_creation_main(dataset_cfg)
 
-    for exp_name in exp_names:
-        model_name = f'{exp_name}_model:best'
-        model_cfg, state_dict = wandb_model_load(api, model_name)
+    mat_data = {}
 
-        run_id = model_cfg.dataset.wandb_experiment
-        with open(f"../rom_tracking_data/{run_id}/config.pickle", 'rb') as f:
-            dataset_cfg = pickle.load(f)
-        dataset_cfg = OmegaConf.create(unnormalize_dict(dataset_cfg))
-        dataset_cfg.epochs = 1
-        dataset_cfg.seed += delta_seed
-        dataset_cfg.env_config.env.num_envs = num_robots
-        dataset_cfg.upload_to_wandb = False
-        dataset_cfg.save_debugging_data = True
-        dataset_cfg.env_config.domain_rand.max_rom_dist = [0.1, 0.1]
+    for _ in range(10):
+        k = torch.randint(50, 175, (1,)).item()
+        for exp_name in exp_names:
+            # Load the model
+            model_name = f'{exp_name}_model:best'
+            model_cfg, state_dict = wandb_model_load(api, model_name)
+            model_cfg.dataset._target_ = model_cfg.dataset._target_.replace('from_wandb', 'from_dataset')
+            model_cfg.dataset._partial_ = True
+            del model_cfg.dataset.wandb_experiment
+            dataset = instantiate(model_cfg.dataset)(dataset=epoch_data)
+            data, target = dataset._get_item_helper(0, model_cfg.dataset.H_rev + k)
 
-        dataset = instantiate(model_cfg.dataset)
-        model = instantiate(model_cfg.model)(dataset.input_dim, dataset.output_dim)
-        model.load_state_dict(state_dict)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        model.eval()
+            model = instantiate(model_cfg.model)(dataset.input_dim, dataset.output_dim)
+            model.load_state_dict(state_dict)
+            model.to(device)
+            model.eval()
 
-        model_cfg.dataset._target_ = model_cfg.dataset._target_.replace('from_wandb', 'from_dataset')
-        model_cfg.dataset._partial_ = True
-        del model_cfg.dataset.wandb_experiment
-        dataset = instantiate(model_cfg.dataset)(dataset=epoch_data)
-        with torch.no_grad():
-            for ii in range(dataset_cfg.env_config.env.num_envs):
-                tmp_data, tmp_target = dataset._get_item_helper(ii, dataset.H_rev)
-                z = epoch_data['z'][ii]
-                v = epoch_data['v'][ii]
-                pz_x = epoch_data['pz_x'][ii]
-                H = v.shape[0] - dataset.H_fwd
-                w = np.zeros((H, *tmp_target.shape))
-                e = np.linalg.norm(pz_x - z, axis=-1)
-                for k in range(H):
-                    data, ek = dataset._get_item_helper(ii, k + dataset.H_rev)
-                    w[k, :] = model(data[None, :].to(device)).cpu().numpy()
+            with torch.no_grad():
+                w = model(data[None, :].to(device)).cpu().numpy().squeeze()
 
-                fn = f"data/eval_{run_id[:-8] + exp_name[-8:]}_{ii}.mat"
-                savemat(fn, {
-                    "z": z,
-                    "v": v,
-                    "e": e,
-                    "w": w,
-                    "pz_x": pz_x,
-                })
-            print(f"Complete!: saved to {fn}")
+                mat_data[f"H_{model_cfg.dataset.H_rev}_w"] = w
+                mat_data[f"H_{model_cfg.dataset.H_rev}_e"] = target.cpu().numpy().squeeze()
+        fn = f"data/multirun_{save_tag}_{k}.mat"
+        savemat(fn, mat_data)
+        print(f"Complete!: saved to {fn}")
 
 
 if __name__ == "__main__":

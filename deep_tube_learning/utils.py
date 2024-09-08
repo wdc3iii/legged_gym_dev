@@ -191,23 +191,23 @@ def evaluate_scalar_tube_oneshot(test_dataset, loss_fn, device):
         metrics = {}
 
         with torch.no_grad():
-            tmp_data, tmp_w = test_dataset[0]
+            tmp_data, tmp_e = test_dataset[0]
             datas = torch.zeros((len(test_dataset), *tmp_data.shape), device=device)
-            w = torch.zeros(((len(test_dataset), *tmp_w.shape)), device=device)
+            e = torch.zeros(((len(test_dataset), *tmp_e.shape)), device=device)
             for ii in range(len(test_dataset)):
                 d, t = test_dataset[ii]
                 datas[ii] = d.to(device)
-                w[ii] = t.to(device)
+                e[ii] = t.to(device)
 
             fw = model(datas)
-            test_loss = loss_fn(fw, w, datas)
+            test_loss = loss_fn(fw, e, datas)
 
-            correct_mask = fw > w
-            differences = (w[correct_mask] - fw[correct_mask]).abs()
+            correct_mask = fw > e
+            differences = (e[correct_mask] - fw[correct_mask]).abs()
 
             metrics[f'Test Loss (alpha={loss_fn.alpha:.1f})'] = test_loss
-            metrics[f'Proportion Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = correct_mask.float().mean()
-            metrics[f'Mean Error when Correct, fw > w (alpha={loss_fn.alpha:.1f})'] = differences.mean()
+            metrics[f'Proportion Correct, fw > e (alpha={loss_fn.alpha:.1f})'] = correct_mask.float().mean()
+            metrics[f'Mean Error when Correct, fw > e (alpha={loss_fn.alpha:.1f})'] = differences.mean()
 
         return metrics
 

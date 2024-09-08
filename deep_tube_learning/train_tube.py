@@ -1,7 +1,6 @@
 import os
 
 from torch.nn.utils import clip_grad_norm_
-
 from deep_tube_learning.datasets import TubeDataset
 
 import hydra
@@ -14,6 +13,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
 from torch.utils.data import DataLoader
+from hydra.core.hydra_config import HydraConfig
 
 
 class CheckPointManager:
@@ -81,20 +81,31 @@ def main(cfg):
     optimizer = instantiate(cfg.optimizer)(model.parameters())
     lr_scheduler = instantiate(cfg.lr_scheduler)(optimizer)
 
-    # Construct a dynamic experiment name based on overridden parameters
-    if "hydra" in cfg and "sweep" in cfg.hydra:
-        experiment_name = f"{cfg.experiment_name}_batch_size={cfg.batch_size}_learning_rate={cfg.lr_scheduler.lr}"
-        # replace the above with the actual attributes being changed
-    else:
-        experiment_name = cfg.experiment_name
+    # Use Hydra's job information directly to construct a dynamic experiment name
+    hydra_config = HydraConfig.get()
+    try:
+        job_id = hydra_config.job.id
+        run_number = hydra_config.job.num
+    except:
+        job_id = "default"
+        run_number = 0
+
+    # Construct the experiment name based on Hydra's job information
+    experiment_name = f"{cfg.experiment_name}_run_{run_number}"
 
     # Send config to wandb
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
-    wandb.init(project="Deep_Tube_Training",
-               entity="coleonguard-Georgia Institute of Technology",
-               name=experiment_name,  # Use the dynamic experiment name
-               config=cfg_dict)
+
+    wandb.init(
+        project="Deep_Tube_Training",
+        entity="coleonguard-Georgia Institute of Technology",
+        name=experiment_name,  # Unique name for each run
+        group=f"{cfg.experiment_name}_{job_id}",  # Group runs under a common ID
+        config=cfg_dict,
+        reinit=True,  # Reinitialize W&B for each run
+    )
+
 
     ckpt_manager = CheckPointManager(metric_name="loss")
 

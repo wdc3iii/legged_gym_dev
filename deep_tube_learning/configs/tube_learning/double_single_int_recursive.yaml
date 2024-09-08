@@ -2,14 +2,14 @@ defaults:
   - default
   - _self_
 
-num_epochs: 1000
-experiment_name: "deep_tube_learning"
+num_epochs: 65
+experiment_name: "deep_tube_learning_double_single_rec"
 lr: 5e-4
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-  wandb_experiment: "double_single_int_afkvm3se"
-  H_fwd: 50
+  wandb_experiment: "double_single_int_dnvyqp9n"
+  H_fwd: 25
   H_rev: 25
 loss:
   _target_: deep_tube_learning.losses.VectorTubeLoss

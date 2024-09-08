@@ -1,11 +1,15 @@
-Datasets:
+Hopper Datasets:
 hopper_single_int_7omt9y8a  --  vel_max: 0.2, com_rnd: 0.005
 hopper_single_int_0ndiuaur  --  vel_max: 0.2, com_rnd: 0.002
 hopper_single_int_0epw5sg4  --  vel_max: 0.3, com_rnd: 0.005
 hopper_single_int_owj086v3  --  vel_max: 0.3, com_rnd: 0.002
+hopper_single_int_936ymzm9  --  vel_max: 0.2, com_rnd: 0
 
-Models:
+Hopper Models:
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yhwtziw1  --  dataset: hopper_single_int_7omt9y8a
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/gfwosj8d  --  dataset: hopper_single_int_0ndiuaur
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/v97a2xh4  --  dataset: hopper_single_int_0epw5sg4
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/2tzuqtqc  --  dataset: hopper_single_int_owj086v3
+
+Double Int Datasets:
+double_single_int_dnvyqp9n  --  vel_max 0.2

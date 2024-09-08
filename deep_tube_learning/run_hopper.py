@@ -31,7 +31,7 @@ def get_receive(client_socket):
 
 def main():
     # Read the setup file
-    with open('/home/noelcs/repos/ARCHER_hopper/ControlStack/config/gains.yaml') as f:
+    with open('/home/wcompton/Repos/ARCHER_hopper/ControlStack/config/gains.yaml') as f:
         data = yaml.safe_load(f)
 
     # Initialize Socket Connection

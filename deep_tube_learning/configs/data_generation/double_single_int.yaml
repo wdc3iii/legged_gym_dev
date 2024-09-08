@@ -62,7 +62,7 @@ env_config:
   trajectory_generator:
     cls: 'TrajectoryGenerator'
     t_samp_cls: 'UniformSampleHoldDT'
-    weight_samp_cls: 'UniformWeightSampler'
+    weight_samp_cls: 'UniformWeightSamplerBiasRampExtremeExp'
     N: 10
     t_low: 0.5
     t_high: 5
