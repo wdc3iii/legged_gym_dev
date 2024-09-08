@@ -111,20 +111,63 @@ class LeggedRobotTrajectory(BaseTask):
         traj_cls = globals()[traj_cfg.cls]
         t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high, backend='torch', device=self.device)
         weight_samp = globals()[traj_cfg.weight_samp_cls](self.rom.m)
-        self.traj_gen = traj_cls(
-            self.rom,
-            t_samp,
-            weight_samp,
-            dt_loop=self.dt,
-            N=traj_cfg.N,
-            freq_low=traj_cfg.freq_low,
-            freq_high=traj_cfg.freq_high,
-            device=self.device,
-            prob_stationary=traj_cfg.prob_stationary,
-            dN=traj_cfg.dN,
-            prob_rnd=traj_cfg.prob_rnd,
-            noise_max_std=traj_cfg.noise_max_std,
-        )
+        if traj_cfg.cls == 'TrajectoryGenerator':
+            t_samp = globals()[traj_cfg.t_samp_cls](traj_cfg.t_low, traj_cfg.t_high, backend='torch',
+                                                    device=self.device)
+            weight_samp = globals()[traj_cfg.weight_samp_cls](self.rom.m)
+            self.traj_gen = TrajectoryGenerator(
+                self.rom,
+                t_samp,
+                weight_samp,
+                dt_loop=self.dt,
+                N=traj_cfg.N,
+                freq_low=traj_cfg.freq_low,
+                freq_high=traj_cfg.freq_high,
+                device=self.device,
+                prob_stationary=traj_cfg.prob_stationary,
+                dN=traj_cfg.dN,
+                prob_rnd=traj_cfg.prob_rnd,
+                noise_llh=traj_cfg.noise_llh
+            )
+        elif traj_cfg.cls == 'ClosedLoopTrajectoryGenerator':
+            from trajopt.l4c_trajectory_generation import ClosedLoopTrajectoryGenerator
+            def list2arr(v):
+                if type(v) == list or type(v) == ListConfig:
+                    return np.array(v)
+                elif type(v) == dict or type(v) == DictConfig:
+                    return {k: list2arr(v) for k, v in v.items()}
+                else:
+                    return v
+
+            prob_dict = {k: list2arr(v) for k, v in traj_cfg.prob_dict.items()}
+            self.traj_gen = ClosedLoopTrajectoryGenerator(
+                self.rom,
+                traj_cfg.H,
+                traj_cfg.N,
+                traj_cfg.dt_loop,
+                self.device,
+                prob_dict,
+                traj_cfg.tube_dyn,
+                nn_path=traj_cfg.nn_path,
+                w_max=traj_cfg.w_max,
+                mpc_dk=traj_cfg.mpc_dk,
+                warm_start=traj_cfg.warm_start,
+                nominal_ws=traj_cfg.nominal_ws,
+                track_nominal=traj_cfg.track_nominal,
+                tube_ws=traj_cfg.tube_ws,
+                max_iter=traj_cfg.max_iter,
+                solver_str=traj_cfg.solver_str
+            )
+        elif traj_cfg.cls == 'SquareTrajectoryGenerator':
+            self.traj_gen = SquareTrajectoryGenerator(
+                self.rom,
+                N=traj_cfg.N,
+                dN=traj_cfg.dN,
+                dt_loop=self.dt,
+                device=self.device
+            )
+        else:
+            raise ValueError(f"Trajectory generator{traj_cfg.cls} not supported.")
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -908,7 +951,7 @@ class LeggedRobotTrajectory(BaseTask):
         self.nominal_rom_z_min = self.cfg.rom.z_min
         self.nominal_rom_v_max = self.cfg.rom.v_max
         self.nominal_rom_v_min = self.cfg.rom.v_min
-        self.nominal_max_rom_distance = self.cfg.domain_rand.max_rom_dist
+        self.nominal_max_rom_distance = self.cfg.domain_rand.max_rom_distance
         self.nominal_zero_rom_distance_likelihood = self.cfg.domain_rand.zero_rom_distance_likelihood
 
         # nominal values (curriculum)

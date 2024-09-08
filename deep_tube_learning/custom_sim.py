@@ -1,5 +1,5 @@
 from trajopt.rom_dynamics import SingleInt2D, DoubleInt2D, ZeroInt2D
-from trajopt.trajectory_generation import TrajectoryGenerator
+from trajopt.trajectory_generation import TrajectoryGenerator, SquareTrajectoryGenerator
 from deep_tube_learning.utils import *
 from omegaconf import DictConfig, ListConfig
 
@@ -98,6 +98,14 @@ class CustomSim:
                 tube_ws=traj_cfg.tube_ws,
                 max_iter=traj_cfg.max_iter,
                 solver_str=traj_cfg.solver_str
+            )
+        elif traj_cfg.cls == 'SquareTrajectoryGenerator':
+            self.traj_gen = SquareTrajectoryGenerator(
+                self.rom,
+                N=traj_cfg.N,
+                dN=traj_cfg.dN,
+                dt_loop=self.dt,
+                device=self.device
             )
         else:
             raise ValueError(f"Trajectory generator{traj_cfg.cls} not supported.")

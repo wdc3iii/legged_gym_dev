@@ -14,6 +14,7 @@ class AbstractTrajectoryGenerator(ABC):
         self.dt_loop = dt_loop
         self.trajectory = torch.zeros((self.rom.n_robots, self.N * self.dN + 1, self.rom.n), device=self.device)
         self.v_trajectory = torch.zeros((self.rom.n_robots, self.N * self.dN, self.rom.m), device=self.device)
+        self.v = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
 
     def uniform(self, low, high, size):
         return (high - low) * torch.rand(*size, device=self.device) + low
@@ -247,7 +248,7 @@ class TrajectoryGeneratorH2H(TrajectoryGenerator):
 
 class CircleTrajectoryGenerator(TrajectoryGenerator):
 
-    def resample(self, idx, z):
+    def resample(self, idx_r, idx_i, z):
         self.center = torch.clone(z.detach())[:, :2]
         self.center[:, 0] -= 0.5
 
@@ -271,17 +272,14 @@ class CircleTrajectoryGenerator(TrajectoryGenerator):
 
 class ZeroTrajectoryGenerator(TrajectoryGenerator):
 
-    def resample(self, idx, z):
-        self.stationary_inds[idx] = True
+    def resample(self, idx_r, idx_i, z):
+        self.stationary_inds[idx_r, idx_i] = True
 
     def get_input_t(self, t, z):
         return torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
 
 
-class SquareTrajectoryGenerator(TrajectoryGenerator):
-
-    def resample(self, idx, z):
-        pass
+class SquareTrajectoryGenerator(AbstractTrajectoryGenerator):
 
     def get_input_t(self, t, z):
         v = torch.zeros((self.rom.n_robots, self.rom.m), device=self.device)
@@ -323,6 +321,26 @@ class SquareTrajectoryGenerator(TrajectoryGenerator):
             raise ValueError("Only SingleInt2D and DoubleInt2D are supported")
         return v
 
+    def step_rom_idx(self, idx, e_prev=None, increment_rom_time=False):
+        # Get input to apply for trajectory
+        v = self.get_input_t(self.t, self.trajectory[:, -1, :])
+        self.v[idx, :] = self.rom.clip_v_z(self.trajectory[idx, -1, :],
+                                           v[idx, :])
+        z_next = self.rom.f(self.trajectory[idx, -1, :], self.v[idx, :])
+        self.trajectory[idx, :-1, :] = self.trajectory[idx, 1:, :]
+        self.trajectory[idx, -1, :] = z_next
+        self.v_trajectory[idx, :-1, :] = self.v_trajectory[idx, 1:, :]
+        self.v_trajectory[idx, -1, :] = self.v[idx]
+        self.k[idx] += 1
+        if increment_rom_time:
+            self.t[idx] += self.rom.dt
+
     def reset_idx(self, idx, z, e_prev=None):
-        z[:, self.rom.vel_inds] = 0
-        super().reset_idx(idx, z)
+        self.trajectory[idx, :, :] = torch.zeros((len(idx), self.N * self.dN + 1, self.rom.n), device=self.device)
+        self.v_trajectory[idx, :, :] = torch.zeros((len(idx), self.N * self.dN, self.rom.m), device=self.device)
+        self.trajectory[idx, -1, :] = z[idx, :]
+        self.k[idx] = -self.N * self.dN
+        self.t[idx] = self.k[idx] * self.rom.dt
+
+        for t in range(self.N * self.dN):
+            self.step_rom_idx(idx, increment_rom_time=True)

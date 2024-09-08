@@ -153,6 +153,7 @@ class LeggedRobotTrajectoryCfg(BaseConfig):
         time_between_pushes = [.5, 10.]  # seconds
         randomize_com = False
         max_rnd_com_dist = 0.005
+        max_rom_distance = [0., 0.]
 
     class rewards:
         class scales:

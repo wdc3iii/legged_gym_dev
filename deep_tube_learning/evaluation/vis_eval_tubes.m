@@ -1,29 +1,55 @@
 clear; clc;
-% Rec
-% nm = 'eval_hopper_single_int_orac2xlf_1';
-% nm = 'eval_hopper_single_int_jvp3btlx_1';
-% nm = 'eval_hopper_single_int_134k6cla_1';
-% nm = 'eval_hopper_single_int_1cing88b_1';
-% nm = 'eval_hopper_single_int_nst1aom5_1';
-% nm = 'eval_hopper_single_int_87ygcfbw_1';
-% nm = 'eval_hopper_single_int_n7gv51qj_1';
-% nm = 'eval_hopper_single_int_4aasu83m_1';
-% nm = 'eval_hopper_single_int_684sv408_1';
-% nm = 'eval_hopper_single_int_edixhvlu_1';
-% nm = 'eval_hopper_single_int_222zytqs_1';
+% Hopper Rec
+% nm = 'eval_hopper_single_int_sjiqi49f_1';
+% nm = 'eval_hopper_single_int_7p1zump7_1';
+% nm = 'eval_hopper_single_int_msj97p19_1';
+% nm = 'eval_hopper_single_int_ks1eg0xw_1';
+% nm = 'eval_hopper_single_int_rg5itafm_1';
+% nm = 'eval_hopper_single_int_j88i9kim_1';
+% nm = 'eval_hopper_single_int_mnfs3r5v_1';
+% nm = 'eval_hopper_single_int_r5xu847t_1';
+% nm = 'eval_hopper_single_int_l4wnnx72_1';
+% nm = 'eval_hopper_single_int_w8flp57h_1';
+% nm = 'eval_hopper_single_int_f9zr70ds_1';
 
-% OS
-% nm = 'eval_hopper_single_int_rp4tbfmo_1';
-% nm = 'eval_hopper_single_int_n5bsyqjv_1';
-% nm = 'eval_hopper_single_int_p7o7oew2_1';
-% nm = 'eval_hopper_single_int_nnvq8473_1';
-% nm = 'eval_hopper_single_int_dee7vf8b_1';
-nm = 'eval_hopper_single_int_a48oos93_1';
-% nm = 'eval_hopper_single_int_wyereqyl_1';
-% nm = 'eval_hopper_single_int_p347litc_1';
-% nm = 'eval_hopper_single_int_6vzk4yps_1';
-% nm = 'eval_hopper_single_int_vybkmgzm_1';
-% nm = 'eval_hopper_single_int_09u49gp1_1';
+% Hopper OS
+% nm = 'eval_hopper_single_int_dy9ivoc2_1';
+% nm = 'eval_hopper_single_int_kma11ykr_1';
+% nm = 'eval_hopper_single_int_i8bev8qs_1';
+% nm = 'eval_hopper_single_int_743mwobx_1';
+% nm = 'eval_hopper_single_int_q9r1jp40_1';
+% nm = 'eval_hopper_single_int_55xbfsa8_1';
+% nm = 'eval_hopper_single_int_xstep89m_1';
+% nm = 'eval_hopper_single_int_r0hxk04w_1';
+% nm = 'eval_hopper_single_int_ho9ss350_1';
+% nm = 'eval_hopper_single_int_y7udluc0_1';
+% nm = 'eval_hopper_single_int_1rf51hpn_1';
+
+% Double Rec
+% nm = 'eval_double_single_int_mrw2ieou_1';
+% nm = 'eval_double_single_int_vugufzon_1';
+% nm = 'eval_double_single_int_28fyddeg_1';
+% nm = 'eval_double_single_int_bzcnvzc8_1';
+% nm = 'eval_double_single_int_nxwo1usp_1';
+% nm = 'eval_double_single_int_2p3relpc_1';
+% nm = 'eval_double_single_int_umfjf3uu_1';
+% nm = 'eval_double_single_int_thsm2yqh_1';
+% nm = 'eval_double_single_int_g7yvoy73_1';
+% nm = 'eval_double_single_int_wn7ag3y4_1';
+nm = 'eval_double_single_int_42cp4zi6_1';
+
+% Double OS
+% nm = 'eval_double_single_int_d2rcffmp_1';
+% nm = 'eval_double_single_int_zsjzccbb_1';
+% nm = 'eval_double_single_int_4tcr7hfa_1';
+% nm = 'eval_double_single_int_6w6s1don_1';
+% nm = 'eval_double_single_int_bte0x966_1';
+% nm = 'eval_double_single_int_4zawox51_1';
+% nm = 'eval_double_single_int_syqvx07n_1';
+% nm = 'eval_double_single_int_6gn5gan2_1';
+% nm = 'eval_double_single_int_a65vb9rm_1';
+% nm = 'eval_double_single_int_adeuul8f_1';
+% nm = 'eval_double_single_int_3iy8gtai_1';
 
 set(groot, 'DefaultAxesFontSize', 17);  % Set default font size for axes labels and ticks
 set(groot, 'DefaultTextFontSize', 17);  % Set default font size for text objects
