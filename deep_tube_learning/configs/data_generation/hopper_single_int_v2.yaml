@@ -16,9 +16,9 @@ controller:
   type: 'rh'
   # Below for option 'rh'
   config_name: "hopper_single_int.yaml"
-  K_p: -0.2
-  K_v: -0.4
-  K_ff: 0.2
+  K_p: -0.05
+  K_v: -0.15
+  K_ff: 0.05
   clip_pos: 0.5
   clip_vel: 1.
   clip_vel_des: 0.2
@@ -56,9 +56,9 @@ env_config:
     seed: ${seed}
     prob_stationary: 0.05
     dN: 1
-    prob_rnd: 0.05
-    noise_max_std: 0.1
-    noise_llh: 0.25
+    prob_rnd: 0.01
+    noise_max_std: 0.01
+    noise_llh: 0.1
   control:
     stiffness:
       foot_slide: 900
@@ -99,7 +99,7 @@ env_config:
     max_rom_distance: [ 1., 1. ]
     zero_rom_distance_likelihood: 0.25
     randomize_com: False
-    max_rnd_com_dist: 0.002
+    max_rnd_com_dist: 0.000
     rigid_shape_properties:
       randomize_restitution: False
       restitution_range: [ 0.9, 1.0 ]

@@ -41,8 +41,34 @@ coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l4wnnx72
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/w8flp57h
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/f9zr70ds
 
+OS Multirun, sluggish:
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y2qyypb0
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/265qknr4
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/04tf1mo4
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/bfr9lsal
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/7wk58jjx
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/v9by75xq
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0zozazia
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/w0tm5abu
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/kalbt5lj
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y7lzvc3l
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/e70jozmq
+
+Rec Multirun, sluggish:
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/xkty94y9
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/eyvpoorf
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3j3u2wam
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yyu12onw
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/4oeqlcsm
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vscndwrs
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3nbdrfdp
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c9cbxovu
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/ks9d6vtv
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/kyxjirnp
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/31z4kksi
+
 Double Int Models:
-OS Multirun
+OS Multirun 25
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/d2rcffmp
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/zsjzccbb
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/4tcr7hfa
@@ -55,7 +81,7 @@ coleonguard-Georgia Institute of Technology/Deep_Tube_Training/a65vb9rm
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/adeuul8f
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3iy8gtai
 
-Rec Multirun
+Rec Multirun 25
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/mrw2ieou
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vugufzon
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/28fyddeg
@@ -67,3 +93,29 @@ coleonguard-Georgia Institute of Technology/Deep_Tube_Training/thsm2yqh
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/g7yvoy73
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/wn7ag3y4
 coleonguard-Georgia Institute of Technology/Deep_Tube_Training/42cp4zi6
+
+OS Multirun 50
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/b0jiyyan
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/9d594iwr
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3ae0d8mi
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/lbgcybrs
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y6z5wvjy
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vf3lo0hn
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/09jq7jhb
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/4ig80lba
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/fxxtlarw
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/bhritipk
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/zqfxq9zx
+
+Rec Multirun 50
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/ejrkdsor
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/bwbcrd79
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/axdiqk5a
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/ihti4yxe
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/2zd33jtb
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/pq9hwtu5
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yt16opgp
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/ww36oj52
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/zkm8ydbn
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/5tnsjart
+coleonguard-Georgia Institute of Technology/Deep_Tube_Training/9hybdms9

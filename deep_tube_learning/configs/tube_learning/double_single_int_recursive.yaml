@@ -8,8 +8,8 @@ lr: 5e-4
 
 dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
-  wandb_experiment: "double_single_int_dnvyqp9n"
-  H_fwd: 25
+  wandb_experiment: "double_single_int_randl60q"
+  H_fwd: 50
   H_rev: 25
 loss:
   _target_: deep_tube_learning.losses.VectorTubeLoss

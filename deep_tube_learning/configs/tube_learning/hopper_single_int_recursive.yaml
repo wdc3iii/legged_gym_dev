@@ -12,8 +12,9 @@ dataset:
 #  wandb_experiment: "hopper_single_int_0epw5sg4"  # 5mm CoM rnd, 0.3 v_max
 #  wandb_experiment: "hopper_single_int_0ndiuaur"  # 2mm CoM rnd, 0.2 v_max
 #  wandb_experiment: "hopper_single_int_7omt9y8a"  # 5mm CoM rnd, 0.2 v_max
-  wandb_experiment: "hopper_single_int_936ymzm9"  # 0mm CoM rnd, 0.2 v_max
-  H_fwd: 25
+#  wandb_experiment: "hopper_single_int_936ymzm9"  # 0mm CoM rnd, 0.2 v_max
+  wandb_experiment: "hopper_single_int_etvji1bf"  # sluggish control
+  H_fwd: 50
   H_rev: 25
 loss:
   _target_: deep_tube_learning.losses.VectorTubeLoss

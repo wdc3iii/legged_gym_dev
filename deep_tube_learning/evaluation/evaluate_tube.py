@@ -13,32 +13,32 @@ from deep_tube_learning.utils import wandb_model_load, wandb_load_artifact, unno
 
 def eval_model(delta_seed=1, num_robots=2):
     # Experiment whose model to evaluate
-    exp_names = [  # Hopper Recursive
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/sjiqi49f",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/7p1zump7",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/msj97p19",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/ks1eg0xw",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/rg5itafm",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/j88i9kim",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/mnfs3r5v",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/r5xu847t",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/l4wnnx72",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/w8flp57h",
-        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/f9zr70ds"
-    ]
-    # exp_names = [  # Hopper Oneshot
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/dy9ivoc2",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/kma11ykr",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/i8bev8qs",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/743mwobx",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/q9r1jp40",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/55xbfsa8",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/xstep89m",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/r0hxk04w",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/ho9ss350",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y7udluc0",
-    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/1rf51hpn"
+    # exp_names = [  # Hopper Recursive
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/xkty94y9",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/eyvpoorf",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3j3u2wam",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yyu12onw",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/4oeqlcsm",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/vscndwrs",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/3nbdrfdp",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/c9cbxovu",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/ks9d6vtv",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/kyxjirnp",
+    #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/31z4kksi"
     # ]
+    exp_names = [  # Hopper Oneshot
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y2qyypb0",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/265qknr4",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/04tf1mo4",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/bfr9lsal",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/7wk58jjx",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/v9by75xq",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/0zozazia",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/w0tm5abu",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/kalbt5lj",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/y7lzvc3l",
+        "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/e70jozmq"
+    ]
     # exp_names = [  # Double oneshot
     #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/d2rcffmp",
     #     "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/zsjzccbb",

@@ -71,9 +71,9 @@ env_config:
     seed: ${seed}
     prob_stationary: 0.01
     dN: 1
-    prob_rnd: 0.05
-    noise_max_std: 0.1
-    noise_llh: 0.25
+    prob_rnd: 0.01
+    noise_max_std: 0.01
+    noise_llh: 0.05
   domain_rand:
     randomize_rom_distance: True
     max_rom_distance: [ 1.0, 1.0 ]

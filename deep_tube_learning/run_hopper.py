@@ -79,7 +79,7 @@ def main():
         solver_str="snopt"
     )
 
-    H = 400
+    H = 200
     z_k = np.zeros((H + 1, cl_traj_gen.planning_model.n),) * np.nan
     v_k = np.zeros((H, cl_traj_gen.planning_model.m)) * np.nan
     w_k = np.zeros((H + 1, 1)) * np.nan
