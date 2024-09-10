@@ -1,4 +1,6 @@
 import os
+import time
+
 import torch
 import wandb
 import numpy as np
@@ -22,8 +24,8 @@ problem_dict = {
             "obs": {'cx': np.array([1., 0.]), 'cy': np.array([0.75, 1.5]), 'r': np.array([0.5, 0.5])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
-    "right": {"name": "right", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
-              "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.52, 0.52]), 'r': np.array([0.5, 0.5])},
+    "right": {"name": "right", "start": np.array([0.0, 0.]), "goal": np.array([1., 0.]),
+              "obs": {'cx': np.array([0.5, 0.5]), 'cy': np.array([-0.4, 0.4]), 'r': np.array([0.375, 0.375])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "right_wide": {"name": "right_wide", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
@@ -237,7 +239,7 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter
 
 
 def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=None, Rv_first=0, Rv_second=0,
-                        max_iter=1000, debug_filename=None, t_wall=None, solver_str="ipopt"):
+                        max_iter=1000, debug_filename=None, t_wall=None, solver_str="ipopt", lim_sol=True):
     z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
     w = ca.MX.sym("w", N, 1)
     w_lb = ca.DM(N, 1)
@@ -336,18 +338,19 @@ def trajopt_tube_solver(pm, tube_dynamics, N, H_rev, Q, Qw, R, w_max, Nobs, Qf=N
         return solver, nlp_dict, nlp_opts
 
     t_lim_nlp_opts = nlp_opts.copy()
-    if solver_str == "snopt":
-        t_lim_nlp_opts["snopt"]["Major feasibility tolerance"] = 1e-6
-        t_lim_nlp_opts["snopt"]["Major optimality tolerance"] = 1e-3
-        t_lim_nlp_opts["snopt"]["Major iterations limit"] = 4
-        t_lim_nlp_opts["snopt"]["Minor iterations limit"] = 20
-        t_lim_nlp_opts["snopt"]["Time limit"] = t_wall
-    elif solver_str == "ipopt":
-        t_lim_nlp_opts["ipopt.max_wall_time"] = t_wall
-        t_lim_nlp_opts["ipopt.mu_init"] = 1e-3
-        t_lim_nlp_opts["ipopt.barrier_tol_factor"] = 1e6
-        t_lim_nlp_opts["ipopt.mu_strategy"] = "monotone"
-        # t_lim_nlp_opts["ipopt.warm_start_init_point"] = 'yes'
+    if lim_sol:
+        if solver_str == "snopt":
+            t_lim_nlp_opts["snopt"]["Major feasibility tolerance"] = 1e-6
+            t_lim_nlp_opts["snopt"]["Major optimality tolerance"] = 1e-3
+            t_lim_nlp_opts["snopt"]["Major iterations limit"] = 4
+            t_lim_nlp_opts["snopt"]["Minor iterations limit"] = 20
+            t_lim_nlp_opts["snopt"]["Time limit"] = t_wall
+        elif solver_str == "ipopt":
+            t_lim_nlp_opts["ipopt.max_wall_time"] = t_wall
+            t_lim_nlp_opts["ipopt.mu_init"] = 1e-3
+            t_lim_nlp_opts["ipopt.barrier_tol_factor"] = 1e6
+            t_lim_nlp_opts["ipopt.mu_strategy"] = "monotone"
+            # t_lim_nlp_opts["ipopt.warm_start_init_point"] = 'yes'
 
     t_lim_nlp_solver = ca.nlpsol("trajectory_generator", solver_str, nlp_dict, t_lim_nlp_opts)
     # t_lim_nlp_solver.print_options()
@@ -567,9 +570,10 @@ def solve_tube(
     e = np.zeros((H_rev, 1))
     v_prev = np.zeros((H_rev, planning_model.m))
 
-    solver, nlp_dict, nlp_opts = trajopt_tube_solver(
+    solver, nlp_dict, nlp_opts, t_lim_solver, t_lim_nlp_opts = trajopt_tube_solver(
         planning_model, tube_dynamics, N, H_rev, Q, Qw, R, w_max, len(obs['r']), Qf=Qf,
-        Rv_first=Rv_first, Rv_second=Rv_second, max_iter=max_iter, debug_filename=debug_filename, solver_str=solver_str
+        Rv_first=Rv_first, Rv_second=Rv_second, max_iter=max_iter, debug_filename=debug_filename, solver_str=solver_str,
+        t_wall=0.1
     )
 
     w_init = get_tube_warm_start(tube_ws, eval_tube, z_init, v_init, e, v_prev)
@@ -583,12 +587,22 @@ def solve_tube(
     params = init_params(start, goal, obs, z_cost=z_cost, v_cost=v_cost, e=e, v_prev=v_prev)
     x_init = init_decision_var(z_init, v_init, w=w_init)
 
+    tic = time.perf_counter_ns()
+    lim_sol = t_lim_solver["solver"](x0=x_init, p=params, lbg=t_lim_solver["lbg"], ubg=t_lim_solver["ubg"], lbx=t_lim_solver["lbx"],
+                           ubx=t_lim_solver["ubx"])
+    lim_sol_time = (time.perf_counter_ns() - tic) / 1e9
+
+    if t_lim_nlp_opts['iteration_callback'] is not None:
+        t_lim_nlp_opts['iteration_callback'].t_lim_solver(solver, params, debug_filename)
+
+    tic = time.perf_counter_ns()
     sol = solver["solver"](x0=x_init, p=params, lbg=solver["lbg"], ubg=solver["ubg"], lbx=solver["lbx"],
                            ubx=solver["ubx"])
+    sol_time = (time.perf_counter_ns() - tic) / 1e9
 
     if nlp_opts['iteration_callback'] is not None:
         nlp_opts['iteration_callback'].write_data(solver, params, debug_filename)
-    return sol, solver
+    return sol, solver, sol_time, lim_sol, t_lim_solver, lim_sol_time
 
 
 def get_l1_tube_dynamics(scaling):

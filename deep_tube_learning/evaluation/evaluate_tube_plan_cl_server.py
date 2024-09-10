@@ -7,6 +7,7 @@ import torch
 from deep_tube_learning.custom_sim import CustomSim
 import socket
 import struct
+import argparse
 
 
 track_warm = True
@@ -18,7 +19,7 @@ solver_str = 'snopt'
 # tube_dyn = "NN_oneshot"
 tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yhwtziw1"
+nn_path_default = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yhwtziw1"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
 max_iter = 200
@@ -26,6 +27,7 @@ N = 25
 mpc_dk = 1
 Rv1 = 10
 Rv2 = 10
+lim_sol = False
 
 def arr2list(d):
     if type(d) is dict:
@@ -57,7 +59,7 @@ def get_receive(server_socket, device):
     return receive_pz_x
 
 
-def main():
+def main(nn_path):
     # Socket setup, to talk to IsaacGym in different python env
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind(('127.0.0.1', 12345))
@@ -111,7 +113,8 @@ def main():
         'track_nominal': track_warm,
         'tube_ws': tube_ws,
         'max_iter': max_iter,
-        'solver_str': solver_str
+        'solver_str': solver_str,
+        'lim_sol': lim_sol
     }
     # dataset_cfg['env_config']['rom']['v_max'] = [0.15, 0.15]
     # dataset_cfg['env_config']['rom']['v_min'] = [-0.15, -0.15]
@@ -184,7 +187,10 @@ def main():
     server_socket.close()
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{solver_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
+    tag = 'rec' if tube_dyn == "NN_recursive" else 'os'
+    if lim_sol:
+        tag += '_lim'
+    fn = f"data/{nn_path[-8:]}_{tag}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),
@@ -208,5 +214,14 @@ def main():
     print(f"Time Solving Tube:    {env.traj_gen.t_solving:.4f} \tRate: {env.traj_gen.t_solving / H:.4f}")
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pass the neural network path.")
+    parser.add_argument(
+        'nn_path',
+        type=str,
+        nargs='?',  # This makes the argument optional
+        default=nn_path_default,  # Set your default path here
+        help='Path to the neural network'
+    )
+    args = parser.parse_args()
+    main(args.nn_path)

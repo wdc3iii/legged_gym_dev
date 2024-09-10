@@ -97,7 +97,8 @@ class CustomSim:
                 track_nominal=traj_cfg.track_nominal,
                 tube_ws=traj_cfg.tube_ws,
                 max_iter=traj_cfg.max_iter,
-                solver_str=traj_cfg.solver_str
+                solver_str=traj_cfg.solver_str,
+                lim_sol=traj_cfg.lim_sol,
             )
         elif traj_cfg.cls == 'SquareTrajectoryGenerator':
             self.traj_gen = SquareTrajectoryGenerator(
