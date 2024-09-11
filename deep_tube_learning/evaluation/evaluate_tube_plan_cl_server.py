@@ -18,14 +18,18 @@ solver_str = 'snopt'
 # tube_dyn = "NN_oneshot"
 tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yhwtziw1"
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yhwtziw1"  # Robust fails
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/qp3x5kqz"  # conservative
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/wn24aexu"  # robust but wont fail
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
-max_iter = 200
-N = 25
+max_iter = 500
+N = 30
 mpc_dk = 1
 Rv1 = 10
 Rv2 = 10
+
+robust = False
 
 def arr2list(d):
     if type(d) is dict:
@@ -95,27 +99,45 @@ def main():
         'v_min': -1e9,
         'v_max': 1e9
     }
-    dataset_cfg['env_config']['trajectory_generator'] = {
-        'cls': 'ClosedLoopTrajectoryGenerator',
-        'H': H,
-        'N': N,
-        'dt_loop': dataset_cfg['env_config']['env']['model']['dt'],
-        'device': "cuda" if torch.cuda.is_available() else "cpu",
-        'prob_dict': {key: arr2list(val) for key, val in problem_dict[prob_str].items()},
-        'tube_dyn': tube_dyn,
-        'nn_path': nn_path,
-        'w_max': 1,
-        'mpc_dk': mpc_dk,
-        'warm_start': warm_start,
-        'nominal_ws': 'interpolate',
-        'track_nominal': track_warm,
-        'tube_ws': tube_ws,
-        'max_iter': max_iter,
-        'solver_str': solver_str
-    }
+    if robust:
+        dataset_cfg['env_config']['trajectory_generator'] = {
+            'cls': 'RobustClosedLoopTrajectoryGenerator',
+            'H': H,
+            'N': N,
+            'dt_loop': dataset_cfg['env_config']['env']['model']['dt'],
+            'device': "cuda" if torch.cuda.is_available() else "cpu",
+            'prob_dict': {key: arr2list(val) for key, val in problem_dict[prob_str].items()},
+            'w_max': 0.1, # 0.024
+            'mpc_dk': mpc_dk,
+            'warm_start': warm_start,
+            'nominal_ws': 'interpolate',
+            'track_nominal': track_warm,
+            'max_iter': max_iter,
+            'solver_str': solver_str
+        }
+    else:
+        dataset_cfg['env_config']['trajectory_generator'] = {
+            'cls': 'ClosedLoopTrajectoryGenerator',
+            'H': H,
+            'N': N,
+            'dt_loop': dataset_cfg['env_config']['env']['model']['dt'],
+            'device': "cuda" if torch.cuda.is_available() else "cpu",
+            'prob_dict': {key: arr2list(val) for key, val in problem_dict[prob_str].items()},
+            'tube_dyn': tube_dyn,
+            'nn_path': nn_path,
+            'w_max': 1,
+            'mpc_dk': mpc_dk,
+            'warm_start': warm_start,
+            'nominal_ws': 'interpolate',
+            'track_nominal': track_warm,
+            'tube_ws': tube_ws,
+            'max_iter': max_iter,
+            'solver_str': solver_str
+        }
     # dataset_cfg['env_config']['rom']['v_max'] = [0.15, 0.15]
     # dataset_cfg['env_config']['rom']['v_min'] = [-0.15, -0.15]
     dataset_cfg['env_config']['domain_rand']['randomize_rom_distance'] = False
+    dataset_cfg['env_config']['domain_rand']['randomize_com'] = False
     dataset_cfg['env_config']['domain_rand']['zero_rom_dist_llh'] = 1.0
     dataset_cfg['env_config']['init_state']['default_noise_lower'] = [0.0, 0.0]
     dataset_cfg['env_config']['init_state']['default_noise_upper'] = [0.0, 0.0]
@@ -184,7 +206,7 @@ def main():
     server_socket.close()
 
     from scipy.io import savemat
-    fn = f"data/cl_tube_{prob_str}_{solver_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}.mat"
+    fn = f"data/cl_tube_{prob_str}_{solver_str}_{nn_path[-8:]}_{warm_start}_Rv_{Rv1}_{Rv2}_N_{N}_dk_{mpc_dk}_{tube_dyn}_{tube_ws_str}_{track_warm}_{robust}.mat"
     savemat(fn, {
         "z": z_vis.detach().cpu().numpy(),
         "v": v_vis.detach().cpu().numpy(),

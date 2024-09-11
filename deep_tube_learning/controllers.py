@@ -47,7 +47,7 @@ class RaibertHeuristic:
         pitch = -Kp * e_x - Kv * ev_x + K_ff * vd_x
         roll = -Kp * e_y - Kv * ev_y + K_ff * vd_y
 
-        current_yaw = RaibertHeuristic.quat_to_yaw(obs[:, 6:10])
+        current_yaw = RaibertHeuristic.quat_to_yaw(obs[:, 6:10]) * 0.
 
         omega_quat = RaibertHeuristic.omega_to_quat(
             torch.clamp(pitch, -clip_ang, clip_ang),

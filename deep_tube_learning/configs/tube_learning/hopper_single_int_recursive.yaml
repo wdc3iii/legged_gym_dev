@@ -10,10 +10,12 @@ dataset:
   _target_: deep_tube_learning.datasets.ScalarHorizonTubeDataset.from_wandb
 #  wandb_experiment: "hopper_single_int_owj086v3"  # 2mm CoM rnd, 0.3 v_max
 #  wandb_experiment: "hopper_single_int_0epw5sg4"  # 5mm CoM rnd, 0.3 v_max
-  wandb_experiment: "hopper_single_int_0ndiuaur"  # 2mm CoM rnd, 0.2 v_max
+#  wandb_experiment: "hopper_single_int_0ndiuaur"  # 2mm CoM rnd, 0.2 v_max
 #  wandb_experiment: "hopper_single_int_7omt9y8a"  # 5mm CoM rnd, 0.2 v_max
+#  wandb_experiment: "hopper_single_int_ip21shqr"  # Sortta sluggish
+  wandb_experiment: "hopper_single_int_yv7pg1wv"  # ttighted bounds yet
   H_fwd: 50
-  H_rev: 25
+  H_rev: 50
 loss:
   _target_: deep_tube_learning.losses.VectorTubeLoss
   alpha: 0.9

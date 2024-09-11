@@ -23,11 +23,11 @@ problem_dict = {
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "right": {"name": "right", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
-              "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.52, 0.52]), 'r': np.array([0.5, 0.5])},
+              "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.425, 0.425]), 'r': np.array([0.375, 0.375])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
-    "right_wide": {"name": "right_wide", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
-                   "obs": {'cx': np.array([1, 1.]), 'cy': np.array([-1.25, 1.25]), 'r': np.array([0.5, 0.5])},
+    "right_smol": {"name": "right", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
+              "obs": {'cx': np.array([1., 1.]), 'cy': np.array([-0.4, 0.4]), 'r': np.array([0.375, 0.375])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "gap_big": {"name": "gap_big", "start": np.array([0., 0.]), "goal": np.array([3., 3.]),
@@ -35,7 +35,7 @@ problem_dict = {
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "complex": {"name": "complex", "start": np.array([0.0, 0.]), "goal": np.array([2., 0.]),
-            "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.2, 0.2, 0.15])},
+            "obs": {'cx': np.array([0.5, 1.05, 1.65]), 'cy': np.array([-0.1, 0.2, -0.08]), 'r': np.array([0.25, 0.25, 0.2])},
             "Q": Q, "R_nominal": R, "R": R_WARM, "Qw": QW, "Rv_first": RV_FIRST, "Rv_second": RV_SECOND,
             "t_wall": TWALL, "mpc_dk": MPC_RECOMPUTE_DK},
     "none": {"name": "gap", "start": np.array([0.0, 0.0]), "goal": np.array([0.5, 0.]),
@@ -156,7 +156,7 @@ def setup_trajopt_solver(pm, N, Nobs):
 
 
 def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter=1000, debug_filename=None, t_wall=None):
-    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, _, _, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
+    z, v, z_lb, z_ub, v_lb, v_ub, p_z0, p_zf, p_z_cost, p_v_cost, p_obs_c_x, p_obs_c_y, p_obs_r = setup_trajopt_solver(pm, N, Nobs)
 
     if Qf is None:
         Qf = Q
@@ -164,12 +164,15 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter
     Qf = ca.DM(Qf)
 
     # Define NLP
-    obj = quadratic_objective(z[:-1, :], Q, goal=p_zf) + quadratic_objective(v, R) + quadratic_objective(z[-1, :], Qf, goal=p_zf)
+    obj = quadratic_objective(z[:-1, :], Q, goal=p_z_cost[:-1, :]) + quadratic_objective(v, R, goal=p_v_cost) \
+          + quadratic_objective(z[-1, :], Qf, goal=p_z_cost[-1, :])
     if Rv_first > 0:
+        Rv_first = ca.DM(Rv_first)
         obj += quadratic_objective(v[:-1, :] - v[1:, :], Rv_first)
     if Rv_second > 0:
+        Rv_second = ca.DM(Rv_second)
         first = v[:-1, :] - v[1:, :]
-        obj += quadratic_objective(first[:-1, :] - first[1:, :], Rv_first)
+        obj += quadratic_objective(first[:-1, :] - first[1:, :], Rv_second)
     g_dyn, g_lb_dyn, g_ub_dyn = dynamics_constraint(pm.f, z, v)
     g_obs, g_lb_obs, g_ub_obs = obstacle_constraints(z, p_obs_c_x, p_obs_c_y, p_obs_r)
     g_ic, g_lb_ic, g_ub_ic = initial_condition_equality_constraint(z, p_z0)
@@ -194,7 +197,11 @@ def trajopt_solver(pm, N, Q, R, Nobs, Qf=None, Rv_first=0, Rv_second=0, max_iter
         ca.reshape(z_ub, (N + 1) * pm.n, 1),
         ca.reshape(v_ub, N * pm.m, 1),
     )
-    p_nlp = ca.vertcat(p_z0.T, p_zf.T, p_obs_c_x, p_obs_c_y, p_obs_r)
+    p_nlp = ca.vertcat(
+        p_z0.T, p_zf.T,
+        ca.reshape(p_z_cost, (N + 1) * pm.n, 1), ca.reshape(p_v_cost, N * pm.m, 1),
+        p_obs_c_x, p_obs_c_y, p_obs_r
+    )
 
     x_cols, g_cols, p_cols = generate_col_names(pm, N, Nobs, x_nlp, g, p_nlp)
     nlp_dict = {

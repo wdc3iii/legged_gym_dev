@@ -6,7 +6,12 @@ recent = false;
 % nm = 'cl_tube_gap_snopt_efctig2n_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
 % nm = 'cl_tube_complex_snopt_yhwtziw1_nominal_Rv_10_10_N_25_dk_1_NN_recursive_evaluate_True';
 % nm = '2024-09-04_16:29:26_outer_file'; 
-nm = '2024-09-06_14:33:34_outer_file';
+
+% For plot?
+% nm = 'cl_tube_right_snopt_qp3x5kqz_nominal_Rv_10_10_N_30_dk_1_NN_recursive_evaluate_True_False';
+% nm = 'cl_tube_right_snopt_qp3x5kqz_nominal_Rv_10_10_N_30_dk_1_NN_recursive_evaluate_True_True';
+% nm = 'cl_tube_right_smol_snopt_qp3x5kqz_nominal_Rv_10_10_N_30_dk_1_NN_recursive_evaluate_True_False';
+nm = 'cl_tube_right_smol_snopt_wn24aexu_nominal_Rv_10_10_N_30_dk_1_NN_recursive_evaluate_True_True';
 
 set(groot, 'DefaultAxesFontSize', 17);  % Set default font size for axes labels and ticks
 set(groot, 'DefaultTextFontSize', 17);  % Set default font size for text objects

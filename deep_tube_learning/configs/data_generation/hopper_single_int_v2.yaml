@@ -9,16 +9,16 @@ wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/fcoar
 curriculum: 7
 upload_to_wandb: True
 
-vel_max: 0.3
-vel_min: -0.3
+vel_max: 0.045
+vel_min: -0.045
 
 controller:
   type: 'rh'
   # Below for option 'rh'
   config_name: "hopper_single_int.yaml"
-  K_p: -0.2
-  K_v: -0.4
-  K_ff: 0.2
+  K_p: -0.1
+  K_v: -0.3
+  K_ff: 0.25
   clip_pos: 0.5
   clip_vel: 1.
   clip_vel_des: 0.3
@@ -54,11 +54,11 @@ env_config:
     freq_low: 0.1
     freq_high: 3
     seed: ${seed}
-    prob_stationary: 0.05
+    prob_stationary: 0.2
     dN: 1
     prob_rnd: 0.05
     noise_max_std: 0.1
-    noise_llh: 0.25
+    noise_llh: 0.1
   control:
     stiffness:
       foot_slide: 900
@@ -92,13 +92,13 @@ env_config:
     added_mass_range: [ -0.5, 0.5 ]
     randomize_inv_base_mass: False
     inv_mass_range: [ -0.5, 0.5 ]
-    push_robots: True
+    push_robots: False
     max_push_vel: [ 0.01, 0.01, 0.01, 0.01, 0.01, 0.01 ]  # [vx, vy, vz, wx, wy, wz]
     time_between_pushes: [ 2., 5. ] # min max time (sec) between pushes of the robot. randomly selected in this range
-    randomize_rom_distance: True
-    max_rom_distance: [ 1., 1. ]
+    randomize_rom_distance: False
+    max_rom_distance: [ 0.5, 0.5 ]
     zero_rom_distance_likelihood: 0.25
-    randomize_com: True
+    randomize_com: False
     max_rnd_com_dist: 0.002
     rigid_shape_properties:
       randomize_restitution: False
@@ -112,23 +112,23 @@ env_config:
       randomize_damping: False
       added_damping_range: [ -0.2, 0.2 ]
     spring_properties:
-      randomize_stiffness: True
+      randomize_stiffness: False
       stiffness_range: [ 0.9, 1.1 ]  # multiplicative
-      randomize_damping: True
+      randomize_damping: False
       damping_range: [ 0.9, 1.1 ]  # multiplicative
-      randomize_setpoint: True
+      randomize_setpoint: False
       setpoint_range: [ 0.9, 1.1 ]  # multiplicative
     pd_gain_properties:
-      randomize_p_gain: True
+      randomize_p_gain: False
       p_gain_range: [ 0.95, 1.05 ]  # multiplicative
-      randomize_d_gain: True
+      randomize_d_gain: False
       d_gain_range: [ 0.95, 1.05 ]  # multiplicative
     torque_speed_properties:
-      randomize_max_torque: True
+      randomize_max_torque: False
       max_torque_range: [ 0.9, 1.1 ]  # multiplicative
-      randomize_max_speed: True
+      randomize_max_speed: False
       max_speed_range: [ 0.9, 1.1 ]  # multiplicative
-      randomize_slope: True
+      randomize_slope: False
       slope_range: [ 0.9, 1.1 ]  # multiplicative
   init_state:
     default_dof_pos_noise_lower: [ -0., -0., -0., -0. ]  # [foot, wheel1, 2, 3]

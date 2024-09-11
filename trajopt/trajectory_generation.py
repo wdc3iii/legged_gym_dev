@@ -134,7 +134,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
 
     def _resample_sinusoid_input(self, idx_r, idx_i, v_min, v_max):
         self.sin_mag[idx_r, idx_i] = self.uniform(torch.zeros_like(v_max), (v_max - v_min) / 2, size=(len(idx_r), self.rom.m))[self.tmp, idx_i]
-        self.sin_mean[idx_r, idx_i] = self.uniform(self.rom.v_min[None, :] + self.sin_mag, self.rom.v_min[None, :]-self.sin_mag, size=self.sin_mag.shape)[idx_r, idx_i]
+        self.sin_mean[idx_r, idx_i] = self.uniform(self.rom.v_min[None, :] + self.sin_mag, self.rom.v_max[None, :]-self.sin_mag, size=self.sin_mag.shape)[idx_r, idx_i]
         self.sin_freq[idx_r, idx_i] = self.uniform(
             torch.tensor([self.freq_low], device=self.device),
             torch.tensor([self.freq_high], device=self.device),

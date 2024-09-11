@@ -99,6 +99,31 @@ class CustomSim:
                 max_iter=traj_cfg.max_iter,
                 solver_str=traj_cfg.solver_str
             )
+        elif traj_cfg.cls == 'RobustClosedLoopTrajectoryGenerator':
+            from trajopt.robust_trajectory_generation import RobustClosedLoopTrajectoryGenerator
+            def list2arr(v):
+                if type(v) == list or type(v) == ListConfig:
+                    return np.array(v)
+                elif type(v) == dict or type(v) == DictConfig:
+                    return {k: list2arr(v) for k, v in v.items()}
+                else:
+                    return v
+            prob_dict = {k: list2arr(v) for k, v in traj_cfg.prob_dict.items()}
+            self.traj_gen = RobustClosedLoopTrajectoryGenerator(
+                self.rom,
+                traj_cfg.H,
+                traj_cfg.N,
+                traj_cfg.dt_loop,
+                self.device,
+                prob_dict,
+                traj_cfg.w_max,
+                mpc_dk=traj_cfg.mpc_dk,
+                warm_start=traj_cfg.warm_start,
+                nominal_ws=traj_cfg.nominal_ws,
+                track_nominal=traj_cfg.track_nominal,
+                max_iter=traj_cfg.max_iter,
+                solver_str=traj_cfg.solver_str
+            )
         else:
             raise ValueError(f"Trajectory generator{traj_cfg.cls} not supported.")
 

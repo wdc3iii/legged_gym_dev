@@ -15,10 +15,10 @@ from deep_tube_learning.utils import update_args_from_hydra, update_cfgs_from_hy
 from deep_tube_learning.controllers import RaibertHeuristic
 from trajopt.rom_dynamics import SingleInt2D
 
-# prob_str = 'right'
+prob_str = 'right_smol'
 # prob_str = 'gap'
-prob_str = 'complex'
-H = 150
+# prob_str = 'complex'
+H = 550
 
 def get_send(client_socket, server_address):
     def send_pz_x(pz_x):
@@ -62,6 +62,8 @@ def main():
     dataset_cfg['env_config']['env']['num_envs'] = 1
 
     dataset_cfg['env_config']['domain_rand']['randomize_rom_distance'] = False
+    dataset_cfg['env_config']['domain_rand']['randomize_com'] = False
+    dataset_cfg['env_config']['env']['episode_length_s'] = 60
 
     cfg = OmegaConf.create(unnormalize_dict(dataset_cfg))
     if cfg.controller.type == 'rl':
