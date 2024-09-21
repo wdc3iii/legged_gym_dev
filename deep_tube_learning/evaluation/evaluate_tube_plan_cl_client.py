@@ -18,7 +18,7 @@ from trajopt.rom_dynamics import SingleInt2D
 prob_str = 'right_smol'
 # prob_str = 'gap'
 # prob_str = 'complex'
-H = 550
+H = 450
 
 def get_send(client_socket, server_address):
     def send_pz_x(pz_x):

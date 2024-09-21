@@ -19,8 +19,8 @@ solver_str = 'snopt'
 tube_dyn = "NN_recursive"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/jtu9xrfq"
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/yhwtziw1"  # Robust fails
-nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/qp3x5kqz"  # conservative
-# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/wn24aexu"  # robust but wont fail
+# nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/qp3x5kqz"  # conservative
+nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/wn24aexu"  # robust but wont fail
 # nn_path = "coleonguard-Georgia Institute of Technology/Deep_Tube_Training/43tiikpa"  # H2H
 
 max_iter = 500
@@ -29,7 +29,7 @@ mpc_dk = 1
 Rv1 = 10
 Rv2 = 10
 
-robust = False
+robust = True
 
 def arr2list(d):
     if type(d) is dict:
@@ -107,7 +107,7 @@ def main():
             'dt_loop': dataset_cfg['env_config']['env']['model']['dt'],
             'device': "cuda" if torch.cuda.is_available() else "cpu",
             'prob_dict': {key: arr2list(val) for key, val in problem_dict[prob_str].items()},
-            'w_max': 0.1, # 0.024
+            'w_max': 0.024, # 0.024
             'mpc_dk': mpc_dk,
             'warm_start': warm_start,
             'nominal_ws': 'interpolate',
