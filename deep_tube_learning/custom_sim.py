@@ -154,7 +154,7 @@ class CustomSim:
         self.reset_traj(idx)
 
     def get_observations(self):
-        return torch.concatenate((
+        return torch.cat((
             torch.clone(self.root_states.detach()),
             self.trajectory[:, 0, :],
             torch.clone(self.traj_gen.get_v_trajectory()[:, 0, :].detach())

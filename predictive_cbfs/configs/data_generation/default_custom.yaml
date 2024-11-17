@@ -1,0 +1,24 @@
+seed: 0
+
+dataset_name: "custom_trajectory"
+
+epochs: 25
+headless: True
+save_debugging_data: False
+upload_to_wandb: False
+track_yaw: False
+
+controller: null
+
+env_config:
+  env:
+    type: 'custom'
+    num_envs: 8192
+    episode_length_s: 20
+    model:
+  noise:
+    add_noise: False
+  domain_rand:
+  init_state:
+    default_noise_lower: [ -0., -0., -0., -0. ]  # [foot, wheel1, 2, 3]
+    default_noise_upper: [ 0., 0., 0., 0. ]

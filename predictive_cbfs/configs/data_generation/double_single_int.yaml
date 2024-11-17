@@ -1,0 +1,79 @@
+defaults:
+  - default_custom
+  - _self_
+
+epochs: 10
+train_epochs: 1
+learning_iters: 50
+p_cbf_horizon_s: 5
+delta_max: 5
+delta_K : 0.5
+decorr_prop: 0.1
+batch_size: 2048
+steps_per_model_checkpoint: 5000
+
+experiment_name: "double_single_int"
+upload_to_wandb: False
+
+controller:
+  _target_: predictive_cbfs.controllers.DoubleSingleVelTracking
+  k_d: 1
+  robustified_cbf:
+    _target_: predictive_cbfs.controllers.RobustifiedCBF
+    cbf:
+      _target_: predictive_cbfs.cbfs.ObstacleCBF
+      alpha: 5
+      epsilon: 0
+      rs: [0.5, 0.5]
+      cxs: [-0.5, -2.]
+      cys: [-2., -3.]
+    nom_controller:
+      _target_: predictive_cbfs.controllers.SingleIntPosTracking
+      k: 1
+      zd: [0, 0]
+      v_max: 1
+    delta:
+      _target_: deep_tube_learning.models.MLP
+      input_size: 4
+      output_dim: 1
+      num_units: 128
+      num_layers: 2
+      activation:
+        _target_: torch.nn.ReLU
+    dyn:
+      _target_: predictive_cbfs.roms.SingleInt2D
+      dt: 0.01
+
+
+env_config:
+  env:
+    num_envs: 4096
+    episode_length_s: 10
+    model:
+      dt: 0.01
+      cls: 'DoubleInt2D'
+  init_state:
+    default_noise_lower: [ -3., -5., -1., -1. ]  # [foot, wheel1, 2, 3]
+    default_noise_upper: [ 0., 0., 1., 1. ]
+
+lr: 1e-2
+lr_scheduler:
+  _target_: "torch.optim.lr_scheduler.LambdaLR"
+  _partial_: True
+  lr_lambda:
+    _target_: "deep_tube_learning.utils.get_warmup_cosine_decay"
+    warmup_steps: 250
+    max_steps: 2000
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: ${lr}
+
+loss_fn:
+  _target_: predictive_cbfs.losses.CheckLoss
+  alpha: 0.5
+
+eval_function:
+  _target_: predictive_cbfs.eval_functions.evaluate_single_double
+  _partial_: True

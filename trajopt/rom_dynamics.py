@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import casadi as ca
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from scipy.spatial.transform import Rotation
@@ -15,7 +14,7 @@ class RomDynamics(ABC):
     n: int  # Dimension of state
     m: int  # Dimension of input
 
-    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='casadi', device='cuda'):
+    def __init__(self, dt, z_min, z_max, v_min, v_max, n_robots=1, backend='torch', device='cuda'):
         """
         Common constructor functionality
         :param dt: time discretization
@@ -23,7 +22,7 @@ class RomDynamics(ABC):
         :param z_max: upper state bound
         :param v_min: lower input bound
         :param v_max: upper input bound
-        :param backend: 'casadi' for when using dynamics for a casadi optimization program,
+        :param backend: 'torch' for when using dynamics with torch tensors,
                'numpy' for use with numpy arrays
         """
         self.dt = dt
@@ -35,17 +34,7 @@ class RomDynamics(ABC):
         self.vel_inds = None
         self.device = device
 
-        if backend == 'casadi':
-            self.zero_mat = lambda r, c: ca.MX(r, c)
-            self.zero_vec = lambda n: ca.MX(n, 1)
-            self.const_mat = lambda m: ca.DM(m)
-            self.sin = lambda x: ca.sin(x)
-            self.cos = lambda x: ca.cos(x)
-            self.stack = lambda lst: ca.horzcat(*lst)
-            self.vstack = lambda lst: ca.vertcat(*lst)
-            self.arctan = lambda y, x: ca.arctan2(y, x)
-
-        elif backend == 'numpy':
+        if backend == 'numpy':
             self.zero_mat = lambda r, c: np.zeros((r, c))
             self.zero_vec = lambda n: np.zeros((n,))
             self.const_mat = lambda m: np.array(m)

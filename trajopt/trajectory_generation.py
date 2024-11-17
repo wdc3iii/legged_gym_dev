@@ -128,7 +128,7 @@ class TrajectoryGenerator(AbstractTrajectoryGenerator):
         self.ramp_v_end[idx_r[mask], idx_i[mask]] = self.extreme_input[idx_r[mask], idx_i[mask]]
 
     def _resample_extreme_input(self, idx_r, idx_i, v_min, v_max):
-        arr = torch.concatenate((v_min[:, :, None], torch.zeros_like(v_min, device=self.device)[:, :, None], v_max[:, :, None]), dim=-1)
+        arr = torch.cat((v_min[:, :, None], torch.zeros_like(v_min, device=self.device)[:, :, None], v_max[:, :, None]), dim=-1)
         mask = torch.arange(3, device=self.device)[None, None, :] == torch.randint(0, 3, (*v_min.shape, 1), device=self.device)
         self.extreme_input[idx_r, idx_i] = arr[mask].reshape(-1, self.rom.m)[self.tmp, idx_i]
 
@@ -261,8 +261,8 @@ class CircleTrajectoryGenerator(TrajectoryGenerator):
             v = v / torch.linalg.norm(v, dim=-1, keepdim=True) * torch.min(torch.minimum(self.rom.v_max, torch.abs(self.rom.v_min)))
         elif isinstance(self.rom, DoubleInt2D):
             m = torch.min(torch.minimum(self.rom.v_max, torch.abs(self.rom.v_min)))
-            z_des = self.center + 0.5 * torch.concatenate([torch.cos(t / m)[:, None], torch.sin(t / m)[:, None]], dim=-1)
-            v_des = 0.5 * torch.concatenate([-torch.sin(t / m)[:, None], torch.cos(t / m)[:, None]], dim=-1) / m
+            z_des = self.center + 0.5 * torch.cat([torch.cos(t / m)[:, None], torch.sin(t / m)[:, None]], dim=-1)
+            v_des = 0.5 * torch.cat([-torch.sin(t / m)[:, None], torch.cos(t / m)[:, None]], dim=-1) / m
             v = self.rom.clip_v_z(z, -4 * (z[:, :2] - z_des) - 4 * (z[:, 2:] - v_des))
         else:
             raise ValueError("Only SingleInt2D and DoubleInt2D are supported")

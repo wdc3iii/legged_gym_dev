@@ -1,0 +1,65 @@
+seed: 0
+
+dataset_name: "hopper_trajectory"
+
+epochs: 25
+headless: True
+save_debugging_data: False
+upload_to_wandb: False
+track_yaw: False
+curriculum: 0
+
+acc_max: 0.3
+acc_min: -0.3
+vel_max: 0.2
+vel_min: -0.2
+pos_max: 1e9
+pos_min: -1e9
+
+controller: null
+
+env_config:
+  env:
+    type: 'isaacgym'
+    num_envs: 8192
+    episode_length_s: 20
+#  terrain:
+#    curriculum: False
+  noise:
+    add_noise: False
+  domain_rand:
+    randomize_friction: False
+    randomize_base_mass: False
+    randomize_inv_base_mass: False
+    push_robots: False
+    randomize_rom_distance: True
+    max_rom_distance: [1., 1.]
+    rigid_shape_properties:
+      randomize_restitution: False
+      randomize_compliance: False
+      randomize_thickness: False
+    dof_properties:
+      randomize_stiffness: False
+      randomize_damping: False
+    spring_properties:
+      randomize_stiffness: False
+      randomize_damping: False
+      randomize_setpoint: False
+    pd_gain_properties:
+      randomize_p_gain: False
+      randomize_d_gain: False
+    torque_speed_properties:
+      randomize_max_torque: False
+      randomize_max_speed: False
+      randomize_slope: False
+  curriculum:
+    use_curriculum: False
+  init_state:
+    default_dof_pos_noise_lower: [ -0., -0., -0., -0. ]  # [foot, wheel1, 2, 3]
+    default_dof_pos_noise_upper: [ 0., 0., 0., 0. ]
+    default_dof_vel_noise_lower: [ -0., -0., -0., -0. ]
+    default_dof_vel_noise_upper: [ 0., 0., 0., 0. ]
+    default_root_pos_noise_lower: [ -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [x, y, z, qx, qy, qz, qw]
+    default_root_pos_noise_upper: [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    default_root_vel_noise_lower: [ -0.0, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [vx, vy, vz, wx, wy, wz]
+    default_root_vel_noise_upper: [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
