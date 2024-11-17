@@ -22,19 +22,9 @@ from trajopt.rom_dynamics import SingleInt2D
 from predictive_cbfs.custom_sim import CustomSim
 from deep_tube_learning.train_tube import CheckPointManager
 from torch.nn.utils import clip_grad_norm_
-from torch.utils.data import Dataset, DataLoader
-
-
-class RegressionDataset(Dataset):
-    def __init__(self, X, y):
-        self.X = X
-        self.y = y
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
+from torch.utils.data import DataLoader
+from scipy.io import savemat
+from predictive_cbfs.utils import CheckPointManager, RegressionDataset
 
 
 @hydra.main(
@@ -44,7 +34,7 @@ class RegressionDataset(Dataset):
 )
 def data_creation_main(cfg):
     """____________________  Setup Learning Stuff  __________________________________________"""
-    experiment_name = cfg.dataset_name
+    experiment_name = cfg.experiment_name
 
     # Send config to wandb
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -54,7 +44,7 @@ def data_creation_main(cfg):
     import random
     import string
     total_run_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-    data_path = str(Path(__file__).parent / "rom_tracking_data" / f"{cfg.dataset_name}_{total_run_id}")
+    data_path = str(Path(__file__).parent / "predictive_cbfs" / f"{cfg.experiment_name}_{total_run_id}")
     os.makedirs(data_path, exist_ok=True)
     with open(f"{data_path}/config.pickle", "wb") as f:
         pickle.dump(cfg_dict, f)
@@ -107,12 +97,14 @@ def data_creation_main(cfg):
     num_robots = env_cfg.env.num_envs
     max_rom_ep_length = int(cfg.env_config.env.episode_length_s / env.model.dt) - 5
 
+
     """_____________________________________ Loop over Learning Iterations __________________________________________"""
     for ii in range(cfg.learning_iters):
         # Data structures
         x = torch.zeros((cfg.epochs, num_robots, max_rom_ep_length + 1, x_n), device=env.device)  # Epochs, steps, states
         h = torch.zeros((cfg.epochs, num_robots, max_rom_ep_length + 1), device=env.device)
         delta = torch.zeros((cfg.epochs, num_robots, max_rom_ep_length + 1), device=env.device)
+
 
         """________________________________ Collect Data Under Current delta policy _________________________________"""
         for epoch in tqdm(range(cfg.epochs), desc="Data Collection Progress (epochs)"):
@@ -154,10 +146,10 @@ def data_creation_main(cfg):
                 'delta': delta.cpu().numpy(),
             }
             pickle.dump(epoch_data, f)
+            savemat(f"{data_path}/data_{ii}.mat", epoch_data)
+
 
         """_____________________________________________ Learn a new delta policy ___________________________________"""
-        print("Time to learn...")
-
         def sliding_min(h_, T):
             n1, n2, H = h.shape
 
@@ -180,15 +172,6 @@ def data_creation_main(cfg):
         x = x[:, :, :err_h_bar.shape[2], :]
         x = x.reshape(cfg.epochs * num_robots * x.shape[2], x.shape[3])
         delta_targ = delta_targ.reshape(cfg.epochs * num_robots * delta_targ.shape[2], 1)
-
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.scatter(x[::100, 0].cpu().numpy(), x[::100, 1].cpu().numpy(), c=delta_targ[::100].cpu().numpy())
-        # plt.xlabel("x")
-        # plt.ylabel("y")
-        # plt.colorbar()
-        # plt.title('Delta Target')
-        # plt.show()
 
         # Downsample to avoid temporal corrolation
         n_samples = int(x.shape[0] * cfg.decorr_prop)
@@ -257,6 +240,7 @@ def data_creation_main(cfg):
                 {"loss_epoch": epoch_loss.item() / len(loader), "lr_epoch": lr_scheduler.get_last_lr()[0]},
                 step=step,
             )
+        ckpt_manager.to_wandb()
         wandb.finish()
 
         # copy the new NN over

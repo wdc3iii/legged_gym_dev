@@ -2,18 +2,17 @@ defaults:
   - default_custom
   - _self_
 
+experiment_name: "double_single_int"
+
 epochs: 2
-train_epochs: 2
+train_epochs: 1
 learning_iters: 50
 p_cbf_horizon_s: 5
 delta_max: 5
 delta_K : 0.5
 decorr_prop: 0.1
 batch_size: 2048
-steps_per_model_checkpoint: 1000
-
-experiment_name: "double_single_int"
-upload_to_wandb: False
+steps_per_model_checkpoint: 100
 
 controller:
   _target_: predictive_cbfs.controllers.DoubleSingleVelTracking
@@ -35,8 +34,6 @@ controller:
       num_layers: 2
       activation:
         _target_: torch.nn.ReLU
-#      final_activation:
-#        _target_: torch.nn.ReLU
     dyn:
       _target_: predictive_cbfs.roms.SingleInt1D
       dt: 0.01
@@ -53,19 +50,10 @@ env_config:
     default_noise_lower: [ -0., -1. ]  # [foot, wheel1, 2, 3]
     default_noise_upper: [ 1., 1. ]
 
-lr: 1e-2
 lr_scheduler:
-  _target_: "torch.optim.lr_scheduler.LambdaLR"
-  _partial_: True
   lr_lambda:
-    _target_: "deep_tube_learning.utils.get_warmup_cosine_decay"
-    warmup_steps: 50
-    max_steps: 400
-
-optimizer:
-  _target_: torch.optim.Adam
-  _partial_: true
-  lr: ${lr}
+    warmup_steps: 25
+    max_steps: 200
 
 loss_fn:
   _target_: predictive_cbfs.losses.CheckLoss

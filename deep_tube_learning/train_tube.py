@@ -38,11 +38,13 @@ class CheckPointManager:
         if self.best_loss > metric:
             self.best_loss = metric
             aliases.append("best")
+            self._model_save(model, True)
 
         wandb.run.log_artifact(artifact, aliases=aliases)
 
-    def _model_save(self, model):
-        torch.save(model.state_dict(), f"{self.ckpt_path}/model.pth")
+    def _model_save(self, model, best=False):
+        prefix = "best" if best else "latest"
+        torch.save(model.state_dict(), f"{self.ckpt_path}/{prefix}_model.pth")
 
 
 def create_data_loaders(dataset: TubeDataset, batch_size, validation_split):
