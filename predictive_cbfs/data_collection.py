@@ -28,8 +28,8 @@ from predictive_cbfs.utils import CheckPointManager, RegressionDataset
 
 
 @hydra.main(
-    config_path=str(Path(__file__).parent / "configs" / "data_generation"),
-    config_name="default_trajectory",
+    config_path=str(Path(__file__).parent / "configs" / "delta_learning"),
+    config_name="default_custom",
     version_base="1.2",
 )
 def data_creation_main(cfg):
@@ -243,13 +243,16 @@ def data_creation_main(cfg):
         ckpt_manager.to_wandb()
         wandb.finish()
 
-        # copy the new NN over
+        # copy the best NN over
+        checkpoint_path = f"{ckpt_manager.ckpt_path}/best_model.pth"
+        state_dict = torch.load(checkpoint_path)
+        new_delta.load_state_dict(state_dict)
         policy.v_filt.delta = new_delta
 
         # Evaluate new NN?
         eval_func(policy, env, eval_root_states, cfg, data_path, ii)
 
-    print(f"\nrun ID: {total_run_id}\ndataset name: {cfg.dataset_name}\nlocal folder: {cfg.experiment_name}_{total_run_id}")
+    print(f"\nrun ID: {total_run_id}\ndataset name: {cfg.experiment_name}\nlocal folder: {cfg.experiment_name}_{total_run_id}")
     return epoch_data
 
 

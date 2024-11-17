@@ -9,7 +9,7 @@ train_epochs: 1
 learning_iters: 50
 p_cbf_horizon_s: 5
 delta_max: 5
-delta_K : 0.5
+delta_K : 2
 decorr_prop: 0.1
 batch_size: 2048
 steps_per_model_checkpoint: 100

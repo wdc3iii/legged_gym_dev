@@ -2,15 +2,17 @@ defaults:
   - default_hopper
   - _self_
 
-epochs: 50
+experiment_name: "hopper_single_int"
 
-dataset_name: "hopper_single_int"
-wandb_experiment: "coleonguard-Georgia Institute of Technology/RL_Training/fcoard3m"
-curriculum: 7
-upload_to_wandb: True
-
-vel_max: 0.045
-vel_min: -0.045
+epochs: 10
+train_epochs: 1
+learning_iters: 50
+p_cbf_horizon_s: 5
+delta_max: 5
+delta_K : 2
+decorr_prop: 0.1
+batch_size: 2048
+steps_per_model_checkpoint: 100
 
 controller:
   type: 'rh'
