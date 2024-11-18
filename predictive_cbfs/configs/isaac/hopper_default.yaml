@@ -1,0 +1,176 @@
+defaults:
+  - default
+  - _self_
+
+task: 'hopper'
+experiment_name: 'hopper'
+headless: True
+
+env_config:
+  env:
+    num_envs: 4096
+    num_observations: 20
+    num_actions: 4
+    send_timeouts: True
+    episode_length_s: 20
+  rewards:
+    scales:
+      orientation: -1.
+      collision: -1.
+      action_rate: -0.1
+      torques: -0.00001
+      unit_quat: -0.1
+    only_positive_rewards: False  # if true negative total rewards are clipped at zero (avoids early termination problems)
+    tracking_sigma: 0.25  # tracking reward = exp(-error^2/sigma)
+    soft_dof_pos_limit: 1.  # percentage of urdf limits, values above this limit are penalized
+    soft_dof_vel_limit: 1.
+    soft_torque_limit: 1.
+    base_height_target: .55
+    max_contact_force: 100.  # forces above this value are penalized
+    raibert:
+      Kp: -0.1
+      Kv: -0.3
+      K_ff: 0.0
+      clip_pos: 0.5
+      clip_vel: 1.0
+      clip_vel_des: 0.2
+      clip_ang: 0.2
+  init_state:
+    pos: [0.0, 0.0, 0.5]  # x,y,z [m]
+    default_joint_angles:
+      foot_slide: 0.021
+      wheel1_rotation: 0.0
+      wheel2_rotation: 0.0
+      wheel3_rotation: 0.0
+    randomize_yaw: False
+    default_dof_pos_noise_lower: [-0.02, 0, 0, 0]  # [foot, wheel1, 2, 3]
+    default_dof_pos_noise_upper: [0.02, 0, 0, 0]
+    default_dof_vel_noise_lower: [-0.1, -100., -100., -100.]
+    default_dof_vel_noise_upper: [0.1, 100., 100., 100.]
+    default_root_pos_noise_lower: [-0.0, -0.0, -0.05, -0.03, -0.03, -0.03, -0.03]  # [x, y, z, qx, qy, qz, qw]
+    default_root_pos_noise_upper: [0.0, 0.0, 0.05, 0.03, 0.03, 0.03, 0.03]
+    default_root_vel_noise_lower: [0.00, -0.05, -0.05, -0.2, -0.2, -0.2]  # [vx, vy, vz, wx, wy, wz]
+    default_root_vel_noise_upper: [0.00, 0.05, 0.05, 0.2, 0.2, 0.2]
+  control:
+    stiffness:
+      foot_slide: 900
+      wheel1_rotation: 15.0
+      wheel2_rotation: 15.0
+      wheel3_rotation: 15.0
+    damping:
+      foot_slide: 60
+      wheel1_rotation: 3.0
+      wheel2_rotation: 3.0
+      wheel3_rotation: 3.0
+    wheel_spindown:
+      wheel1_rotation: 0.1
+      wheel2_rotation: 0.1
+      wheel3_rotation: 0.1
+    foot_pos_des: 0.021
+    action_scale: 1
+    decimation: 4
+    control_type: "orientation_spindown"
+    zero_action: [1.0, 0.0, 0.0, 0.0]
+  asset:
+    spring_stiffness: 7000
+    spring_damping: 4
+    rot_actuator: [
+            [-0.8165, 0.2511, 0.2511],
+            [-0, -0.7643, 0.7643],
+            [-0.5773, -0.5939, -0.5939]
+        ]
+    wheel_speed_bounds:
+      wheel1_rotation: 600
+      wheel2_rotation: 600
+      wheel3_rotation: 600
+    torque_speed_bound_ratio: 6
+    disable_gravity: False
+  normalization:
+    obs_scales:
+      lin_vel: 0.5
+      ang_vel: 0.25
+      dof_vel: 0.01
+      z_pos: 1.0
+    clip_observations: 100
+    clip_actions: 100
+  noise:
+    add_noise: True
+    noise_level: 1.0
+    noise_scales:
+      dof_vel: 1.5
+      lin_vel: 0.1
+      ang_vel: 0.2
+      gravity: 0.05
+      z_pos: 0.02
+      quat: 0.05
+  domain_rand:
+    randomize_friction: True
+    friction_range: [0.5, 1.25]
+    randomize_base_mass: True
+    added_mass_range: [-0.5, 0.5]
+    randomize_inv_base_mass: True
+    inv_mass_range: [-0.5, 0.5]
+    push_robots: True
+    max_push_vel: [0.25, 0.25, 0.25, 0.75, 0.75, 0.75]  # [vx, vy, vz, wx, wy, wz]
+    time_between_pushes: [2., 10.] # min max time (sec) between pushes of the robot. randomly selected in this range
+    randomize_rom_distance: True
+    max_rom_distance:
+    zero_rom_distance_likelihood: 0.25
+    randomize_com: True
+    max_rnd_com_dist: 0.005
+    rigid_shape_properties:
+      randomize_restitution: True
+      restitution_range: [0.0, 1.0]
+      randomize_compliance: True
+      compliance_range: [0.0, 1.0]
+      randomize_thickness: True
+      thickness_range: [0.0, 0.05]
+    dof_properties:
+      randomize_stiffness: False
+      randomize_damping: True
+      added_damping_range: [-0.2, 0.2]
+    spring_properties:
+      randomize_stiffness: True
+      stiffness_range: [0.9, 1.1]  # multiplicative
+      randomize_damping: True
+      damping_range: [ 0.9, 1.1 ]  # multiplicative
+      randomize_setpoint: True
+      setpoint_range: [0.75, 1.25]  # multiplicative
+    pd_gain_properties:
+      randomize_p_gain: True
+      p_gain_range: [0.9, 1.1]  # multiplicative
+      randomize_d_gain: True
+      d_gain_range: [0.9, 1.1]  # multiplicative
+    torque_speed_properties:
+      randomize_max_torque: True
+      max_torque_range: [0.95, 1.05]  # multiplicative
+      randomize_max_speed: True
+      max_speed_range: [0.9, 1.1]  # multiplicative
+      randomize_slope: True
+      slope_range: [0.9, 1.1]  # multiplicative
+train_config:
+  policy:
+    actor_hidden_dims: [128, 64, 32]
+    critic_hidden_dims: [128, 64, 32]
+    activation: 'elu'
+  algorithm:
+    entropy_coef: 0.01
+  runner:
+    run_name: ''
+    experiment_name: ${experiment_name}
+    load_run: -1
+    max_iterations: 300
+    resume: False
+    checkpoint: -1
+
+args:
+  task: ${task}
+  headless: ${headless}
+  num_envs: ${env_config.env.num_envs}
+  seed: ${seed}
+  max_iterations: ${train_config.runner.max_iterations}
+  resume: ${train_config.runner.resume}
+  experiment_name: ${train_config.runner.experiment_name}
+  run_name: ${train_config.runner.run_name}
+  load_run: ${train_config.runner.load_run}
+  checkpoint: ${train_config.runner.checkpoint}

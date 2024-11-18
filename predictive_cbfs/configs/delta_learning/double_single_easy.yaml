@@ -8,7 +8,6 @@ epochs: 2
 train_epochs: 1
 learning_iters: 50
 p_cbf_horizon_s: 5
-delta_max: 5
 delta_K : 0.5
 decorr_prop: 0.1
 batch_size: 2048
@@ -37,14 +36,16 @@ controller:
     dyn:
       _target_: predictive_cbfs.roms.SingleInt1D
       dt: 0.01
+    delta_max: 5
 
 
 env_config:
   env:
     num_envs: 4096
     episode_length_s: 10
+    dt: 0.01
     model:
-      dt: 0.01
+      dt: ${env_config.env.dt}
       cls: 'DoubleInt1D'
   init_state:
     default_noise_lower: [ -0., -1. ]  # [foot, wheel1, 2, 3]

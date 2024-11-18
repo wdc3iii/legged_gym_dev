@@ -188,6 +188,40 @@ class HopperRoughCfg( LeggedRobotCfg ):
         base_height_target = .55
         max_contact_force = 100.  # forces above this value are penalized
 
+        class raibert:
+            Kp = -0.3
+            Kv = -0.9
+            Kff = 0.0
+            clip_pos = 0.5
+            clip_vel = 1.0
+            clip_vel_des = 0.2
+            clip_ang = 0.2
+
+        class differential_error:
+            pos_slope = 4
+            neg_slope = 1
+        class sigma_values:
+            tracking_rom = 0.25  # tracking reward = exp(-error^2/sigma)
+            feet_air_time = 1.
+            stumble = 1.
+            stand_still = 1.
+            feet_contact_forces = 1.
+            tracking_lin_vel = 1.
+            tracking_ang_vel = 1.
+            torque_limits = 1.
+            dof_vel_limits = 1.
+            dof_pos_limits = 1.
+            termination = 1.
+            collision = 1.
+            action_rate = 1.
+            dof_acc = 1.
+            dof_vel = 1.
+            torques = 1.
+            base_height = 1.
+            orientation = 1.
+            ang_vel_xy = 1.
+            lin_vel_z = 1.
+
     class curriculum:
         use_curriculum = False
         curriculum_steps = [100, 200]

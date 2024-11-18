@@ -40,6 +40,8 @@ from isaacgym import gymtorch, gymapi, gymutil
 import torch
 from torch import Tensor
 from typing import Tuple, Dict
+import shutil
+from xml.etree import ElementTree as ElTree
 
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
@@ -76,6 +78,11 @@ class LeggedRobot(BaseTask):
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True
+
+        self.time_until_next_push = torch_rand_float(self.cfg.domain_rand.time_between_pushes[0],
+                                                     self.cfg.domain_rand.time_between_pushes[1],
+                                                     (self.num_envs, 1),
+                                                     device=self.device)
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
@@ -121,6 +128,17 @@ class LeggedRobot(BaseTask):
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
 
         self._post_physics_step_callback()
+
+        self.time_until_next_push -= self.cfg.control.decimation * self.sim_params.dt
+        need_push = (self.time_until_next_push <= 0).reshape((-1,))
+
+        if torch.any(need_push):
+            self._push_robots(need_push)
+            # Reset the timer for the next push for the environments that needed a push
+            self.time_until_next_push[need_push] = torch_rand_float(self.cfg.domain_rand.time_between_pushes[0],
+                                                                    self.cfg.domain_rand.time_between_pushes[1],
+                                                                    (torch.sum(need_push), 1),
+                                                                    device=self.device)
 
         # compute observations, rewards, resets, ...
         self.check_termination()
@@ -368,20 +386,20 @@ class LeggedRobot(BaseTask):
         Args:
             env_ids (List[int]): Environments ids for which new commands are needed
         """
-        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
-                                                     self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
-                                                     device=self.device).squeeze(1)
-        self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
-                                                     self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
-                                                     device=self.device).squeeze(1)
-        if self.cfg.commands.heading_command:
-            self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
-                                                         self.command_ranges["heading"][1], (len(env_ids), 1),
-                                                         device=self.device).squeeze(1)
-        else:
-            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
-                                                         self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
-                                                         device=self.device).squeeze(1)
+        # self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
+        #                                              self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
+        #                                              device=self.device).squeeze(1)
+        # self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
+        #                                              self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
+        #                                              device=self.device).squeeze(1)
+        # if self.cfg.commands.heading_command:
+        #     self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
+        #                                                  self.command_ranges["heading"][1], (len(env_ids), 1),
+        #                                                  device=self.device).squeeze(1)
+        # else:
+        #     self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
+        #                                                  self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
+        #                                                  device=self.device).squeeze(1)
 
         # set small commands to zero
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
@@ -453,12 +471,13 @@ class LeggedRobot(BaseTask):
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-    def _push_robots(self):
+    def _push_robots(self, push_idx):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
-        self.root_states[:, 7:9] = torch_rand_float(-self.max_push_vel, self.max_push_vel, (self.num_envs, 2),
-                                                    device=self.device)  # lin vel x/y
-        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
+        max_vel = self.cfg.domain_rand.max_push_vel_xy
+        self.root_states[push_idx, 7:9] = torch_rand_float(-max_vel, max_vel, (torch.sum(push_idx), 2),
+                                                           device=self.device)  # lin vel x/y
+        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(torch.clone(self.root_states.detach())))
 
     def _update_terrain_curriculum(self, env_ids):
         """ Implements the game-inspired curriculum.
@@ -733,11 +752,16 @@ class LeggedRobot(BaseTask):
         env_upper = gymapi.Vec3(0., 0., 0.)
         self.actor_handles = []
         self.envs = []
+        asset_file_tmp = 'robot_tmp.urdf'
+        tmp_urdf_path = os.path.join(asset_root, asset_file_tmp)
+        shutil.copyfile(asset_path, tmp_urdf_path)
+        d_com = self.cfg.domain_rand.max_rnd_com_dist
         for i in range(self.num_envs):
             # create env instance
             env_handle = self.gym.create_env(self.sim, env_lower, env_upper, int(np.sqrt(self.num_envs)))
             pos = self.env_origins[i].clone()
-            pos[:2] += torch_rand_float(-1., 1., (2, 1), device=self.device).squeeze(1)
+            # pos[:2] += torch_rand_float(-1., 1., (2, 1), device=self.device).squeeze(1)
+            # TODO: Debugging
             start_pose.p = gymapi.Vec3(*pos)
 
             rigid_shape_props = self._process_rigid_shape_props(self.rigid_shape_props_asset, i)
@@ -817,24 +841,42 @@ class LeggedRobot(BaseTask):
             self.env_origins[:, 2] = 0.
 
     def _parse_cfg(self, cfg):
+        # self.dt = self.cfg.control.decimation * self.sim_params.dt
+        # self.obs_scales = self.cfg.normalization.obs_scales
+        # self.reward_scales = class_to_dict(self.cfg.rewards.scales)
+        # self.nominal_command_ranges = class_to_dict(self.cfg.commands.ranges)
+        # self.curriculum_state = 0
+        # self.nominal_command_ranges = class_to_dict(self.cfg.commands.ranges)
+        # self.nominal_push_time = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
+        # self.nominal_max_push_vel = self.cfg.domain_rand.max_push_vel
+        # if self.cfg.curriculum.use_curriculum:
+        #     self.update_command_curriculum()
+        # else:
+        #     self.command_ranges = self.nominal_command_ranges
+        #     self.push_time = self.nominal_push_time
+        #     self.max_push_vel = self.nominal_max_push_vel
+        # if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
+        #     self.cfg.terrain.curriculum = False
+        # self.max_episode_length_s = self.cfg.env.episode_length_s
+        # self.max_episode_length = np.ceil(self.max_episode_length_s / self.dt)
         self.dt = self.cfg.control.decimation * self.sim_params.dt
         self.obs_scales = self.cfg.normalization.obs_scales
         self.reward_scales = class_to_dict(self.cfg.rewards.scales)
-        self.nominal_command_ranges = class_to_dict(self.cfg.commands.ranges)
-        self.curriculum_state = 0
-        self.nominal_command_ranges = class_to_dict(self.cfg.commands.ranges)
-        self.nominal_push_time = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
-        self.nominal_max_push_vel = self.cfg.domain_rand.max_push_vel
-        if self.cfg.curriculum.use_curriculum:
-            self.update_command_curriculum()
-        else:
-            self.command_ranges = self.nominal_command_ranges
-            self.push_time = self.nominal_push_time
-            self.max_push_vel = self.nominal_max_push_vel
-        if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
-            self.cfg.terrain.curriculum = False
         self.max_episode_length_s = self.cfg.env.episode_length_s
         self.max_episode_length = np.ceil(self.max_episode_length_s / self.dt)
+
+        # nominal values (curriculum)
+        self.curriculum_state = 0
+        self.nominal_tracking_sigma = self.cfg.rewards.tracking_sigma
+        self.tracking_sigma = self.nominal_tracking_sigma
+        self.nominal_push_time = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
+        self.nominal_max_push_vel = self.cfg.domain_rand.max_push_vel
+
+        if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
+            self.cfg.terrain.curriculum = False
+
+        self.push_time = self.nominal_push_time
+        self.max_push_vel = self.nominal_max_push_vel
 
     def _draw_debug_vis(self):
         """ Draws visualizations for dubugging (slows down simulation a lot).

@@ -35,11 +35,7 @@ import torch
 from typing import Dict
 from legged_gym.envs import LeggedRobot
 from legged_gym.envs.hopper.flat.hopper_config import HopperRoughCfg
-from legged_gym.utils.helpers import torch_rand_vec_float
-from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate, \
-    euler_angles_to_matrix, matrix_to_quaternion
-
-from deep_tube_learning.controllers import RaibertHeuristic
+from pytorch3d.transforms import quaternion_invert, quaternion_multiply, so3_log_map, quaternion_to_matrix, Rotate
 
 
 class Hopper(LeggedRobot):
@@ -57,17 +53,10 @@ class Hopper(LeggedRobot):
         self.max_speed_range = cfg.domain_rand.torque_speed_properties.max_speed_range
         self.max_slope_range = cfg.domain_rand.torque_speed_properties.slope_range
         self.zero_action = torch.repeat_interleave(torch.tensor(cfg.control.zero_action).reshape((1, -1)), cfg.env.num_envs, 0).float()
-        super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
-        self.raibert_Kp = cfg.rewards.raibert.Kp
-        self.raibert_Kv = cfg.rewards.raibert.Kv
-        self.raibert_Kff = cfg.rewards.raibert.Kff
-        self.raibert_clip_pos = cfg.rewards.raibert.clip_pos
-        self.raibert_clip_vel = cfg.rewards.raibert.clip_vel
-        self.raibert_clip_vel_des = cfg.rewards.raibert.clip_vel_des
-        self.raibert_clip_ang = cfg.rewards.raibert.clip_ang
 
+        super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self.zero_action = self.zero_action.to(self.device)
-        self.foot_joint_index = torch.tensor([0])
+        self.foot_joint_index = torch.tensor([0], device=self.device)
         mask = torch.ones(self.num_dof, dtype=torch.bool)
         mask[self.foot_joint_index] = False
         self.wxyz_quat_inds = torch.tensor([6, 3, 4, 5])
@@ -115,14 +104,11 @@ class Hopper(LeggedRobot):
             if self.device == 'cpu':
                 self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
-
-            # Hopper-specific
             self.gym.refresh_actor_root_state_tensor(self.sim)
             self.gym.refresh_net_contact_force_tensor(self.sim)
 
             # prepare quantities
             self.base_quat[:] = self.root_states[:, 3:7]
-            self.prev_x = self.root_states[0, 0]
             self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
 
         self.post_physics_step()
@@ -170,7 +156,7 @@ class Hopper(LeggedRobot):
         self.compute_reward()
         env_ids = self.reset_buf.nonzero(as_tuple=False).flatten()
         self.reset_idx(env_ids)
-        self.compute_observations()  # in some cases a simulation step might be required to refresh some obs (for example body positions)
+        self.compute_observations()  # in some cases a simulation step might be required to refresh some obs
 
         self.last_actions[:] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
@@ -195,7 +181,7 @@ class Hopper(LeggedRobot):
 
         foot_pos = self.dof_pos[:, self.foot_joint_index]
         foot_vel = self.dof_vel[:, self.foot_joint_index]
-        contacts = torch.squeeze(self.contact_forces[:, self.feet_indices, 2] > 0.1, dim=1)
+        contacts = torch.squeeze(self.contact_forces[:, self.feet_indices, 2] > 0.1)
 
         not_contacts = torch.logical_not(contacts)
         contact_inds = torch.nonzero(contacts, as_tuple=False)
@@ -217,102 +203,67 @@ class Hopper(LeggedRobot):
         # Compute wheel torques
         if "spindown" in control_type:
             self.torques[contact_inds, self.wheel_joint_indices] = -kd_spindown[contact_inds.squeeze(), :] * wheel_vel[contact_inds.squeeze()]
-            orient_inds = not_contact_inds.squeeze(dim=1)
+            orient_inds = not_contact_inds.reshape((-1,))
         else:
             orient_inds = torch.arange(self.num_envs)
 
-        if orient_inds.shape != torch.Size([]):
-            if orient_inds.shape[0] > 0:
-                if "orientation" in control_type:
-                    quat_des = actions_scaled[orient_inds, :] / torch.linalg.norm(actions_scaled[orient_inds, :], dim=-1, keepdim=True)
+        if orient_inds.shape[0] > 0:
+            if "orientation" in control_type:
+                quat_des = actions_scaled[orient_inds, :] / torch.linalg.norm(actions_scaled[orient_inds, :], dim=-1, keepdim=True)
+                # quat_des = torch.zeros_like(actions_scaled[orient_inds, :]).to(self.device)
+                # quat_des[:, 0] = 1
 
-                    quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
-                    err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
-                    log_err = so3_log_map(quaternion_to_matrix(err))
-                    local_tau = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * log_err - d_gains[orient_inds[:, None], self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
+                quat_act = self.root_states[orient_inds[:, None], self.wxyz_quat_inds]
+                err = quaternion_multiply(quaternion_invert(quat_des), quat_act)
+                log_err = so3_log_map(quaternion_to_matrix(err))
+                local_tau = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * log_err - d_gains[orient_inds[:, None], self.wheel_joint_indices] * self.base_ang_vel[orient_inds.squeeze(), :]
 
-                    tau = self.actuator_transform.transform_points(local_tau)
-                    self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
-                elif "V" in control_type:
-                    self.torques[orient_inds, self.wheel_joint_indices] = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
-                                                          - d_gains[orient_inds[:, None], self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
-                elif "T" in control_type:
-                    self.torques[orient_inds, self.wheel_joint_indices] = actions_scaled[orient_inds, self.wheel_joint_indices]
-                else:
-                    raise NameError(f"Unknown controller type: {control_type}")
+                tau = self.actuator_transform.transform_points(local_tau)
+                self.torques[orient_inds[:, None], self.wheel_joint_indices] = tau
+            elif "V" in control_type:
+                self.torques[orient_inds, self.wheel_joint_indices] = -p_gains[orient_inds[:, None], self.wheel_joint_indices] * (actions_scaled[orient_inds, self.wheel_joint_indices] - wheel_vel) \
+                    - d_gains[orient_inds[:, None], self.wheel_joint_indices] * (wheel_vel - self.last_dof_vel[orient_inds, self.wheel_joint_indices]) / self.sim_params.dt
+            elif "T" in control_type:
+                self.torques[orient_inds, self.wheel_joint_indices] = actions_scaled[orient_inds, self.wheel_joint_indices]
+            else:
+                raise NameError(f"Unknown controller type: {control_type}")
 
         ts_ratio = self.torque_speed_bound_ratio * self.torque_speed_bound_ratio_random
         t_bound = self.torque_limits * self.torque_limit_random
         w_bound = self.wheel_speed_limits * self.wheel_limit_random
         state_input_upper = -ts_ratio * t_bound[:, self.wheel_joint_indices] / w_bound * (wheel_vel - w_bound)
         state_input_lower = -ts_ratio * t_bound[:, self.wheel_joint_indices] / w_bound * (wheel_vel + w_bound)
-        self.torques[:, self.wheel_joint_indices] = torch.clip(self.torques[:, self.wheel_joint_indices],
-                                                               state_input_lower, state_input_upper)
+        self.torques[:, self.wheel_joint_indices] = torch.clip(self.torques[:, self.wheel_joint_indices], state_input_lower, state_input_upper)
         return torch.clip(self.torques, -t_bound, t_bound)
 
     def compute_observations(self):
-        """ Computes observations
+        """ Computes observations: (z, quat, foot_pos, v, omega, foot_vel, wheel_vel, cmd, action)
         """
         actions_normalized_quat = torch.clone(self.actions)
-        actions_normalized_quat /= torch.linalg.norm(actions_normalized_quat, dim=-1,
-                                                     keepdim=True)  # Normalize actions when feeding back to model
-        actions_normalized_quat[actions_normalized_quat[:, 0] < 0, :] *= -1  # By convention, always have qw > 0
-        # Adjust trajectory positions relative to current position
-
-        self.obs_buf = torch.cat((self.root_states[:, :3] - self.env_origins,
+        actions_normalized_quat /= torch.linalg.norm(actions_normalized_quat, dim=-1, keepdim=True)  # Normalize actions when feeding back to model
+        actions_normalized_quat[actions_normalized_quat[:, 0] < 0, :] *= -1                          # By convention, always have qw > 0
+        self.obs_buf = torch.cat((self.root_states[:, 2][:, None] * self.obs_scales.z_pos,
                                   self.base_quat,
-                                  self.base_lin_vel,
-                                  self.base_ang_vel,
-                                  self.dof_vel[:, self.wheel_joint_indices],
+                                  self.base_lin_vel * self.obs_scales.lin_vel,
+                                  self.base_ang_vel * self.obs_scales.ang_vel,
+                                  self.dof_vel[:, self.wheel_joint_indices] * self.obs_scales.dof_vel,
+                                  self.commands[:, :3] * self.commands_scale,
                                   actions_normalized_quat
-                                  ), dim=-1)
-
+                                  ),dim=-1)
         # add perceptive inputs if not blind
         if self.cfg.terrain.measure_heights:
-            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
-                                 1.) * self.obs_scales.height_measurements
+            heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.) * self.obs_scales.height_measurements
             self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
         # add noise if needed
         if self.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
 
-    def get_states(self):
-        return torch.clone(torch.concatenate((
-            self.root_states[:, :3] - self.env_origins,
-            self.root_states[:, 3:7],
-            self.dof_pos,
-            self.root_states[:, 7:],
-            self.dof_vel
-        ), dim=1).detach())
-
-    def set_states(self, states):
-        for _ in range(2):
-            self.root_states[:, :3] = states[:, :3] + self.env_origins
-            self.root_states[:, 3:7] = states[:, 3:7]
-            self.dof_pos = states[:, 7:11]
-            self.root_states[:, 7:] = states[:, 11:17]
-            self.dof_vel = states[:, 17:21]
-
-            env_ids_int32 = torch.arange(self.num_envs, device=self.device).to(dtype=torch.int32)
-            self.gym.set_actor_root_state_tensor_indexed(self.sim,
-                                                         gymtorch.unwrap_tensor(self.root_states),
-                                                         gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
-            self.gym.set_dof_state_tensor_indexed(self.sim,
-                                                  gymtorch.unwrap_tensor(self.dof_state),
-                                                  gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
-
-            obs, privileged_obs, _, _, _ = self.step(self.zero_action)
-        return obs, privileged_obs
-
-
     def reset(self):
         """ Reset all robots"""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
-        self.prev_x = self.root_states[0, 0]
         obs, privileged_obs, _, _, _ = self.step(self.zero_action)
-        # For some reason we need an addiontional reset
+        # For some reason need to do this twice
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
-        self.prev_x = self.root_states[0, 0]
         obs, privileged_obs, _, _, _ = self.step(self.zero_action)
         return obs, privileged_obs
 
@@ -333,7 +284,6 @@ class Hopper(LeggedRobot):
             (len(env_ids), self.num_dof), device=self.device
         )
         self.actions[env_ids, :] = torch.clone(self.zero_action[env_ids, :].detach())
-
         env_ids_int32 = env_ids.to(dtype=torch.int32)
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
@@ -344,24 +294,31 @@ class Hopper(LeggedRobot):
             Sets base position based on the curriculum
             Selects randomized base velocities within -0.5:0.5 [m/s, rad/s]
         Args:
-            env_ids (List[int]): Environment ids
+            env_ids (List[int]): Environemnt ids
         """
         # base position
-        self.root_states[env_ids] = self.base_init_state
-        self.root_states[env_ids, :3] += self.env_origins[env_ids]
-        self.root_states[env_ids, :7] += torch_rand_vec_float(
-            self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
-            (len(env_ids), 7), device=self.device
-        )  # xy position within 1m of the center
-        self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
-
+        if self.custom_origins:
+            self.root_states[env_ids] = self.base_init_state
+            self.root_states[env_ids, :3] += self.env_origins[env_ids]
+            self.root_states[env_ids, :7] += torch_rand_vec_float(
+                self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
+                (len(env_ids), 7), device=self.device
+            )  # xy position within 1m of the center
+            self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
+        else:
+            self.root_states[env_ids] = self.base_init_state
+            self.root_states[env_ids, :3] += self.env_origins[env_ids]
+            self.root_states[env_ids, :7] += torch_rand_vec_float(
+                self.default_root_pos_noise_lower, self.default_root_pos_noise_upper,
+                (len(env_ids), 7), device=self.device
+            )  # xy position within 1m of the center
+            self.root_states[env_ids, 3:7] /= torch.linalg.norm(self.root_states[env_ids, 3:7], dim=-1, keepdim=True)
         if self.cfg.init_state.randomize_yaw:
             yaw = torch_rand_float(-torch.pi, torch.pi, (len(env_ids), 1), device=self.device)
-            quat_yaw = matrix_to_quaternion(euler_angles_to_matrix(torch.concatenate([torch.zeros((len(env_ids), 2), device=self.device), yaw], dim=-1), "XYZ"))
+            quat_yaw =  matrix_to_quaternion(euler_angles_to_matrix(torch.concatenate([torch.zeros((len(env_ids), 2), device=self.device), yaw], dim=-1), "XYZ"))
             q_wxyz = self.root_states[:, self.wxyz_quat_inds][env_ids, :]
             q_new_wxyz = quaternion_multiply(q_wxyz, quat_yaw)
             self.root_states[env_ids, 3:7] = q_new_wxyz[:, [1, 2, 3, 0]]
-
         # base velocities
         self.root_states[env_ids, 7:13] = torch_rand_vec_float(
             self.default_root_vel_noise_lower, self.default_root_vel_noise_upper,
@@ -372,14 +329,13 @@ class Hopper(LeggedRobot):
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
-    def _push_robots(self, push_idx):
+    def _push_robots(self, push_inds):
         """ Random pushes the robots. Emulates an impulse by setting a randomized base velocity.
         """
 
-        self.root_states[push_idx, 7:13] += torch_rand_vec_float(-self.max_vel, self.max_vel,
-                                                                (len(push_idx), 6), device=self.device)
+        self.root_states[push_inds, 7:13] += torch_rand_vec_float(-self.max_vel, self.max_vel,
+                                                        (len(push_inds), 6), device=self.device)
 
-        env_ids_int32 = push_idx.to(dtype=torch.int32)
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                              gymtorch.unwrap_tensor(self.root_states),
                                              gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
@@ -433,7 +389,6 @@ class Hopper(LeggedRobot):
         self.actions = torch.clone(self.zero_action.to(self.device).detach())
         self.kd_spindown = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
         self.wheel_speed_limits = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
-        self.wheel_speed_limits = torch.zeros(3, dtype=torch.float, device=self.device, requires_grad=False)
 
         for i in range(1, 4):
             wheel_str = f"wheel{i}_rotation"
@@ -463,19 +418,32 @@ class Hopper(LeggedRobot):
         self.add_noise = self.cfg.noise.add_noise
         noise_scales = self.cfg.noise.noise_scales
         noise_level = self.cfg.noise.noise_level
-
-        noise_vec[0:2] = noise_scales.z_pos * noise_level
-        noise_vec[3:7] = noise_scales.quat * noise_level
-        noise_vec[7:10] = noise_scales.lin_vel * noise_level
-        noise_vec[10:13] = noise_scales.ang_vel * noise_level
-        noise_vec[13:16] = noise_scales.dof_vel * noise_level
-
-        noise_vec[16:20] = 0.  # previous actions
-
+        noise_vec[0] = noise_scales.z_pos * noise_level * self.obs_scales.z_pos
+        noise_vec[1:5] = noise_scales.quat * noise_level
+        noise_vec[5:8] = noise_scales.lin_vel * noise_level * self.obs_scales.lin_vel
+        noise_vec[8:11] = noise_scales.ang_vel * noise_level * self.obs_scales.ang_vel
+        noise_vec[11:14] = noise_scales.dof_vel * noise_level * self.obs_scales.dof_vel
+        noise_vec[14:17] = 0.  # commands
+        noise_vec[17:21] = 0.  # previous actions
         if self.cfg.terrain.measure_heights:
-            noise_vec[20:207] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
-
+            noise_vec[18:205] = noise_scales.height_measurements * noise_level * self.obs_scales.height_measurements
         return noise_vec
+
+    def _resample_commands(self, env_ids):
+        """ Randommly select commands of some environments
+
+        Args:
+            env_ids (List[int]): Environments ids for which new commands are needed
+        """
+        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0], self.command_ranges["lin_vel_x"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0], self.command_ranges["lin_vel_y"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        if self.cfg.commands.heading_command:
+            self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0], self.command_ranges["heading"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        else:
+            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0], self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+
+        # set small commands to zero
+        self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.05).unsqueeze(1)
 
     def _reward_torque_limits(self):
         # penalize torques too close to the limit
@@ -488,23 +456,3 @@ class Hopper(LeggedRobot):
     def _reward_unit_quat(self):
         act_norm = torch.linalg.norm(self.actions, dim=-1)
         return torch.square(1 - act_norm)
-
-    def _reward_raibert(self):
-        rl_actions = self.actions
-
-        current_velocity = quat_rotate_inverse(self.root_states[:, 3:7], self.root_states[:, 7:10])[:, :2]
-        current_position = self.root_states[:, :2]
-
-        desired_position = self.traj_gen.get_trajectory()[:, 0]
-        desired_velocity = self.traj_gen.v
-
-        positional_error = desired_position - current_position
-        # velocity_error = desired_velocity - current_velocity
-        quaternion = self.root_states[:, 3:7]  # w,x,y,z
-        rh_obs = torch.cat((positional_error, current_velocity, desired_velocity, quaternion), dim=1)
-
-        rh_actions = RaibertHeuristic.raibert_policy(
-            rh_obs.detach(), self.raibert_Kp, self.raibert_Kv, self.raibert_Kff,
-            self.raibert_clip_pos, self.raibert_clip_vel, self.raibert_clip_vel_des, self.raibert_clip_ang
-        )
-        return torch.sum(torch.square(rl_actions - rh_actions), dim=1)

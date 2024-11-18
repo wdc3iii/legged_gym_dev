@@ -921,9 +921,8 @@ class LeggedRobotTrajectory(BaseTask):
         if self.cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
             self.cfg.terrain.curriculum = False
 
-        else:
-            self.push_time = self.nominal_push_time
-            self.max_push_vel = self.nominal_max_push_vel
+        self.push_time = self.nominal_push_time
+        self.max_push_vel = self.nominal_max_push_vel
 
     def destroy_sim(self):
         self.gym.destroy_viewer(self.viewer)

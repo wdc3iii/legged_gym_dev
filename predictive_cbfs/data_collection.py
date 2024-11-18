@@ -50,18 +50,10 @@ def data_creation_main(cfg):
         pickle.dump(cfg_dict, f)
 
     if cfg.env_config.env.type == 'isaacgym':
-        if cfg.controller.type == 'rl':
-            exp_name = cfg.wandb_experiment
-            model_name = f'{exp_name}_model:best{cfg.curriculum}'
-            api = wandb.Api()
-            rl_cfg, state_dict = wandb_model_load(api, model_name)
-        elif cfg.controller.type == 'rh':
-            cfg_dir = str(Path(__file__).parent / "configs" / "rl")
-            GlobalHydra.instance().clear()
-            with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
-                rl_cfg = compose(config_name=cfg.controller.config_name)
-        else:
-            raise ValueError(f"Controller type {cfg.controller.type} not implemented.")
+        cfg_dir = str(Path(__file__).parent.resolve() / "configs" / "isaac")
+        GlobalHydra.instance().clear()
+        with initialize_config_dir(config_dir=cfg_dir, version_base="1.2"):
+            rl_cfg = compose(config_name="hopper")
         rl_cfg = update_hydra_cfg(cfg, rl_cfg)
 
         args = get_args()
@@ -71,16 +63,7 @@ def data_creation_main(cfg):
 
         env, env_cfg = task_registry.make_env(name=rl_cfg.task, args=args, env_cfg=env_cfg)
 
-        if cfg.controller.type == 'rl':
-            train_cfg.runner.resume = True
-            ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args,
-                                                                  train_cfg=train_cfg)
-            policy = ppo_runner.get_inference_policy(device=env.device)
-        elif cfg.controller.type == 'rh':
-            raibert = RaibertHeuristic(cfg)
-            policy = raibert.get_inference_policy(device=env.device)
-        else:
-            raise ValueError(f"IsaacGym controller type {cfg.controller.type} not implemented.")
+        policy = instantiate(cfg.controller)
     elif cfg.env_config.env.type == 'custom':
         env_cfg = cfg.env_config
         env = CustomSim(env_cfg)
@@ -88,22 +71,22 @@ def data_creation_main(cfg):
     else:
         raise ValueError(f"Environment type {cfg.env_config.env.type} not implemented.")
 
-    x_n = env.get_states().shape[1]
-    env.reset()
-    eval_root_states = torch.clone(env.root_states.detach())
+    obs, _ = env.reset()
+    x_n =obs.shape[1]
+    eval_states = torch.clone(env.get_states().detach())
     eval_func = instantiate(cfg.eval_function)
 
     # Loop over epochs
     num_robots = env_cfg.env.num_envs
-    max_rom_ep_length = int(cfg.env_config.env.episode_length_s / env.model.dt) - 5
+    max_ep_length = int(cfg.env_config.env.episode_length_s / env.dt) - 5
 
 
     """_____________________________________ Loop over Learning Iterations __________________________________________"""
     for ii in range(cfg.learning_iters):
         # Data structures
-        x = torch.zeros((cfg.epochs, num_robots, max_rom_ep_length + 1, x_n), device=env.device)  # Epochs, steps, states
-        h = torch.zeros((cfg.epochs, num_robots, max_rom_ep_length + 1), device=env.device)
-        delta = torch.zeros((cfg.epochs, num_robots, max_rom_ep_length + 1), device=env.device)
+        x = torch.zeros((cfg.epochs, num_robots, max_ep_length + 1, x_n), device=env.device)  # Epochs, steps, states
+        h = torch.zeros((cfg.epochs, num_robots, max_ep_length + 1), device=env.device)
+        delta = torch.zeros((cfg.epochs, num_robots, max_ep_length + 1), device=env.device)
 
 
         """________________________________ Collect Data Under Current delta policy _________________________________"""
@@ -112,29 +95,17 @@ def data_creation_main(cfg):
             # Initialization
             env.reset()
             obs = env.get_observations()
-            x[epoch, :, 0, :] = env.get_states()
+            x[epoch, :, 0, :] = obs.detach()
             h[epoch, :, 0] = policy.v_filt.cbf.h(policy.v_filt.dyn.proj(x[epoch, :, 0, :]))
 
             # Loop over time steps
-            for t in range(max_rom_ep_length):
+            for t in range(max_ep_length):
                 # have to modify obs if using Raibert Heuristic
-                if 'type' in cfg.controller.keys() and cfg.controller.type == 'rh':
-                    if isinstance(env.traj_gen.rom, SingleInt2D):
-                        current_velocity = env.root_states[:, 7:9]
-                        current_position = env.root_states[:, :2]
-
-                        desired_position = env.traj_gen.get_trajectory()[:, cfg.controller.N]
-                        desired_velocity = env.traj_gen.get_v_trajectory()[:, cfg.controller.N]
-
-                        positional_error = desired_position - current_position
-                        # velocity_error = desired_velocity - current_velocity
-                        quaternion = env.base_quat  # x,y,z,w
-                        obs = torch.cat((positional_error, current_velocity, desired_velocity, quaternion), dim=1)
                 actions = policy(obs.detach())
                 obs, _, _, dones, _ = env.step(actions.detach())
 
                 # Save Data
-                x[epoch, :, t + 1, :] = env.get_states()
+                x[epoch, :, t + 1, :] = obs.detach()
                 h[epoch, :, t + 1] = policy.v_filt.cbf.h(policy.v_filt.dyn.proj(x[epoch, :, t+1, :]))
                 delta[epoch, :, t + 1] = policy.v_filt.delta_val.detach()
 
@@ -162,16 +133,42 @@ def data_creation_main(cfg):
             return torch.min(sliding_windows, dim=-1).values
 
         # Compute minimum violation over the horizon
-        err_h_bar = -sliding_min(h, int(cfg.p_cbf_horizon_s / env.model.dt))
+        err_h_bar = -sliding_min(h, int(cfg.p_cbf_horizon_s / env.dt))
         # Compute the new desired
         delta_targ = delta[:, :, :err_h_bar.shape[2]] + cfg.delta_K * err_h_bar
-        delta_targ = torch.clip(delta_targ, 0, cfg.delta_max)
+        delta_targ = torch.clip(delta_targ, 0, policy.v_filt.delta_max)
 
 
         # Reshape for learning
         x = x[:, :, :err_h_bar.shape[2], :]
         x = x.reshape(cfg.epochs * num_robots * x.shape[2], x.shape[3])
         delta_targ = delta_targ.reshape(cfg.epochs * num_robots * delta_targ.shape[2], 1)
+
+        # Adjust points which are near origin?
+        if cfg.adjust_distribution:
+            # Example inputs
+
+            # 1. Identify the proportion of rows close to the origin
+            distances = torch.norm(x[:, :2], dim=1)  # Compute distances from origin
+            close_mask = distances <= cfg.converged_tol  # Mask for rows within epsilon
+            proportion_close = close_mask.float().mean().item()  # Proportion of rows close to origin
+            far_mask = ~close_mask
+            # 2. Randomly eliminate rows to ensure at most alpha percent are close
+            num_close_to_keep = int(cfg.max_converged_proportion * x.shape[0])  # Maximum allowed rows close to origin
+            close_indices = torch.where(close_mask)[0]  # Indices of close rows
+
+            if len(close_indices) > num_close_to_keep:
+                keep_indices = torch.randperm(len(close_indices))[:num_close_to_keep]
+                close_indices_to_keep = close_indices[keep_indices]
+                close_mask[close_indices] = False  # Reset all initially
+                close_mask[close_indices_to_keep] = True  # Mark the subset to keep
+
+                # Resulting matrix after elimination
+                x = x[close_mask | far_mask]
+
+        # Adjust points to keep
+        if policy.keep_inds is not None:
+            x = x[:, policy.keep_inds]
 
         # Downsample to avoid temporal corrolation
         n_samples = int(x.shape[0] * cfg.decorr_prop)
@@ -246,11 +243,12 @@ def data_creation_main(cfg):
         # copy the best NN over
         checkpoint_path = f"{ckpt_manager.ckpt_path}/best_model.pth"
         state_dict = torch.load(checkpoint_path)
-        new_delta.load_state_dict(state_dict)
-        policy.v_filt.delta = new_delta
+        # new_delta.load_state_dict(state_dict)
+        # policy.v_filt.delta = new_delta
+        policy.v_filt.delta.load_state_dict(state_dict)
 
         # Evaluate new NN?
-        eval_func(policy, env, eval_root_states, cfg, data_path, ii)
+        eval_func(policy, env, eval_states, cfg, data_path, ii)
 
     print(f"\nrun ID: {total_run_id}\ndataset name: {cfg.experiment_name}\nlocal folder: {cfg.experiment_name}_{total_run_id}")
     return epoch_data

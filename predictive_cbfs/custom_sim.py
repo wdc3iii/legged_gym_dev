@@ -7,7 +7,7 @@ class CustomSim:
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.dt = self.cfg.env.model.dt
+        self.dt = self.cfg.env.dt
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_envs = self.cfg.env.num_envs
 
@@ -29,6 +29,7 @@ class CustomSim:
 
     def reset(self):
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        return self.get_observations(), None
 
     def reset_idx(self, idx):
         self.root_states[idx, :] = torch_rand_vec_float(
@@ -41,3 +42,7 @@ class CustomSim:
 
     def get_states(self):
         return torch.clone(self.root_states.detach())
+
+    def set_states(self, states):
+        self.root_states = states
+        return self.get_observations(), None

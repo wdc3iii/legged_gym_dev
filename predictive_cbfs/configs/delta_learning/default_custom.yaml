@@ -6,7 +6,6 @@ epochs: 10
 train_epochs: 1
 learning_iters: 50
 p_cbf_horizon_s: 5
-delta_max: 5
 delta_K : 0.5
 decorr_prop: 0.1
 batch_size: 2048
@@ -16,8 +15,9 @@ controller: null
 
 env_config:
   env:
+    dt: 0.01
     type: 'custom'
-    num_envs: 8192
+    num_envs: 4096
     episode_length_s: 20
     model:
   noise:
