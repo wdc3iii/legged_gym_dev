@@ -5,10 +5,10 @@ from torch.utils.data import Dataset
 from pathlib import Path
 
 class CheckPointManager:
-    def __init__(self, metric_name="loss"):
+    def __init__(self, run_id, metric_name="loss"):
         self.metric_name = metric_name
         self.best_loss = float("inf")
-        self.ckpt_path = str(Path(__file__).parent / "models" / f"{wandb.run.id}")
+        self.ckpt_path = str(Path(__file__).parent / "models" / f"{run_id}")
         os.makedirs(self.ckpt_path, exist_ok=True)
 
     def save(self, model, metric, epoch, step):

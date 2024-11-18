@@ -12,8 +12,12 @@ delta_K : 2
 decorr_prop: 0.1
 batch_size: 2048
 steps_per_model_checkpoint: 100
-reduced_state: False
+save_eval_data: True
+save_training_data: False
+
+adjust_distribution: False
 converged_tol: 0.05
+max_converged_proportion: 0.01
 
 controller:
   _target_: predictive_cbfs.controllers.DoubleSingleVelTracking

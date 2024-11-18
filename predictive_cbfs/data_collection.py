@@ -16,15 +16,13 @@ from hydra import initialize_config_dir, compose
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import OmegaConf
 from isaacgym.torch_utils import *
-from deep_tube_learning.utils import update_args_from_hydra, update_cfgs_from_hydra, wandb_model_load, update_hydra_cfg
-from deep_tube_learning.controllers import RaibertHeuristic
-from trajopt.rom_dynamics import SingleInt2D
+from deep_tube_learning.utils import update_args_from_hydra, update_cfgs_from_hydra, update_hydra_cfg
 from predictive_cbfs.custom_sim import CustomSim
-from deep_tube_learning.train_tube import CheckPointManager
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 from scipy.io import savemat
 from predictive_cbfs.utils import CheckPointManager, RegressionDataset
+import matplotlib.pyplot as plt
 
 
 @hydra.main(
@@ -109,15 +107,23 @@ def data_creation_main(cfg):
                 h[epoch, :, t + 1] = policy.v_filt.cbf.h(policy.v_filt.dyn.proj(x[epoch, :, t+1, :]))
                 delta[epoch, :, t + 1] = policy.v_filt.delta_val.detach()
 
+            if epoch == 0:
+                eval_func(
+                    x[0, :, :], h[0, :, :], delta[0, :, :],
+                    cfg.save_eval_data, data_path, ii,
+                    policy
+                )
+
         # Log Data
-        with open(f"{data_path}/data_{ii}.pickle", "wb") as f:
-            epoch_data = {
-                'x': x.cpu().numpy(),
-                'h': h.cpu().numpy(),
-                'delta': delta.cpu().numpy(),
-            }
-            pickle.dump(epoch_data, f)
-            savemat(f"{data_path}/data_{ii}.mat", epoch_data)
+        if cfg.save_training_data:
+            with open(f"{data_path}/data_{ii}.pickle", "wb") as f:
+                epoch_data = {
+                    'x': x.cpu().numpy(),
+                    'h': h.cpu().numpy(),
+                    'delta': delta.cpu().numpy(),
+                }
+                pickle.dump(epoch_data, f)
+                savemat(f"{data_path}/data_{ii}.mat", epoch_data)
 
 
         """_____________________________________________ Learn a new delta policy ___________________________________"""
@@ -137,7 +143,6 @@ def data_creation_main(cfg):
         # Compute the new desired
         delta_targ = delta[:, :, :err_h_bar.shape[2]] + cfg.delta_K * err_h_bar
         delta_targ = torch.clip(delta_targ, 0, policy.v_filt.delta_max)
-
 
         # Reshape for learning
         x = x[:, :, :err_h_bar.shape[2], :]
@@ -175,6 +180,10 @@ def data_creation_main(cfg):
         inds = torch.randperm(x.shape[0])[:n_samples]
         x = x[inds, :]
         delta_targ = delta_targ[inds]
+        plt.figure()
+        plt.hist(delta_targ[delta_targ > 0].cpu().numpy(), bins=100)
+        plt.title(f'Iteration {ii}: Delta Target Histogram (for Delta > 0)')
+        plt.show()
         loader = DataLoader(RegressionDataset(x, delta_targ), batch_size=cfg.batch_size, shuffle=True)
 
         # Get a new NN
@@ -185,12 +194,12 @@ def data_creation_main(cfg):
 
         cfg_dict = OmegaConf.to_container(cfg, resolve=True)
         cfg_dict = pd.json_normalize(cfg_dict, sep="/").to_dict(orient="records")[0]
-        wandb.init(project="Predictive_CBFs",
-                   entity="wdc3iii",
-                   name=f"{experiment_name}_{ii}",  # Use the dynamic experiment name
-                   config=cfg_dict)
+        # wandb.init(project="Predictive_CBFs",
+        #            entity="wdc3iii",
+        #            name=f"{experiment_name}_{ii}",  # Use the dynamic experiment name
+        #            config=cfg_dict)
 
-        ckpt_manager = CheckPointManager(metric_name="loss")
+        ckpt_manager = CheckPointManager(total_run_id, metric_name="loss")
         # Fit the nn
         step = 0
         for t_ep in range(cfg.train_epochs):
@@ -220,38 +229,52 @@ def data_creation_main(cfg):
                 grad_norm = torch.cat(grads).norm()
 
                 # Log loss, lr, and gradient norm
-                wandb.log(
-                    {
-                        "loss_step": loss.item(),
-                        "lr_step": lr_scheduler.get_last_lr()[0],
-                        "grad_norm": grad_norm
-                    },
-                    step=step,
-                )
+                # wandb.log(
+                #     {
+                #         "loss_step": loss.item(),
+                #         "lr_step": lr_scheduler.get_last_lr()[0],
+                #         "grad_norm": grad_norm
+                #     },
+                #     step=step,
+                # )
                 pbar.set_postfix({"loss": loss.item(), "lr": lr_scheduler.get_last_lr()[0]})
                 epoch_loss += loss
                 if step % cfg.steps_per_model_checkpoint == 0:
                     ckpt_manager.save(new_delta, loss.item(), epoch=t_ep, step=step)
 
-            wandb.log(
-                {"loss_epoch": epoch_loss.item() / len(loader), "lr_epoch": lr_scheduler.get_last_lr()[0]},
-                step=step,
-            )
-        ckpt_manager.to_wandb()
-        wandb.finish()
+            # wandb.log(
+            #     {"loss_epoch": epoch_loss.item() / len(loader), "lr_epoch": lr_scheduler.get_last_lr()[0]},
+            #     step=step,
+            # )
+        # ckpt_manager.to_wandb()
+        # wandb.finish()
 
         # copy the best NN over
         checkpoint_path = f"{ckpt_manager.ckpt_path}/best_model.pth"
-        state_dict = torch.load(checkpoint_path)
+        state_dict = torch.load(checkpoint_path, weights_only=True)
         # new_delta.load_state_dict(state_dict)
         # policy.v_filt.delta = new_delta
         policy.v_filt.delta.load_state_dict(state_dict)
 
+        # Export to onnx
+        policy.v_filt.delta.eval()
+        onnx_file_path = f"{ckpt_manager.ckpt_path}/best_model.onnx"
+        torch.onnx.export(
+            policy.v_filt.delta,  # PyTorch model
+            x[0, :][None, :],  # Example input
+            onnx_file_path,  # Output file path
+            export_params=True,  # Store parameters in the model file
+            opset_version=11,  # ONNX opset version (adjust if needed)
+            do_constant_folding=True,  # Optimize constant folding for inference
+            input_names=["input"],  # Input tensor name(s)
+            output_names=["output"],  # Output tensor name(s)
+        )
+        policy.v_filt.delta.eval()
+
         # Evaluate new NN?
-        eval_func(policy, env, eval_states, cfg, data_path, ii)
+        # eval_func(policy, env, eval_states, cfg, data_path, ii)
 
     print(f"\nrun ID: {total_run_id}\ndataset name: {cfg.experiment_name}\nlocal folder: {cfg.experiment_name}_{total_run_id}")
-    return epoch_data
 
 
 if __name__ == "__main__":

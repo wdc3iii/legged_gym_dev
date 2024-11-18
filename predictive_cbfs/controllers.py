@@ -86,8 +86,8 @@ class RaibertHeuristic:
         self.clip_ang = clip_ang
         self.randomize_rp = randomize_rp > 0
         self.num_robots = None
-        self.rnd_pitch = torch.rand((num_robots, 1), device="cuda:0") * randomize_rp
-        self.rnd_roll = torch.rand((num_robots, 1), device="cuda:0") * randomize_rp
+        self.rnd_pitch = torch.rand((num_robots,), device="cuda:0") * randomize_rp
+        self.rnd_roll = torch.rand((num_robots,), device="cuda:0") * randomize_rp
 
 
     def get_inference_policy(self, device):
@@ -102,9 +102,9 @@ class RaibertHeuristic:
             )
 
         if self.randomize_rp:
-            return policy
-        else:
             return rnd_policy
+        else:
+            return policy
 
     @staticmethod
     def omega_to_quat(omega_pitch, omega_roll, omega_yaw):
