@@ -41,3 +41,7 @@ class RegressionDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
+
+
+def eta_schedule(epoch, eta_max, eta_decay):
+    return eta_max * eta_decay**epoch

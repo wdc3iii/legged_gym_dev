@@ -74,6 +74,8 @@ def data_creation_main(cfg):
     eval_states = torch.clone(env.get_states().detach())
     eval_func = instantiate(cfg.eval_function)
 
+    eta_func = instantiate(cfg.eta_schedule)
+
     # Loop over epochs
     num_robots = env_cfg.env.num_envs
     max_ep_length = int(cfg.env_config.env.episode_length_s / env.dt) - 5
@@ -84,6 +86,7 @@ def data_creation_main(cfg):
         # Data structures
         x = torch.zeros((cfg.epochs, num_robots, max_ep_length + 1, x_n), device=env.device)  # Epochs, steps, states
         h = torch.zeros((cfg.epochs, num_robots, max_ep_length + 1), device=env.device)
+        dot_h = torch.zeros((cfg.epochs, num_robots, max_ep_length + 1), device=env.device)
         delta = torch.zeros((cfg.epochs, num_robots, max_ep_length + 1), device=env.device)
 
 
@@ -94,7 +97,9 @@ def data_creation_main(cfg):
             env.reset()
             obs = env.get_observations()
             x[epoch, :, 0, :] = obs.detach()
-            h[epoch, :, 0] = policy.v_filt.cbf.h(policy.v_filt.dyn.proj(x[epoch, :, 0, :]))
+            h0, Jh0 = policy.v_filt.cbf.h_Jh(policy.v_filt.dyn.proj(x[epoch, :, 0, :]))
+            h[epoch, :, 0] = h0
+            dot_h[epoch, :, 0] = torch.sum(Jh0 * x[epoch, :, 0, cfg.JPi_f_inds], dim=-1)
 
             # Loop over time steps
             for t in range(max_ep_length):
@@ -104,7 +109,9 @@ def data_creation_main(cfg):
 
                 # Save Data
                 x[epoch, :, t + 1, :] = obs.detach()
-                h[epoch, :, t + 1] = policy.v_filt.cbf.h(policy.v_filt.dyn.proj(x[epoch, :, t+1, :]))
+                ht, Jht =  policy.v_filt.cbf.h_Jh(policy.v_filt.dyn.proj(x[epoch, :, t+1, :]))
+                h[epoch, :, t + 1] = ht
+                dot_h[epoch, :, t + 1] = torch.sum(Jht * x[epoch, :, t+1, cfg.JPi_f_inds], dim=-1)
                 delta[epoch, :, t + 1] = policy.v_filt.delta_val.detach()
 
             if epoch == 0:
@@ -139,15 +146,33 @@ def data_creation_main(cfg):
             return torch.min(sliding_windows, dim=-1).values
 
         # Compute minimum violation over the horizon
-        err_h_bar = -sliding_min(h, int(cfg.p_cbf_horizon_s / env.dt))
+        if cfg.use_barrier:
+            err_h_bar = -sliding_min(dot_h + policy.v_filt.cbf.alpha * h, int(cfg.p_cbf_horizon_s / env.dt))
+        else:
+            err_h_bar = -sliding_min(h, int(cfg.p_cbf_horizon_s / env.dt))
         # Compute the new desired
-        delta_targ = delta[:, :, :err_h_bar.shape[2]] + cfg.delta_K * err_h_bar
+
+        delta_targ = delta[:, :, :err_h_bar.shape[2]] + eta_func(ii) * err_h_bar
         delta_targ = torch.clip(delta_targ, 0, policy.v_filt.delta_max)
+
+        # plt.hist(err_h_bar[err_h_bar > 0].flatten().cpu().numpy(), bins=100)
+        # plt.title(f'Iteration {ii}: Violation Histogram (for Violation > 0)')
+        # plt.xlabel('violation')
+        # plt.ylabel('count')
+        # plt.show()
+        # d2 = delta[:, :, :err_h_bar.shape[2]]
+        # plt.hist(d2[d2 > 0].flatten().cpu().numpy(), bins=100)
+        # plt.title(f'Iteration {ii}: Delta Pred Histogram (for Delta Pred > 0)')
+        # plt.xlabel('violation')
+        # plt.ylabel('count')
+        # plt.show()
 
         # Reshape for learning
         x = x[:, :, :err_h_bar.shape[2], :]
         x = x.reshape(cfg.epochs * num_robots * x.shape[2], x.shape[3])
         delta_targ = delta_targ.reshape(cfg.epochs * num_robots * delta_targ.shape[2], 1)
+        delta = delta[:, :, :err_h_bar.shape[2]].reshape(cfg.epochs * num_robots * err_h_bar.shape[2], 1)
+        err_h_bar = err_h_bar.reshape(cfg.epochs * num_robots * err_h_bar.shape[2], 1)
 
         # Adjust points which are near origin?
         if cfg.adjust_distribution:
@@ -170,6 +195,15 @@ def data_creation_main(cfg):
 
                 # Resulting matrix after elimination
                 x = x[close_mask | far_mask]
+                delta = delta[close_mask | far_mask]
+                delta_targ = delta_targ[close_mask | far_mask]
+                err_h_bar = err_h_bar[close_mask | far_mask]
+
+        savemat(
+            f"{data_path}/learning_iterates_{ii}.mat",
+            {"x": x.cpu().numpy(), "delta": delta.cpu().numpy(), "delta_targ": delta_targ.cpu().numpy(),
+             "viol": err_h_bar.cpu().numpy()})
+        print(f"Saving Iterations: {data_path}")
 
         # Adjust points to keep
         if policy.keep_inds is not None:
@@ -258,7 +292,7 @@ def data_creation_main(cfg):
 
         # Export to onnx
         policy.v_filt.delta.eval()
-        onnx_file_path = f"{ckpt_manager.ckpt_path}/best_model.onnx"
+        onnx_file_path = f"{ckpt_manager.ckpt_path}/model_{ii}.onnx"
         torch.onnx.export(
             policy.v_filt.delta,  # PyTorch model
             x[0, :][None, :],  # Example input

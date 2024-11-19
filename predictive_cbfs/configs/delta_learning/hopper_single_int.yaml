@@ -8,17 +8,19 @@ epochs: 10
 train_epochs: 1
 learning_iters: 50
 p_cbf_horizon_s: 5
-#p_cbf_horizon_s: 2.5
-delta_K: .5
+delta_K: 1
 decorr_prop: 0.2
 batch_size: 2048
 steps_per_model_checkpoint: 100
 save_eval_data: True
 save_training_data: False
 
-adjust_distribution: False
+adjust_distribution: True
 converged_tol: 0.05
-max_converged_proportion: 0.01
+max_converged_proportion: 0.05
+
+use_barrier: True
+JPi_f_inds: [7, 8]
 
 controller:
   _target_: predictive_cbfs.controllers.HopperVelTracking
@@ -72,9 +74,15 @@ lr_scheduler:
     warmup_steps: 200
     max_steps: 2000
 
+eta_schedule:
+  _target_: predictive_cbfs.utils.eta_schedule
+  _partial_: True
+  eta_max: ${delta_K}
+  eta_decay: 0.9
+
 loss_fn:
   _target_: predictive_cbfs.losses.CheckLoss
-  alpha: 0.6
+  alpha: 0.5
 
 eval_function:
   _target_: predictive_cbfs.eval_functions.evaluate_single_double

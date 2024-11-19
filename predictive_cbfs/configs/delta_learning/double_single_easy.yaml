@@ -4,9 +4,9 @@ defaults:
 
 experiment_name: "double_single_int"
 
-epochs: 2
+epochs: 6
 train_epochs: 1
-learning_iters: 50
+learning_iters: 200
 p_cbf_horizon_s: 5
 delta_K : 0.5
 decorr_prop: 0.1
@@ -15,9 +15,13 @@ steps_per_model_checkpoint: 100
 save_eval_data: True
 save_training_data: False
 
-adjust_distribution: False
-converged_tol: 0.05
-max_converged_proportion: 0.01
+adjust_distribution: True
+converged_tol: 0.01
+max_converged_proportion: 0.02
+
+use_barrier: True
+JPi_f_inds: [1]
+
 controller:
   _target_: predictive_cbfs.controllers.DoubleSingleVelTracking
   k_d: 1
@@ -47,7 +51,7 @@ controller:
 env_config:
   env:
     num_envs: 4096
-    episode_length_s: 10
+    episode_length_s: 6
     dt: 0.01
     model:
       dt: ${env_config.env.dt}
@@ -55,6 +59,12 @@ env_config:
   init_state:
     default_noise_lower: [ -0., -1. ]  # [foot, wheel1, 2, 3]
     default_noise_upper: [ 1., 1. ]
+
+eta_schedule:
+  _target_: predictive_cbfs.utils.eta_schedule
+  _partial_: True
+  eta_max: ${delta_K}
+  eta_decay: 1.
 
 lr_scheduler:
   lr_lambda:

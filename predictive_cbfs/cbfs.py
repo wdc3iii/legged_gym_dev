@@ -79,7 +79,7 @@ class SmoothObstacleCBF(ObstacleCBF):
         """
         pc = self._p_center(z)
         norm_pc = torch.linalg.norm(pc, dim=-1)
-        d = norm_pc - self.rs.unsqeeze(0)
+        d = norm_pc - self.rs.unsqueeze(0)
         exp_d = torch.exp(-self.rho * d)
         sum_exp = torch.sum(exp_d, dim=-1)
 
