@@ -12,15 +12,15 @@ class CheckPointManager:
         os.makedirs(self.ckpt_path, exist_ok=True)
 
     def save(self, model, metric, epoch, step):
-        self._model_save(model)
+        self._model_save(model, epoch)
 
         if metric < self.best_loss:
             self.best_loss = metric
-            self._model_save(model, True)
+            self._model_save(model, epoch, True)
 
-    def _model_save(self, model, best=False):
+    def _model_save(self, model, epoch, best=False):
         prefix = "best" if best else "latest"
-        torch.save(model.state_dict(), f"{self.ckpt_path}/{prefix}_model.pth")
+        torch.save(model.state_dict(), f"{self.ckpt_path}/{prefix}_model_{epoch}.pth")
 
     def to_wandb(self):
         artifact = wandb.Artifact(

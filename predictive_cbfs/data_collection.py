@@ -214,9 +214,12 @@ def data_creation_main(cfg):
         inds = torch.randperm(x.shape[0])[:n_samples]
         x = x[inds, :]
         delta_targ = delta_targ[inds]
-        plt.figure()
-        plt.hist(delta_targ[delta_targ > 0].cpu().numpy(), bins=100)
-        plt.title(f'Iteration {ii}: Delta Target Histogram (for Delta > 0)')
+        fig, ax = plt.subplots(1,2)
+        ax[0].hist(delta_targ[delta_targ > 0].cpu().numpy(), bins=100)
+        ax[0].set_xlabel("Delta Target")
+        ax[1].hist(err_h_bar[err_h_bar > 0].cpu().numpy(), bins=100)
+        ax[1].set_xlabel("Violation")
+        plt.title(f'Iteration {ii}: Violation Histogram (for Violation > 0)')
         plt.show()
         loader = DataLoader(RegressionDataset(x, delta_targ), batch_size=cfg.batch_size, shuffle=True)
 
@@ -274,7 +277,7 @@ def data_creation_main(cfg):
                 pbar.set_postfix({"loss": loss.item(), "lr": lr_scheduler.get_last_lr()[0]})
                 epoch_loss += loss
                 if step % cfg.steps_per_model_checkpoint == 0:
-                    ckpt_manager.save(new_delta, loss.item(), epoch=t_ep, step=step)
+                    ckpt_manager.save(new_delta, loss.item(), epoch=ii, step=step)
 
             # wandb.log(
             #     {"loss_epoch": epoch_loss.item() / len(loader), "lr_epoch": lr_scheduler.get_last_lr()[0]},
@@ -284,7 +287,7 @@ def data_creation_main(cfg):
         # wandb.finish()
 
         # copy the best NN over
-        checkpoint_path = f"{ckpt_manager.ckpt_path}/best_model.pth"
+        checkpoint_path = f"{ckpt_manager.ckpt_path}/best_model_{ii}.pth"
         state_dict = torch.load(checkpoint_path, weights_only=True)
         # new_delta.load_state_dict(state_dict)
         # policy.v_filt.delta = new_delta

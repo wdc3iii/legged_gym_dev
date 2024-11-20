@@ -2,11 +2,11 @@ defaults:
   - default_custom
   - _self_
 
-experiment_name: "double_single_int"
+experiment_name: "double_single_easy_int"
 
 epochs: 6
 train_epochs: 1
-learning_iters: 200
+learning_iters: 50
 p_cbf_horizon_s: 5
 delta_K : 0.5
 decorr_prop: 0.1
@@ -57,8 +57,8 @@ env_config:
       dt: ${env_config.env.dt}
       cls: 'DoubleInt1D'
   init_state:
-    default_noise_lower: [ -0., -1. ]  # [foot, wheel1, 2, 3]
-    default_noise_upper: [ 1., 1. ]
+    default_noise_lower: [ -0.2, -2. ]  # [foot, wheel1, 2, 3]
+    default_noise_upper: [ 1., 2. ]
 
 eta_schedule:
   _target_: predictive_cbfs.utils.eta_schedule

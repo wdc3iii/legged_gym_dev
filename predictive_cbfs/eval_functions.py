@@ -24,8 +24,8 @@ def evaluate_single_double_easy(x, h, delta, save_eval_data, data_path, ii, poli
     plt.title(f"Evaluation of Training Iteration {ii}")
     plt.show()
 
-    x_ = torch.linspace(0, 1, 100)  # 100 points in the range [0, 1]
-    y_ = torch.linspace(-1, 1, 100)  # 100 points in the range [-1, 1]
+    x_ = torch.linspace(-0.2, 1, 100)  # 100 points in the range [0, 1]
+    y_ = torch.linspace(-2, 2, 100)  # 100 points in the range [-1, 1]
     xx, yy = torch.meshgrid(x_, y_, indexing='ij')  # Create a grid
     grid = torch.stack([xx, yy], dim=-1).reshape(-1, 2).to("cuda:0")  # Shape: (10000, 2)
 

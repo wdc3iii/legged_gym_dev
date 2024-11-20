@@ -4,11 +4,11 @@ defaults:
 
 experiment_name: "double_single_int"
 
-epochs: 10
+epochs: 20
 train_epochs: 1
 learning_iters: 100
 p_cbf_horizon_s: 5
-delta_K : 1
+delta_K : 0.5
 decorr_prop: 0.1
 batch_size: 2048
 steps_per_model_checkpoint: 100
@@ -38,7 +38,7 @@ controller:
       _target_: predictive_cbfs.controllers.SingleIntPosTracking
       k: 1
       zd: [0, 0]
-      v_max: 1
+      v_max: 2
     delta:
       _target_: deep_tube_learning.models.MLP
       input_size: 4
@@ -56,7 +56,7 @@ controller:
 env_config:
   env:
     num_envs: 4096
-    episode_length_s: 10
+    episode_length_s: 7
     dt: 0.01
     model:
       dt: ${env_config.env.dt}
@@ -69,7 +69,7 @@ eta_schedule:
   _target_: predictive_cbfs.utils.eta_schedule
   _partial_: True
   eta_max: ${delta_K}
-  eta_decay: 0.97
+  eta_decay: 1.0
 
 lr_scheduler:
   lr_lambda:

@@ -4,11 +4,11 @@ defaults:
 
 experiment_name: "hopper_single_int"
 
-epochs: 10
+epochs: 20
 train_epochs: 1
-learning_iters: 50
+learning_iters: 100
 p_cbf_horizon_s: 5
-delta_K: 1
+delta_K: 0.5
 decorr_prop: 0.2
 batch_size: 2048
 steps_per_model_checkpoint: 100
@@ -37,8 +37,8 @@ controller:
     clip_vel: 1.
     clip_vel_des: 0.3
     clip_ang: 0.6
-#    randomize_rp: 0.002
-    randomize_rp: -0.
+    randomize_rp: 0.002
+#    randomize_rp: -0.
     num_robots: ${env_config.env.num_envs}
   robustified_cbf:
     _target_: predictive_cbfs.controllers.RobustifiedCBF
@@ -78,11 +78,11 @@ eta_schedule:
   _target_: predictive_cbfs.utils.eta_schedule
   _partial_: True
   eta_max: ${delta_K}
-  eta_decay: 0.9
+  eta_decay: 1.0
 
 loss_fn:
   _target_: predictive_cbfs.losses.CheckLoss
-  alpha: 0.5
+  alpha: 0.55
 
 eval_function:
   _target_: predictive_cbfs.eval_functions.evaluate_single_double
@@ -91,7 +91,7 @@ eval_function:
 env_config:
   env:
     num_envs: 4096
-    episode_length_s: 15
+    episode_length_s: 7
   control:
     stiffness:
       foot_slide: 900
