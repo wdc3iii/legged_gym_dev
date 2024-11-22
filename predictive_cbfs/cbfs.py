@@ -18,7 +18,7 @@ class ObstacleCBF(CBF):
         self.alpha = alpha
         self.epsilon = epsilon
         self.rs = torch.tensor(rs, device="cuda:0")
-        self.cs = torch.vstack((torch.tensor(cxs), torch.tensor(cys))).to(torch.device("cuda:0"))
+        self.cs = torch.vstack((torch.tensor(cxs), torch.tensor(cys))).to(torch.device("cuda:0")).T
 
     def _p_center(self, z):
         """

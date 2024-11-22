@@ -4,11 +4,11 @@ defaults:
 
 experiment_name: "hopper_single_int"
 
-epochs: 20
+epochs: 40
 train_epochs: 1
 learning_iters: 100
-p_cbf_horizon_s: 5
-delta_K: 0.5
+p_cbf_horizon_s: 2
+delta_K: 0.25
 decorr_prop: 0.2
 batch_size: 2048
 steps_per_model_checkpoint: 100
@@ -25,8 +25,8 @@ JPi_f_inds: [7, 8]
 controller:
   _target_: predictive_cbfs.controllers.HopperVelTracking
   t_prop: 0.3
-  keep_inds: null
-  #keep_inds: [0, 1, 8, 9]  # Only double integrator state
+#  keep_inds: null
+  keep_inds: [0, 1, 8, 9]  # Only double integrator state
 #  keep_inds: [ 0, 1, 2, 8, 9, 10 ]  # Double integerator and z
   raibert_heuristic:
     _target_: predictive_cbfs.controllers.RaibertHeuristic
@@ -37,8 +37,8 @@ controller:
     clip_vel: 1.
     clip_vel_des: 0.3
     clip_ang: 0.6
-    randomize_rp: 0.002
-#    randomize_rp: -0.
+#    randomize_rp: 0.001
+    randomize_rp: -0.
     num_robots: ${env_config.env.num_envs}
   robustified_cbf:
     _target_: predictive_cbfs.controllers.RobustifiedCBF
@@ -46,9 +46,9 @@ controller:
       _target_: predictive_cbfs.cbfs.ObstacleCBF
       alpha: 5
       epsilon: 0
-      rs: [ 0.5, 0.5 ]
-      cxs: [ -0.5, -2. ]
-      cys: [ -2., -3. ]
+      rs: [ 0.375, 0.375, 0.375, 0.375]
+      cxs: [ -0.1, -0.1, 0.75, 1.7 ]
+      cys: [ -0.5, 0.5, -0.1, 0.4]
     nom_controller:
       _target_: predictive_cbfs.controllers.SingleIntPosTracking
       k: 1
@@ -60,7 +60,7 @@ controller:
 #      input_size: 4  # Only double int states
 #      input_size: 6  # CoM states
       output_dim: 1
-      num_units: 64
+      num_units: 128
       num_layers: 2
       activation:
         _target_: torch.nn.ReLU
@@ -82,7 +82,7 @@ eta_schedule:
 
 loss_fn:
   _target_: predictive_cbfs.losses.CheckLoss
-  alpha: 0.55
+  alpha: 0.5
 
 eval_function:
   _target_: predictive_cbfs.eval_functions.evaluate_single_double
@@ -91,7 +91,7 @@ eval_function:
 env_config:
   env:
     num_envs: 4096
-    episode_length_s: 7
+    episode_length_s: 3
   control:
     stiffness:
       foot_slide: 900
@@ -168,10 +168,10 @@ env_config:
     default_dof_pos_noise_upper: [ 0., 0., 0., 0. ]
     default_dof_vel_noise_lower: [ -0., -0., -0., -0. ]
     default_dof_vel_noise_upper: [ 0., 0., 0., 0. ]
-    default_root_pos_noise_lower: [ -3.0, -5.0, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [x, y, z, qx, qy, qz, qw]
-    default_root_pos_noise_upper: [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
-    default_root_vel_noise_lower: [ -0.2, -0.2, -0.0, -0.0, -0.0, -0.0 ]  # [vx, vy, vz, wx, wy, wz]
-    default_root_vel_noise_upper: [ 0.2, 0.2, 0.0, 0.0, 0.0, 0.0 ]
+    default_root_pos_noise_lower: [ -0.75, -1.25, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [x, y, z, qx, qy, qz, qw]
+    default_root_pos_noise_upper: [ 2.25, 1.25, 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    default_root_vel_noise_lower: [ -0.3, -0.3, -0.0, -0.0, -0.0, -0.0 ]  # [vx, vy, vz, wx, wy, wz]
+    default_root_vel_noise_upper: [ 0.3, 0.3, 0.0, 0.0, 0.0, 0.0 ]
   noise:
     add_noise: False
     noise_level: 1.0
