@@ -69,14 +69,17 @@ def data_creation_main(cfg):
     else:
         raise ValueError(f"Environment type {cfg.env_config.env.type} not implemented.")
 
+
+    eval_func = instantiate(cfg.eval_function)
+    eta_func = instantiate(cfg.eta_schedule)
+    pretrain_func = instantiate(cfg.pretrain_function)
+    if pretrain_func is not None:
+        pretrain_func(env, policy, cfg)
+
+    # Loop over epochs
     obs, _ = env.reset()
     x_n =obs.shape[1]
     eval_states = torch.clone(env.get_states().detach())
-    eval_func = instantiate(cfg.eval_function)
-
-    eta_func = instantiate(cfg.eta_schedule)
-
-    # Loop over epochs
     num_robots = env_cfg.env.num_envs
     max_ep_length = int(cfg.env_config.env.episode_length_s / env.dt) - 5
 

@@ -2,9 +2,9 @@ defaults:
   - default_custom
   - _self_
 
-experiment_name: "double_single_easy_int"
+experiment_name: "double_single_easy_int_zghb8svu"
 
-epochs: 6
+epochs: 100
 train_epochs: 1
 learning_iters: 50
 p_cbf_horizon_s: 5
@@ -38,7 +38,7 @@ controller:
       _target_: deep_tube_learning.models.MLP
       input_size: 2
       output_dim: 1
-      num_units: 64
+      num_units: 128
       num_layers: 2
       activation:
         _target_: torch.nn.ReLU
@@ -47,11 +47,13 @@ controller:
       dt: 0.01
     delta_max: 5
 
+pretrain_function:
+
 
 env_config:
   env:
     num_envs: 4096
-    episode_length_s: 6
+    episode_length_s: 5.25
     dt: 0.01
     model:
       dt: ${env_config.env.dt}
@@ -69,7 +71,7 @@ eta_schedule:
 lr_scheduler:
   lr_lambda:
     warmup_steps: 25
-    max_steps: 200
+    max_steps: 440
 
 loss_fn:
   _target_: predictive_cbfs.losses.CheckLoss

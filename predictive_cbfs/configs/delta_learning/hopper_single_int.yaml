@@ -7,8 +7,8 @@ experiment_name: "hopper_single_int"
 epochs: 40
 train_epochs: 1
 learning_iters: 100
-p_cbf_horizon_s: 2
-delta_K: 0.25
+p_cbf_horizon_s: 3
+delta_K: 0.5
 decorr_prop: 0.2
 batch_size: 2048
 steps_per_model_checkpoint: 100
@@ -26,8 +26,8 @@ controller:
   _target_: predictive_cbfs.controllers.HopperVelTracking
   t_prop: 0.3
 #  keep_inds: null
-  keep_inds: [0, 1, 8, 9]  # Only double integrator state
-#  keep_inds: [ 0, 1, 2, 8, 9, 10 ]  # Double integerator and z
+#  keep_inds: [0, 1, 8, 9]  # Only double integrator state
+  keep_inds: [ 0, 1, 2, 8, 9, 10 ]  # Double integerator and z
   raibert_heuristic:
     _target_: predictive_cbfs.controllers.RaibertHeuristic
     K_p: -0.2
@@ -35,20 +35,26 @@ controller:
     K_ff: 0.2
     clip_pos: 0.5
     clip_vel: 1.
-    clip_vel_des: 0.3
+    clip_vel_des: 0.25
     clip_ang: 0.6
-#    randomize_rp: 0.001
-    randomize_rp: -0.
+    randomize_rp: 0.002
+#    randomize_rp: -0.
     num_robots: ${env_config.env.num_envs}
   robustified_cbf:
     _target_: predictive_cbfs.controllers.RobustifiedCBF
     cbf:
       _target_: predictive_cbfs.cbfs.ObstacleCBF
-      alpha: 5
+      alpha: 2
       epsilon: 0
-      rs: [ 0.375, 0.375, 0.375, 0.375]
-      cxs: [ -0.1, -0.1, 0.75, 1.7 ]
-      cys: [ -0.5, 0.5, -0.1, 0.4]
+#      rs: [ 0.375]
+#      cxs: [ 0.6 ]
+#      cys: [ 0.6 ]
+#      rs: [ 0.375, 0.375, 0.375, 0.375 ]
+#      cxs: [ -0.1, -0.1, 0.75, 1.7 ]
+#      cys: [ -0.5, 0.5, -0.1, 0.4 ]
+      rs: [ 0.375, 0.375, 0.375, 0.375, 0.375, 0.375]
+      cxs: [ 1.064, 2.195, 1.579, 1.162, 0.834, 0.507 ]
+      cys: [1.834, 0.668, -0.467, 0.786, 0.596, 0.406 ]
     nom_controller:
       _target_: predictive_cbfs.controllers.SingleIntPosTracking
       k: 1
@@ -56,9 +62,9 @@ controller:
       v_max: 0.3
     delta:
       _target_: deep_tube_learning.models.MLP
-      input_size: 20  # All states
+#      input_size: 20  # All states
 #      input_size: 4  # Only double int states
-#      input_size: 6  # CoM states
+      input_size: 6  # CoM states
       output_dim: 1
       num_units: 128
       num_layers: 2
@@ -67,7 +73,7 @@ controller:
     dyn:
       _target_: predictive_cbfs.roms.SingleInt2D
       dt: 0.01
-    delta_max: 5
+    delta_max: 2
 
 lr_scheduler:
   lr_lambda:
@@ -82,16 +88,20 @@ eta_schedule:
 
 loss_fn:
   _target_: predictive_cbfs.losses.CheckLoss
-  alpha: 0.5
+  alpha: 0.55
 
 eval_function:
   _target_: predictive_cbfs.eval_functions.evaluate_single_double
   _partial_: True
 
+pretrain_function:
+#  _target_: predictive_cbfs.utils.pretrain_step_conservative
+#  _partial_: True
+
 env_config:
   env:
     num_envs: 4096
-    episode_length_s: 3
+    episode_length_s: 5
   control:
     stiffness:
       foot_slide: 900
@@ -168,8 +178,10 @@ env_config:
     default_dof_pos_noise_upper: [ 0., 0., 0., 0. ]
     default_dof_vel_noise_lower: [ -0., -0., -0., -0. ]
     default_dof_vel_noise_upper: [ 0., 0., 0., 0. ]
-    default_root_pos_noise_lower: [ -0.75, -1.25, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [x, y, z, qx, qy, qz, qw]
-    default_root_pos_noise_upper: [ 2.25, 1.25, 0.0, 0.0, 0.0, 0.0, 0.0 ]
+#    default_root_pos_noise_lower: [ -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [x, y, z, qx, qy, qz, qw]
+#    default_root_pos_noise_upper: [ 1.2, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    default_root_pos_noise_lower: [ -0.5, -1.0, -0.0, -0.0, -0.0, -0.0, -0.0 ]  # [x, y, z, qx, qy, qz, qw]
+    default_root_pos_noise_upper: [ 3, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0 ]
     default_root_vel_noise_lower: [ -0.3, -0.3, -0.0, -0.0, -0.0, -0.0 ]  # [vx, vy, vz, wx, wy, wz]
     default_root_vel_noise_upper: [ 0.3, 0.3, 0.0, 0.0, 0.0, 0.0 ]
   noise:

@@ -19,7 +19,7 @@ from scipy.io import savemat
 from deep_tube_learning.utils import unnormalize_dict
 
 
-dir_name = "double_single_easy_int_yimjsolw"
+dir_name = "double_single_easy_int_zghb8svu"
 
 def main():
     data_path = str(Path(__file__).parent / "predictive_cbfs" / dir_name)
@@ -53,7 +53,7 @@ def main():
     else:
         raise ValueError(f"Environment type {cfg.env_config.env.type} not implemented.")
 
-    checkpoint_path = f"models/{dir_name[-8:]}/best_model.pth"
+    checkpoint_path = f"models/{dir_name[-8:]}/best_model_49.pth"
     state_dict = torch.load(checkpoint_path, weights_only=True)
     policy.v_filt.delta.load_state_dict(state_dict)
 
